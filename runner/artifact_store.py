@@ -247,6 +247,10 @@ class ArtifactStore:
         with self._lock:
             return self._credential_endpoints.get(digest)
 
+    def endpoint_scan_flag_only_default(self, endpoint_id: str) -> bool:
+        with self._lock:
+            return self._endpoints.get(endpoint_id, {}).get("_scan_flag_only_default", True)
+
     def logging_level(self, guardrail_id: str | None) -> str:
         if guardrail_id is None:
             return "info"
@@ -308,7 +312,8 @@ class ArtifactStore:
         endpoints: dict[str, dict[str, Any]] = {}
         for item in desired_state.endpoints:
             verification = endpoint_verification_from_proto(item.verification)
-            endpoints[item.endpoint_id] = {**verification, "_adapter": item.adapter, "_router_id": item.router_id}
+            endpoints[item.endpoint_id] = {**verification, "_adapter": item.adapter, "_router_id": item.router_id,
+                "_scan_flag_only_default": item.scan_flag_only_default if item.HasField("scan_flag_only_default") else True}
         credential_endpoints: dict[str, str | None] = {}
         for endpoint_id, endpoint in endpoints.items():
             for credential in endpoint.get("credentials", []):

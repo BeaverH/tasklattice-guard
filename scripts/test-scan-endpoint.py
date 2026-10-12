@@ -29,6 +29,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default=os.environ.get("CALYPSOAI_URL"))
     parser.add_argument("--guardrail-id", default=os.environ.get("SCAN_GUARDRAIL_ID"))
+    parser.add_argument("--flag-only-default", choices=("true", "false"), default="true",
+                        help="Match the Endpoint default for requests that omit flagOnly")
     parser.add_argument("--schema", type=Path, help="Optional F5 OpenAPI JSON; requires jsonschema")
     parser.add_argument("--output", type=Path, default=Path("output/f5-scan-compatibility.json"))
     parser.add_argument("--max-body-bytes", type=int, default=1048576,
@@ -128,7 +130,7 @@ def main() -> int:
                           expected=expected, text=transformed)
     for name, original, action, transformed in samples:
         check(f"defaults/{name}", {"input": original},
-              expected="cleared" if action == "cleared" else "flagged", text=transformed)
+              expected="flagged" if args.flag_only_default == "true" and action != "cleared" else action, text=transformed)
     for name, original in (("empty", ""), ("unicode", "你好，世界 😀\n第二行")):
         check(name, {"input": original})
     check("case-insensitive", {"input": "f5_scan_block_me", "flagOnly": False}, expected="blocked")
@@ -155,6 +157,7 @@ def main() -> int:
           status=413, code="request_too_large")
     report = {"createdAt": datetime.now(timezone.utc).isoformat(), "endpoint": endpoint,
               "guardrailId": args.guardrail_id, "f5SchemaVersion": schema_version,
+              "flagOnlyDefault": args.flag_only_default == "true",
               "scope": "TaskLattice Scan compatibility demo; not a detection benchmark or live F5 comparison",
               "total": len(cases), "passed": sum(case["passed"] for case in cases), "cases": cases}
     report["failed"] = report["total"] - report["passed"]

@@ -1839,20 +1839,22 @@ export class ControlPlaneService {
     return queryAuditEvents(this.db, query);
   }
 
-  async createEndpoint(input: { name: string; adapter: string; actorId: string }) {
+  async createEndpoint(input: { name: string; adapter: string; scanFlagOnlyDefault?: boolean | undefined; actorId: string }) {
     if (!["litellm-generic-guardrail", "f5-scan"].includes(input.adapter)) throw new ValidationError("Unsupported Endpoint adapter.");
+    if (input.scanFlagOnlyDefault !== undefined && input.adapter !== "f5-scan") throw new ValidationError("scanFlagOnlyDefault is only supported by F5 Scan Endpoints.");
     const id = randomUUID();
     const issued = issueEndpointCredential();
     const verification = { credentials: [issued.stored] };
     const [created] = await this.db.transaction(async (tx) => {
       const rows = await tx.insert(endpoints).values({
-        id, name: input.name, adapter: input.adapter, verification,
+        id, name: input.name, adapter: input.adapter, verification, scanFlagOnlyDefault: input.scanFlagOnlyDefault ?? true,
       }).returning();
       await this.advanceEndpointDesiredState(tx, {
         endpointId: id,
         actorId: input.actorId,
         auditKind: "endpoint.created",
-        auditDetail: { name: input.name, adapter: input.adapter, credentialId: issued.stored.id },
+        auditDetail: { name: input.name, adapter: input.adapter, credentialId: issued.stored.id,
+          ...(input.adapter === "f5-scan" ? { scanFlagOnlyDefault: input.scanFlagOnlyDefault ?? true } : {}) },
       });
       if (!rows[0]) throw new Error("Endpoint creation did not return the stored resource.");
       return rows;
@@ -1867,23 +1869,27 @@ export class ControlPlaneService {
     };
   }
 
-  async setEndpointEnabled(input: { id: string; enabled: boolean; actorId: string }) {
+  async updateEndpoint(input: { id: string; enabled?: boolean | undefined; scanFlagOnlyDefault?: boolean | undefined; actorId: string }) {
     return this.db.transaction(async (tx) => {
       const [endpoint] = await tx.select().from(endpoints)
         .where(and(eq(endpoints.id, input.id), isNull(endpoints.deletedAt))).for("update");
       if (!endpoint) throw new NotFoundError("Endpoint", input.id);
-      const status = input.enabled ? "active" : "disabled";
-      if (endpoint.status === status) return this.publicEndpoint(endpoint);
+      if (input.scanFlagOnlyDefault !== undefined && endpoint.adapter !== "f5-scan") throw new ValidationError("scanFlagOnlyDefault is only supported by F5 Scan Endpoints.");
+      const status = input.enabled === undefined ? endpoint.status : input.enabled ? "active" : "disabled";
+      const scanFlagOnlyDefault = input.scanFlagOnlyDefault ?? endpoint.scanFlagOnlyDefault;
+      const scanChanged = scanFlagOnlyDefault !== endpoint.scanFlagOnlyDefault;
+      if (endpoint.status === status && !scanChanged) return this.publicEndpoint(endpoint);
 
       const now = new Date();
-      const [updated] = await tx.update(endpoints).set({ status, updatedAt: now })
+      const [updated] = await tx.update(endpoints).set({ status, scanFlagOnlyDefault, updatedAt: now })
         .where(and(eq(endpoints.id, input.id), isNull(endpoints.deletedAt))).returning();
       if (!updated) throw new NotFoundError("Endpoint", input.id);
       await this.advanceEndpointDesiredState(tx, {
         endpointId: input.id,
         actorId: input.actorId,
-        auditKind: input.enabled ? "endpoint.enabled" : "endpoint.disabled",
-        auditDetail: { previousStatus: endpoint.status, status },
+        auditKind: scanChanged ? "endpoint.updated" : input.enabled ? "endpoint.enabled" : "endpoint.disabled",
+        auditDetail: { previousStatus: endpoint.status, status,
+          ...(scanChanged ? { previousScanFlagOnlyDefault: endpoint.scanFlagOnlyDefault, scanFlagOnlyDefault } : {}) },
       });
       return this.publicEndpoint(updated);
     });
@@ -2192,6 +2198,7 @@ export class ControlPlaneService {
         trafficRouterId: endpoint.trafficRouterId,
         adapter: endpoint.adapter,
         verification: endpoint.verification,
+        scanFlagOnlyDefault: endpoint.scanFlagOnlyDefault,
       })),
       guardrailLoggingLevels: Object.fromEntries(loggingLevels.map((item) => [item.id, item.level])),
     };
@@ -2727,6 +2734,7 @@ export class ControlPlaneService {
       name: endpoint.name,
       adapter: endpoint.adapter,
       status: endpoint.status,
+      ...(endpoint.adapter === "f5-scan" ? { scanFlagOnlyDefault: endpoint.scanFlagOnlyDefault } : {}),
       createdAt: endpoint.createdAt,
       updatedAt: endpoint.updatedAt,
       credentials: publicEndpointCredentials(endpoint.verification),

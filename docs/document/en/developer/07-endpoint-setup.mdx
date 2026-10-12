@@ -50,6 +50,8 @@ LiteLLM owns these settings. The Endpoint details do not show their live values.
 
 Set the F5 script's `CALYPSOAI_URL` to the Runner Service origin and `CALYPSOAI_TOKEN` to the complete Scan Endpoint credential. The script still posts to `/backend/v1/scans`. Bearer authentication selects the Endpoint, and its Router selects the Guardrail.
 
+Administrators can configure **Default flagOnly** when creating a Scan Endpoint or viewing its details (initially `true`). Requests that omit `flagOnly` use this value; explicit request values take precedence. Choose `false` to distinguish blocked and redacted results. Changes take effect after Runner synchronization.
+
 To verify the connection, send a real scan with the [Scan cURL and JSON examples](/document/developer/scan-protocol#scan-connection). Scan has no `/verify`. Check the script against the documented compatibility scope. Placeholder fields for project selection, Scanner configuration and request correlation have no effect.
 
 <a id="endpoint-delivery" />

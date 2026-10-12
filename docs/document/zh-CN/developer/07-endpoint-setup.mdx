@@ -50,6 +50,8 @@ order: 0
 
 把 F5 测试脚本的 `CALYPSOAI_URL` 改为 Runner Service 根地址，`CALYPSOAI_TOKEN` 改为 Scan Endpoint 的完整凭据。脚本仍向 `/backend/v1/scans` 发送请求。Bearer 凭据识别 Endpoint，它的 Router 选择 Guardrail。
 
+管理员可在创建或查看 Scan Endpoint 时配置“默认 flagOnly”（初始为 `true`）。请求省略 `flagOnly` 时使用此值；请求显式值优先。选择 `false` 可区分阻断和替换结果，修改在 Runner 同步后生效。
+
 按 [Scan 的 cURL 与 JSON 示例](/document/developer/scan-protocol#scan-connection)发送一次真实扫描，即可验证连接。Scan 没有 `/verify`。核对脚本是否遵守文档中的兼容范围。项目选择、Scanner 配置和请求关联等占位字段都不生效。
 
 <a id="endpoint-delivery" />

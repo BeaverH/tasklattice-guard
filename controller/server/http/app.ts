@@ -138,8 +138,12 @@ const playgroundDraftInteractionInput = playgroundInteractionInput.omit({ guardr
 const endpointInput = z.object({
   name: z.string().trim().min(1).max(160),
   adapter: z.enum(["litellm-generic-guardrail", "f5-scan"]),
+  scanFlagOnlyDefault: z.boolean().optional().describe("F5 Scan only. Default for requests that omit flagOnly; new Endpoints default to true. Explicit request values take precedence."),
 });
-const endpointEnabledInput = z.object({ enabled: z.boolean() });
+const endpointUpdateInput = z.object({
+  enabled: z.boolean().optional(),
+  scanFlagOnlyDefault: z.boolean().optional().describe("F5 Scan only. Default for requests that omit flagOnly. Explicit request values take precedence."),
+}).strict().refine(value => value.enabled !== undefined || value.scanFlagOnlyDefault !== undefined, "Provide enabled or scanFlagOnlyDefault.");
 const deletionInput = z.object({
   reason: z.string().trim().min(1).max(1_000),
   confirmRecentTraffic: z.boolean().default(false),
@@ -830,10 +834,10 @@ export function createHttpApp(input: {
     return context.json(await withDistribution(await input.service.getEndpoint(context.req.param("id"))));
   });
   app.patch("/api/v1/endpoints/:id", authenticated, administrator, async (context) => {
-    const body = endpointEnabledInput.parse(await context.req.json());
-    const updated = await input.service.setEndpointEnabled({
+    const body = endpointUpdateInput.parse(await context.req.json());
+    const updated = await input.service.updateEndpoint({
       id: context.req.param("id"),
-      enabled: body.enabled,
+      ...body,
       actorId: context.get("actor").id,
     });
     return context.json(await withDistribution(updated, true));

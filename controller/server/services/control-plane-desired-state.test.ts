@@ -43,6 +43,12 @@ const desiredStateResults = () => [
 ] as unknown[][];
 
 describe("desired state per pool", () => {
+  it("distributes an explicit false Scan default", async () => {
+    const results = desiredStateResults();
+    results[7] = [{ id: "scan", adapter: "f5-scan", scanFlagOnlyDefault: false, verification: { credentials: [] } }];
+    const desired = await desiredStateService(results).desiredStateForPool("default");
+    expect(desired.endpoints[0]).toMatchObject({ endpointId: "scan", scanFlagOnlyDefault: false });
+  });
   it("ships only Router-referenced artifacts plus the Default Guardrail to non-default pools", async () => {
     const desired = await desiredStateService(desiredStateResults()).desiredStateForPool("edge");
     expect(desired.generation).toBe(9);

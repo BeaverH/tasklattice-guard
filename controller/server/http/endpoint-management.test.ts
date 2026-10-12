@@ -34,6 +34,31 @@ const endpoint = {
 };
 
 describe("Endpoint management HTTP routes", () => {
+  it("retains an explicit false default during creation and updates", async () => {
+    const createEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter: "f5-scan", scanFlagOnlyDefault: false });
+    const updateEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter: "f5-scan", scanFlagOnlyDefault: false });
+    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { createEndpoint, updateEndpoint });
+    const created = await app.request("/api/v1/endpoints", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Scan", adapter: "f5-scan", scanFlagOnlyDefault: false }),
+    });
+    expect(created.status).toBe(201);
+    expect(createEndpoint).toHaveBeenCalledWith({ name: "Scan", adapter: "f5-scan", scanFlagOnlyDefault: false, actorId: "admin-1" });
+    const updated = await app.request("/api/v1/endpoints/endpoint-1", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ scanFlagOnlyDefault: false }),
+    });
+    expect(updated.status).toBe(200);
+    expect(updateEndpoint).toHaveBeenCalledWith({ id: "endpoint-1", scanFlagOnlyDefault: false, actorId: "admin-1" });
+  });
+
+  it.each([{}, { scanFlagOnlyDefault: "false" }, { scanFlagOnlyDefault: null }, { scanFlagOnlyDefault: 0 }])("rejects invalid Scan default updates %j", async body => {
+    const updateEndpoint = vi.fn();
+    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { updateEndpoint });
+    expect((await app.request("/api/v1/endpoints/endpoint-1", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    })).status).toBe(400);
+    expect(updateEndpoint).not.toHaveBeenCalled();
+  });
   it.each(["litellm-generic-guardrail", "f5-scan"])("creates the supported Endpoint adapter %s", async (adapter) => {
     const createEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter });
     const app = appWith({ user: { id: "admin-1", role: "admin" } }, { createEndpoint });
@@ -79,6 +104,9 @@ describe("Endpoint management HTTP routes", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ enabled: false }),
     })).status).toBe(403);
+    expect((await app.request("/api/v1/endpoints/endpoint-1", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ scanFlagOnlyDefault: false }),
+    })).status).toBe(403);
     expect((await app.request("/api/v1/endpoints/endpoint-1/credentials", {
       method: "POST",
     })).status).toBe(403);
@@ -88,12 +116,12 @@ describe("Endpoint management HTTP routes", () => {
   });
 
   it("forwards the administrator actor and route parameters to the service", async () => {
-    const setEndpointEnabled = vi.fn().mockResolvedValue({ ...endpoint, status: "disabled" });
+    const updateEndpoint = vi.fn().mockResolvedValue({ ...endpoint, status: "disabled" });
     const rotateEndpointCredential = vi.fn().mockResolvedValue({ ...endpoint, credential: "tg_one_time" });
     const revokeEndpointCredential = vi.fn().mockResolvedValue(undefined);
     const app = appWith(
       { user: { id: "admin-1", role: "admin" } },
-      { setEndpointEnabled, rotateEndpointCredential, revokeEndpointCredential },
+      { updateEndpoint, rotateEndpointCredential, revokeEndpointCredential },
     );
 
     const toggled = await app.request("/api/v1/endpoints/endpoint-1", {
@@ -107,7 +135,7 @@ describe("Endpoint management HTTP routes", () => {
     expect(toggled.status).toBe(200);
     expect(rotated.status).toBe(201);
     expect(revoked.status).toBe(204);
-    expect(setEndpointEnabled).toHaveBeenCalledWith({ id: "endpoint-1", enabled: false, actorId: "admin-1" });
+    expect(updateEndpoint).toHaveBeenCalledWith({ id: "endpoint-1", enabled: false, actorId: "admin-1" });
     expect(rotateEndpointCredential).toHaveBeenCalledWith({ id: "endpoint-1", actorId: "admin-1" });
     expect(revokeEndpointCredential).toHaveBeenCalledWith({
       id: "endpoint-1",

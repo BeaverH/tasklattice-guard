@@ -15,7 +15,7 @@ it("provides the root Scan URL and Bearer examples without a streaming callback"
   expect(args).toContain("Authorization: Bearer <CALYPSOAI_TOKEN>");
   expect(args).toContain("Content-Type: application/json");
   expect(JSON.parse(args[args.indexOf("--data") + 1]!)).toEqual({
-    input: "Hello, can you help me?", scanDirection: "request", flagOnly: true, verbose: false,
+    input: "Hello, can you help me?", scanDirection: "request", verbose: false,
   });
 });
 

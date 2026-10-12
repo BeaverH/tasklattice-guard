@@ -25,10 +25,14 @@ def decision(action="allow", status="allow", **kwargs):
 
 
 class Store:
+    def __init__(self, flag_only_default=True):
+        self.flag_only_default = flag_only_default
     def endpoint_for_credential(self, value):
         return {"key": "endpoint", "lite-key": "lite-endpoint"}.get(value)
     def endpoint_adapter(self, identity):
         return "f5-scan" if identity == "endpoint" else "litellm-generic-guardrail"
+    def endpoint_scan_flag_only_default(self, identity):
+        return self.flag_only_default
     def logging_level(self, _):
         return "info"
 
@@ -44,11 +48,11 @@ class Runtime:
         return self.result
 
 
-def app_for(runtime=None, **kwargs):
+def app_for(runtime=None, *, store=None, **kwargs):
     runtime = runtime or Runtime()
     app = FastAPI()
     telemetry = Telemetry()
-    app.include_router(RunnerAPI(runtime, Store(), Metrics(), telemetry, "runner", "controller", **kwargs).router)
+    app.include_router(RunnerAPI(runtime, store or Store(), Metrics(), telemetry, "runner", "controller", **kwargs).router)
     return app, runtime, telemetry
 
 
@@ -110,7 +114,8 @@ async def test_placeholders_and_unknown_fields_never_reach_execution(value):
 
 
 @pytest.mark.parametrize("body", [{}, [], {"input": None}, {"input": 3},
-    {"input": "private", "flagOnly": "false"}, {"input": "private", "verbose": 0}, {"input": "private", "scanDirection": "output"}])
+    {"input": "private", "flagOnly": "false"}, {"input": "private", "flagOnly": None},
+    {"input": "private", "verbose": 0}, {"input": "private", "scanDirection": "output"}])
 async def test_core_fields_are_strict_and_errors_do_not_echo_input(body):
     app, runtime, _ = app_for()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://runner") as c:
@@ -152,8 +157,31 @@ def test_openapi_documents_ignored_fields_and_bearer():
     assert op["security"] == [{"ScanBearer": []}]
     body = op["requestBody"]["content"]["application/json"]["schema"]
     assert body["required"] == ["input"]
+    assert "default" not in body["properties"]["flagOnly"]
+    assert "Endpoint" in body["properties"]["flagOnly"]["description"]
     for field in IGNORED_FIELDS:
         assert "type" not in body["properties"][field]
+
+
+@pytest.mark.parametrize("default", [True, False])
+@pytest.mark.parametrize("override", [None, True, False])
+@pytest.mark.parametrize("direction", ["request", "response"])
+@pytest.mark.parametrize("action", ["allow", "block", "transform"])
+async def test_endpoint_default_and_explicit_request_precedence(default, override, direction, action):
+    runtime = Runtime(decision(action, "allow" if action == "allow" else "intervene", texts=("processed",)))
+    app, _, telemetry = app_for(runtime, store=Store(default))
+    payload = {"input": "original", "scanDirection": direction}
+    if override is not None:
+        payload["flagOnly"] = override
+    effective = default if override is None else override
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://runner") as client:
+        response = await client.post("/backend/v1/scans", headers={"Authorization": "Bearer key"}, json=payload)
+    assert response.status_code == 200, response.text
+    expected = "cleared" if action == "allow" else "flagged" if effective else {"block": "blocked", "transform": "redacted"}[action]
+    assert response.json()["result"]["outcome"] == expected
+    assert response.json()["redactedInput"] == "processed"
+    assert telemetry.events[-1]["metadata"]["flagOnly"] is effective
+    assert runtime.calls[0].mode == "enforce"
 
 
 @pytest.mark.parametrize("fixture_name", ["local-secrets-v1", "ordered-local-v1"])

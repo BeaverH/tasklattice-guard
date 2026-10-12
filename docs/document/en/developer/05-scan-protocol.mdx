@@ -73,7 +73,7 @@ A response scan sends the complete answer that the model already generated, in t
 | --- | --- | --- |
 | `input` | Required string | The only content to inspect. It must be a string, not an array, an object or `null`. The schema accepts an empty string, but an empty scan proves nothing about other content. |
 | `scanDirection` | `"request"` (default) or `"response"` | Selects the Input Rail or the Output Rail. The value is case-sensitive. |
-| `flagOnly` | Boolean, default `true` | `true` reports each match as `flagged`. `false` tells `blocked` and `redacted` apart. |
+| `flagOnly` | Boolean; omitted uses the Endpoint default, initially `true` | `true` reports each match as `flagged`. `false` tells `blocked` and `redacted` apart. |
 | `verbose` | Boolean, default `false` | Adds one aggregate result detail of the Guardrail. |
 
 All four fields have strict types:
@@ -83,6 +83,10 @@ All four fields have strict types:
 - An invalid enum value or type returns `422`.
 
 Each call resolves the current routing again and returns a new Scan ID. A request scan and a response scan do not share a session or a pinned version. A second submission does a new scan. Scan gives no deduplication or idempotency guarantee. To pin one version for a whole model call, use [LiteLLM](/document/developer/gateway-connect).
+
+Administrators can select **Default flagOnly** when creating a Scan Endpoint and change it in the Endpoint details. New and existing Endpoints initially use `true`. Setting it to `false` lets requests that omit the field distinguish `blocked` from `redacted`. Precedence is **explicit request value → Endpoint default**; an explicit `null` still returns `422`. Changes take effect after Runner synchronization without republishing the Router.
+
+The control-plane create and update field is `scanFlagOnlyDefault`, supported only by `f5-scan`. For example, send `{"scanFlagOnlyDefault":false}` to `PATCH /api/v1/endpoints/{id}` to update the default. The integration page's cURL example omits `flagOnly` to use this setting.
 
 `flagOnly` changes how the result shows. It does not change the inspection or the server execution mode. To observe without enforcing, the client records the decisions separately from the delivery. `dry_run` and the compatibility placeholders cannot start a server Dry Run.
 
@@ -181,7 +185,7 @@ A transformed response scan with `flagOnly=false` and `verbose=true`:
 | `result.outcome` | Meaning and client behavior |
 | --- | --- |
 | `cleared` | The required inspections completed without an intervention. Continue according to the result. |
-| `flagged` | The scan detected an intervention. The default `flagOnly=true` does not tell a block from a replacement. This is not an allow result. |
+| `flagged` | The scan detected an intervention. `flagOnly=true` does not tell a block from a replacement. This is not an allow result. |
 | `blocked` | A block, with `flagOnly=false`. Stop the current phase and hold back the original text. |
 | `redacted` | A real replacement, with `flagOnly=false`. Use the processed text, not the original. |
 
@@ -201,7 +205,7 @@ A timeout, a missing required inspection or an execution failure never becomes `
 <a id="scan-decision-mapping" />
 ### Mapping internal decisions to F5 outcomes
 
-The platform's internal `decision` value for pass is `allow`. The Scan adapter derives `result.outcome` from the final decision, inspection assessment statuses and `flagOnly`. Request and response scans use the same mapping. When omitted, `flagOnly` defaults to `true`. The table applies to successful scans; “intervention” means that at least one final inspection assessment has the status `intervene`.
+The platform's internal `decision` value for pass is `allow`. The Scan adapter derives `result.outcome` from the final decision, inspection assessment statuses and `flagOnly`. Request and response scans use the same mapping. When omitted, `flagOnly` uses the Endpoint default (initially `true`); an explicit request value takes precedence. The table applies to successful scans; “intervention” means that at least one final inspection assessment has the status `intervene`.
 
 | `decision` | Assessment condition | `flagOnly=true` | `flagOnly=false` |
 | --- | --- | --- | --- |

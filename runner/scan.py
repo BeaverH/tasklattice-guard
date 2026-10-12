@@ -25,6 +25,11 @@ def _reject_json_constant(value: str) -> None:
 
 
 def _request_schema(schema):
+    schema["properties"]["flagOnly"].pop("default", None)
+    schema["properties"]["flagOnly"]["description"] = (
+        "When omitted, use the Endpoint's configured default (initially true). "
+        "An explicit boolean overrides that default."
+    )
     for name in IGNORED_FIELDS:
         schema["properties"][name] = {
             "description": "Not applicable. Compatibility placeholder; any JSON value is accepted and ignored.",
@@ -161,6 +166,8 @@ def register_scan(api, *, max_body_bytes: int, timeout_seconds: float) -> None:
                     {"loc": ["body", *item["loc"]], "msg": item["msg"], "type": item["type"]}
                     for item in error.errors(include_input=False, include_context=False, include_url=False)
                 ]})
+            if "flagOnly" not in payload.model_fields_set:
+                payload = payload.model_copy(update={"flagOnly": api._store.endpoint_scan_flag_only_default(endpoint_id)})
             phase = "input" if payload.scanDirection == "request" else "output"
             source = "user_input" if phase == "input" else "model_output"
             protection_request = ProtectionRequest(

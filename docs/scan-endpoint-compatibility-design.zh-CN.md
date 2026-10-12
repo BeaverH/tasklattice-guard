@@ -58,7 +58,7 @@ Runner 已补充“有效凭据摘要 → Endpoint”的索引，在配置应用
 | --- | --- | --- |
 | `input` | 必填 `string` | **有效。** 本次扫描的唯一文本，保留换行、空格、Unicode 和原始内容；不自动解包其中的 JSON |
 | `scanDirection` | `request` 或 `response`；默认 `request` | **有效。** 分别映射到 Guardrail 的 input 或 output 阶段 |
-| `flagOnly` | `boolean`；默认 `true` | **有效。** 控制成功响应的总体 outcome 表达方式，不改变路由和 Guardrail 执行动作 |
+| `flagOnly` | `boolean`；省略时使用 Endpoint 默认值，初始为 `true` | **有效。** 控制成功响应的总体 outcome 表达方式，不改变路由和 Guardrail 执行动作 |
 | `verbose` | `boolean`；默认 `false` | **有效。** 控制是否返回 `scannerResults` 执行详情，不增减实际检查 |
 | `project` | UUID / 名称字符串或 `null` | **兼容占位，任意 JSON 值均忽略。** 不选择项目、Endpoint、Router 或 Guardrail |
 | `externalMetadata` | 对象或 `null` | **兼容占位，任意 JSON 值均忽略。** 不作为路由属性、标签、业务上下文或可查询元数据 |
@@ -76,7 +76,7 @@ Runner 已补充“有效凭据摘要 → Endpoint”的索引，在配置应用
 
 ### 3.2 最小请求
 
-下面的请求等价于 `scanDirection=request`、`flagOnly=true`、`verbose=false`。
+下面的请求使用 `scanDirection=request`、`verbose=false`；`flagOnly` 使用 Endpoint 默认值（初始为 `true`）。
 
 ```json
 {
@@ -134,7 +134,7 @@ Runner 已补充“有效凭据摘要 → Endpoint”的索引，在配置应用
   "properties": {
     "input": {"type": "string"},
     "scanDirection": {"type": "string", "enum": ["request", "response"], "default": "request"},
-    "flagOnly": {"type": "boolean", "default": true},
+    "flagOnly": {"type": "boolean", "description": "Omitted uses the Endpoint default, initially true. Explicit request values take precedence."},
     "verbose": {"type": "boolean", "default": false},
     "project": {"description": "不适用；仅兼容占位，任意 JSON 值均忽略。", "x-tasklattice-effect": "ignored"},
     "externalMetadata": {"description": "不适用；仅兼容占位，任意 JSON 值均忽略。", "x-tasklattice-effect": "ignored"},
@@ -227,11 +227,11 @@ HTTP 响应增加 `X-TaskLattice-Scan-Compatibility: v1` 和 `X-Request-ID: <sca
 
 ### 5.2 `outcome` 与 `flagOnly`
 
-[F5 的 flagOnly 发布说明](https://docs.aisecurity.f5.com/release-notes/2026-03-30-saas.html)明确：配置为阻断的命中，省略或传 `true` 时报告 `flagged`，传 `false` 时报告 `blocked`。本实现采用以下完整映射。
+[F5 的 flagOnly 发布说明](https://docs.aisecurity.f5.com/release-notes/2026-03-30-saas.html)明确：配置为阻断的命中，省略或传 `true` 时报告 `flagged`，传 `false` 时报告 `blocked`。本实现采用以下完整映射；支持 Endpoint 默认值配置后，省略参数时使用该默认值（初始为 `true`），显式请求值仍优先。
 
 先检查扫描是否有效完成，再映射内容结果。`matched` 表示权威的最终检测结果确认命中；不能用“trace 非空”“出现过模型调用”或“中间重试曾命中”替代。
 
-| 有效完成的 Guardrail 结果 | `flagOnly=true` 或省略 | `flagOnly=false` |
+| 有效完成的 Guardrail 结果 | 有效 `flagOnly=true` | `flagOnly=false` |
 | --- | --- | --- |
 | 无风险命中，允许 | `cleared` | `cleared` |
 | 已命中，但配置只记录/允许 | `flagged` | `flagged` |
@@ -451,7 +451,7 @@ CALYPSOAI_URL=https://guard-runtime.example.com
 CALYPSOAI_TOKEN=<TASKLATTICE_ENDPOINT_API_KEY>
 ```
 
-不要求在脚本中加入 `project` 或 Scanner ID。默认 `flagOnly=true` 正是为了兼容这类只统计 `cleared / flagged` 的二元分类脚本。该版本的混淆矩阵只纳入这两个 outcome，验收需另核对总样本数、有效结果数、错误数和超时数，不能让错误样本被排除后掩盖问题。
+不要求在脚本中加入 `project` 或 Scanner ID。Endpoint 初始默认 `flagOnly=true` 是为了兼容这类只统计 `cleared / flagged` 的二元分类脚本。该版本的混淆矩阵只纳入这两个 outcome，验收需另核对总样本数、有效结果数、错误数和超时数，不能让错误样本被排除后掩盖问题。
 
 [F5 DevCentral 的 out-of-band 示例](https://github.com/f5devcentral/f5-ai-security-api-integration-examples/blob/main/examples/scans_api_out_of_band.py)可用于补充 `flagOnly=false` 和四种结果的客户端处理验证。该示例还会调用业务模型；Scan 契约测试应只复用其扫描调用与结果解析部分。
 
@@ -522,3 +522,11 @@ Schema 校验使用 `jsonschema`。这是 TaskLattice 已声明的 Scan 兼容�
 - 本地连接变量保存在忽略目录 `.local-secrets/f5-scan.env`（权限 `0600`）。先加载此文件，即可重复运行上述脚本。公开的配置 ID 和地址保存在 `output/f5-scan-setup.json`；报告不包含 Endpoint Token。
 
 这次验证使用确定性样本，没有运行完整攻击数据集，也没有向真实 F5 服务发送对照请求。验证结论是该客户端调用方式和已声明的 Scan 协议可用，不是 F5 全产品或检测准确率等价认证。
+
+### Endpoint 默认结果格式
+
+创建和更新 `f5-scan` Endpoint 支持布尔字段 `scanFlagOnlyDefault`，数据库为新旧记录保留初始值 `true`。省略请求参数时读取该默认值，显式布尔值优先；`null` 不表示继承，仍按无效类型拒绝。非 F5 Endpoint 不接受该配置。
+
+更改默认值会产生审计记录并递增 desired-state generation，通过完整快照与 Endpoint 凭据、Router 绑定一起分发。Runner 原子激活并持久化，重启恢复相同默认值；旧快照未包含此字段时保留 `true`。无须重新发布 Router。日志中的 `flagOnly` 记录本次请求实际使用的值。
+
+接入页复制的 cURL 命令省略 `flagOnly`，自然继承 Endpoint 配置。兼容性脚本支持 `--flag-only-default false`，用于验证默认值为 `false` 的部署；显式 true/false 的测试矩阵仍保留。

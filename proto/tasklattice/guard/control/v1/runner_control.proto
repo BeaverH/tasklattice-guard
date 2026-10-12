@@ -161,6 +161,8 @@ message EndpointRuntime {
   EndpointVerification verification = 3;
   // Explicit composed Router binding; empty rejects public traffic.
   string router_id = 4;
+  // F5 Scan default when the request omits flagOnly. Absence preserves true.
+  optional bool scan_flag_only_default = 5;
 }
 
 // ACK/NACK for verifying, prewarming, and activating an artifact generation.
