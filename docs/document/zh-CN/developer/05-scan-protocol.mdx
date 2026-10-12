@@ -185,8 +185,6 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 | `blocked` | `flagOnly=false` 时的阻断。停止当前阶段，不交付原文。 |
 | `redacted` | `flagOnly=false` 时发生了实际替换。使用处理后的文本，不交付原文。 |
 
-`flagOnly=false` 并不保证只返回三种结果。聚合结果需要干预、但最终动作不是 block 或 transform 时，仍可能返回 `flagged`。调用方必须处理全部四种值。
-
 | 返回字段 | 约束 |
 | --- | --- |
 | `id` | 每次扫描新生成的 UUID。它不是请求关联键，也不是模型调用 ID。 |
@@ -199,6 +197,22 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 | `scanners` | 固定为 `null`。配置不适用。 |
 
 检测超时、缺少所需检测或执行出错，都不会变成 `cleared`。这些情况返回非 `2xx` 错误，而不是成功的 Scan 结果。
+
+<a id="scan-decision-mapping" />
+### 内部 decision 到 F5 outcome 的映射
+
+平台内部表示放行（pass）的 `decision` 值是 `allow`。Scan 适配器根据最终 decision、检测评估状态和 `flagOnly` 生成 `result.outcome`，输入与输出扫描使用同一套映射。省略 `flagOnly` 时默认为 `true`。下表适用于成功返回的扫描；“需要干预”表示至少一项检测的最终评估状态为 `intervene`。
+
+| `decision` | 检测评估条件 | `flagOnly=true` | `flagOnly=false` |
+| --- | --- | --- | --- |
+| `allow`（放行 / pass） | 无须干预 | `cleared` | `cleared` |
+| `allow`（放行 / pass） | 仍有评估需要干预 | `flagged` | `flagged` |
+| `block` | 无额外条件 | `flagged` | `blocked` |
+| `transform` | 无额外条件 | `flagged` | `redacted` |
+
+因此，`flagOnly=false` 仍可能返回 `flagged`，调用方必须处理全部四种 outcome。`flagOnly` 只改变对外的 outcome 标签，不关闭 Guardrail 的阻断或替换处理，也不把 `flagged` 变成放行。例如，`transform` 在 `flagOnly=true` 时返回 `flagged`，但 `redactedInput` 仍包含处理后的文本。
+
+`transform` 可以是局部替换，也可以是整段文本替换。映射为 `redacted` 是本平台的协议适配约定，不代表复用了 F5 的策略或具有相同的检测效果。
 
 <a id="scan-errors" />
 ## 错误格式、响应头与限制

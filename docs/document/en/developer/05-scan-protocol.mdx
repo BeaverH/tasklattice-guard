@@ -185,8 +185,6 @@ A transformed response scan with `flagOnly=false` and `verbose=true`:
 | `blocked` | A block, with `flagOnly=false`. Stop the current phase and hold back the original text. |
 | `redacted` | A real replacement, with `flagOnly=false`. Use the processed text, not the original. |
 
-`flagOnly=false` does not guarantee only three outcomes. An aggregate intervention without a final block or transform Decision can still produce `flagged`. Handle all four values.
-
 | Response field | Contract |
 | --- | --- |
 | `id` | A new UUID for each scan. It is not a correlation key and not a model-call ID. |
@@ -199,6 +197,22 @@ A transformed response scan with `flagOnly=false` and `verbose=true`:
 | `scanners` | Always `null`. Configuration does not apply. |
 
 A timeout, a missing required inspection or an execution failure never becomes `cleared`. Each returns a non-2xx error instead of a successful Scan result.
+
+<a id="scan-decision-mapping" />
+### Mapping internal decisions to F5 outcomes
+
+The platform's internal `decision` value for pass is `allow`. The Scan adapter derives `result.outcome` from the final decision, inspection assessment statuses and `flagOnly`. Request and response scans use the same mapping. When omitted, `flagOnly` defaults to `true`. The table applies to successful scans; “intervention” means that at least one final inspection assessment has the status `intervene`.
+
+| `decision` | Assessment condition | `flagOnly=true` | `flagOnly=false` |
+| --- | --- | --- | --- |
+| `allow` (pass) | No intervention | `cleared` | `cleared` |
+| `allow` (pass) | An assessment still requires intervention | `flagged` | `flagged` |
+| `block` | No additional condition | `flagged` | `blocked` |
+| `transform` | No additional condition | `flagged` | `redacted` |
+
+Therefore, `flagOnly=false` can still return `flagged`. Clients must handle all four outcomes. `flagOnly` changes only the outward outcome label: it does not disable Guardrail blocking or replacement, and `flagged` does not grant permission to deliver the text. For example, `transform` with `flagOnly=true` returns `flagged`, but `redactedInput` still contains the processed text.
+
+`transform` can replace part of the text or the entire text. Mapping it to `redacted` is this platform's protocol adaptation; it does not imply reuse of F5 policies or equivalent detection behavior.
 
 <a id="scan-errors" />
 ## Errors, response headers and limits

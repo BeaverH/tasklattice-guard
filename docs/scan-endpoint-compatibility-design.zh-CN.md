@@ -461,7 +461,7 @@ CALYPSOAI_TOKEN=<TASKLATTICE_ENDPOINT_API_KEY>
 
 第一版提供同步文本扫描、四个有效请求字段、六个可忽略占位字段、四种总体结果、聚合执行详情、Bearer 凭据定位以及现有 Router 分发。以下能力不包含在此契约中：原始请求/SSE 扫描 `/scans/raw/{format}`、业务模型代理 `/prompts`、图片/音频、批量数组 Body、F5 Project/Scanner 管理、F5 历史查询和跨请求关联。
 
-已实现 Runner 认证、独立执行和结果适配，以及 Endpoint 管理、Playground、Helm 根路径入口和日志。管理端标注“Scan（F5 兼容）”，接入说明列出被忽略字段和聚合详情粒度。当前交付为仓库代码，尚未部署到实际集群。
+已实现 Runner 认证、独立执行和结果适配，以及 Endpoint 管理、Playground、Helm 根路径入口和日志。管理端标注“Scan（F5 兼容）”，接入说明列出被忽略字段和聚合详情粒度。2026-10-12 已在本地 OrbStack 集群完成专用 Endpoint 的部署验收，记录见下文；真实 F5 实例对照仍未进行。
 
 主要工作集中在固定路径的 Endpoint 身份解析、独立输出生命周期和判定证据映射。JSON 解析与字段占位本身较简单，也无须复制 F5 的项目和扫描器管理体系。
 
@@ -484,3 +484,41 @@ npm run build --prefix controller
 ```
 
 创建 Scan Endpoint 后仍需绑定已发布 Router、等待 Runner 配置同步，再使用该 Endpoint 的 API Key 调用。真实集群的 DNS、TLS、Ingress Controller 和真实 F5 数据集对照属于部署后的联调范围。
+
+## 11. 可重复的部署验收
+
+`tests/fixtures/scan/demo-guardrail.json` 是独立的兼容性验收配置，可以作为创建 Guardrail 的请求体。它使用本地 Phrase filters，在 input 和 output 两个方向阻断 `F5_SCAN_BLOCK_ME`，把 `F5_SCAN_REDACT_ME` 替换成 `[REDACTED]`，其他文本放行。该配置用于验证协议，不代表通用安全检测覆盖率。
+
+运行并通过 Guardrail 的四项规则验收后发布版本，创建 `f5-scan` Endpoint，再通过已发布 Router 的 fallback Route 将全部流量指向该版本。Router 发布仍需遵循应用的审批流程。
+
+保存 Endpoint 凭据后运行：
+
+```bash
+export CALYPSOAI_URL='http://localhost:38082'
+export CALYPSOAI_TOKEN='<Scan Endpoint 凭据>'
+export SCAN_GUARDRAIL_ID='<上述 Guardrail ID>'
+.venv/bin/python scripts/test-scan-endpoint.py
+```
+
+脚本执行 96 项真实 HTTP 检查：先发起独立 response 扫描，再覆盖两个方向、四种 outcome、flagOnly 与 verbose 组合、默认值、Unicode、空文本、局部替换、六个占位字段的不同 JSON 类型、未知字段、严格校验、认证、媒体类型及请求体上限。每次扫描还检查独立 ID 和兼容性响应头。失败、超时和网络错误均计入失败数；报告写入 `output/f5-scan-compatibility.json`，退出码非零表示有失败。
+
+如部署修改了请求体上限，使用 `--max-body-bytes` 传入相同值。可以下载 F5 公开 OpenAPI 并为所有成功响应增加 Schema 校验：
+
+```bash
+curl --fail --silent --show-error https://docs.aisecurity.f5.com/openapi.json \
+  --output /tmp/f5-scan-openapi.json
+.venv/bin/python scripts/test-scan-endpoint.py --schema /tmp/f5-scan-openapi.json
+```
+
+Schema 校验使用 `jsonschema`。这是 TaskLattice 已声明的 Scan 兼容契约验收；其中“接受并忽略任意类型占位字段”等断言是本实现的约定，不能用作真实 F5 服务的完整一致性测试。检测准确率仍需使用业务数据集单独评估。
+
+### 2026-10-12 本地部署验证记录
+
+- 在 OrbStack 的 `tali` namespace 创建 `F5 Scan Compatibility Demo` Guardrail、Endpoint 和 Router，发布 fallback Route，指向专用版本。该配置不调用检测模型。
+- 配置时发现并修复短语验收证据 ID 映射：展开后的用例现在检查 `configured/phrases/<entry-id>`，与实际执行证据一致。相关领域单测 17/17 通过，Controller 构建与滚动更新通过，专用 Guardrail 的四项验收 4/4 通过后才发布。
+- 重跑 Scan 专项测试：48/48 通过。
+- 对运行中的 Endpoint 执行 `scripts/test-scan-endpoint.py`：96/96 通过，其中 80 份成功响应全部通过本次下载的 F5 OpenAPI `10.110.0` 的 `PostScansResponse` Schema 校验。完整本地报告为 `output/f5-scan-compatibility.json`。
+- 从上文固定版本的 F5 DevCentral 脚本提取未经修改的 `calypsoai_scan` 函数，使用原始 `requests.post` 调用本地 Runner。正常文本和中文文本返回 `cleared`，阻断与替换样本在默认 `flagOnly=true` 下返回 `flagged`，4/4 通过。报告为 `output/f5-upstream-client-compatibility.json`，包含来源版本及下载文件 SHA-256。
+- 本地连接变量保存在忽略目录 `.local-secrets/f5-scan.env`（权限 `0600`）。先加载此文件，即可重复运行上述脚本。公开的配置 ID 和地址保存在 `output/f5-scan-setup.json`；报告不包含 Endpoint Token。
+
+这次验证使用确定性样本，没有运行完整攻击数据集，也没有向真实 F5 服务发送对照请求。验证结论是该客户端调用方式和已声明的 Scan 协议可用，不是 F5 全产品或检测准确率等价认证。
