@@ -1145,61 +1145,58 @@ def test_promotion_defaults_mount_no_promotion_material_and_switch_no_feature():
     assert not {"package-signing", "package-trust", "baseline-package"} & {volume["name"] for volume in spec["volumes"]}
 
 
-def test_trust_and_baseline_are_mounted_read_only():
+def test_legacy_trust_is_ignored_and_optional_baseline_is_mounted_read_only():
     spec = _controller(render(
         "--set", "controller.promotion.trust.existingConfigMap=guard-package-trust",
         "--set", "controller.promotion.baselinePackage.existingConfigMap=guard-baseline",
     ))
     container = spec["containers"][0]
     environment = {entry["name"]: entry.get("value") for entry in container["env"]}
-    assert environment["CONTROLLER_PACKAGE_TRUST_PATH"] == "/etc/tasklattice/package-trust/trust.json"
+    assert "CONTROLLER_PACKAGE_TRUST_PATH" not in environment
     assert environment["CONTROLLER_BASELINE_PACKAGE_PATH"] == "/etc/tasklattice/baseline-package/baseline.guardrail.zip"
     mounts = {mount["name"]: mount for mount in container["volumeMounts"]}
-    assert mounts["package-trust"]["readOnly"] and mounts["baseline-package"]["readOnly"]
+    assert "package-trust" not in mounts
+    assert mounts["baseline-package"]["readOnly"]
     volumes = {volume["name"]: volume for volume in spec["volumes"]}
-    assert volumes["package-trust"]["configMap"]["name"] == "guard-package-trust"
+    assert "package-trust" not in volumes
+    assert volumes["baseline-package"]["configMap"]["name"] == "guard-baseline"
 
 
-def test_inline_trust_sources_render_the_chart_trust_config_map():
+def test_legacy_inline_trust_sources_are_ignored():
     sources = [{"id": "bank-uat", "name": "Bank UAT", "keys": [{"id": "uat-2026", "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nkey\n-----END PUBLIC KEY-----\n"}],
                 "reservedGuardrailIds": ["guardrail-default"]}]
     documents = render("--set-json", f"controller.promotion.trust.sources={json.dumps(sources)}")
-    config_map = next(doc for doc in documents if doc["kind"] == "ConfigMap" and doc["metadata"]["name"].endswith("-package-trust"))
-    assert json.loads(config_map["data"]["trust.json"]) == {"sources": sources}
+    assert not any(doc["kind"] == "ConfigMap" and doc["metadata"]["name"].endswith("-package-trust") for doc in documents)
     spec = _controller(documents)
     environment = {entry["name"]: entry.get("value") for entry in spec["containers"][0]["env"]}
-    assert environment["CONTROLLER_PACKAGE_TRUST_PATH"] == "/etc/tasklattice/package-trust/trust.json"
+    assert "CONTROLLER_PACKAGE_TRUST_PATH" not in environment
     volumes = {volume["name"]: volume for volume in spec["volumes"]}
-    assert volumes["package-trust"]["configMap"]["name"] == config_map["metadata"]["name"]
-    # Changing who is trusted rolls the Controller.
+    assert "package-trust" not in volumes
     deployment = next(doc for doc in documents if doc["kind"] == "Deployment" and doc["metadata"]["name"].endswith("controller"))
-    assert "checksum/package-trust" in deployment["spec"]["template"]["metadata"]["annotations"]
-    # Every source needs a name; the Controller refuses the file otherwise.
-    assert "name" in render_error("--set-json", 'controller.promotion.trust.sources=[{"id":"bank-uat","keys":[{"id":"k","publicKeyPem":"-----BEGIN PUBLIC KEY-----"}]}]')
+    assert "checksum/package-trust" not in deployment["spec"]["template"]["metadata"]["annotations"]
+    # Stale values never impose requirements on ordinary file import/export.
+    render("--set-json", 'controller.promotion.trust.sources=[{"id":"bank-uat"}]')
 
 
-def test_local_promotion_pair_differs_only_in_identity_and_ports():
+def test_local_promotion_pair_needs_no_package_configuration():
     uat = render_dev("--values", str(CHART / "values-dev-uat.yaml"))
     prod = render_dev("--values", str(CHART / "values-dev-prod.yaml"))
     env = lambda documents: {entry["name"]: entry.get("value") for entry in _controller(documents)["containers"][0]["env"]}
-    assert env(uat)["CONTROLLER_PACKAGE_SOURCE_ID"] == "bank-uat"
-    assert "CONTROLLER_PACKAGE_SIGNING_KEY_PATH" not in env(prod)
+    assert not any(name.startswith("CONTROLLER_PACKAGE_") for name in {**env(uat), **env(prod)})
     # No feature switch tells the two apart.
     assert not any(name.startswith("CONTROLLER_AUTHORING") for name in {**env(uat), **env(prod)})
     ports = lambda documents: sorted(doc["spec"]["ports"][0]["port"] for doc in documents if doc["kind"] == "Service" and doc["spec"].get("type") == "LoadBalancer")
     assert ports(uat) == [38181, 38182] and ports(prod) == [38281, 38282]
 
 
-def test_authoring_environment_signs_packages_with_a_separate_key_and_source_identity():
+def test_legacy_package_export_keys_and_source_identity_are_ignored():
     spec = _controller(render(
         "--set", "controller.promotion.export.existingSecret=guard-package-signing",
         "--set", "controller.promotion.export.sourceId=bank-uat",
         "--set", "controller.promotion.export.keyId=uat-2026",
     ))
     environment = {entry["name"]: entry.get("value") for entry in spec["containers"][0]["env"]}
-    assert environment["CONTROLLER_PACKAGE_SOURCE_ID"] == "bank-uat"
-    assert environment["CONTROLLER_PACKAGE_SOURCE_NAME"] == "bank-uat"
-    assert environment["CONTROLLER_PACKAGE_SIGNING_KEY_ID"] == "uat-2026"
-    assert environment["CONTROLLER_PACKAGE_SIGNING_KEY_PATH"] == "/var/run/tasklattice/package-signing/private-key.pem"
-    assert {volume["name"]: volume for volume in spec["volumes"]}["package-signing"]["secret"]["secretName"] == "guard-package-signing"
-    assert "controller.promotion.export.sourceId is required" in render_error("--set", "controller.promotion.export.existingSecret=guard-package-signing")
+    assert not any(name.startswith("CONTROLLER_PACKAGE_") for name in environment)
+    assert "package-signing" not in {volume["name"] for volume in spec["volumes"]}
+    assert "package-signing" not in {mount["name"] for mount in spec["containers"][0]["volumeMounts"]}
+    render("--set", "controller.promotion.export.existingSecret=guard-package-signing")

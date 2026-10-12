@@ -1,3 +1,4 @@
+vi.mock("./testing-report-retention.js", async importOriginal => ({ ...await importOriginal<typeof import("./testing-report-retention.js")>(), pruneTestingReports: vi.fn() }));
 import { resolve } from "node:path";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
@@ -217,7 +218,7 @@ describe("Default baseline validation gate", () => {
   it.each([null, "admin-user"])("only resumes automatic publication for system validation (actor %s)", async (createdBy) => {
     const content = candidate();
     const run = { id: "validation-1", guardrailId: "guardrail-default", guardrailVersion: content.guardrailVersion, createdBy, status: "running", subject: "draft" };
-    const test = harness([[], [run], [{ payload: { plan: content.plan, runtimeProfile: "auto" } }]]);
+    const test = harness([[], [{ guardrailId: run.guardrailId }], [{ id: run.guardrailId }], [run], [{ payload: { plan: content.plan, runtimeProfile: "auto" } }]]);
     const reconcile = vi.spyOn(test.service, "initialize").mockResolvedValue();
     await test.service.completeValidation({ runId: "validation-1", status: "passed", metrics: emptyValidationMetrics(), results: [], candidateArtifact: content });
     expect(reconcile).toHaveBeenCalledTimes(createdBy === null ? 1 : 0);
@@ -236,7 +237,7 @@ describe("Validated candidate gate", () => {
 
   it("stores the exact tested candidate and its digest", async () => {
     const content = candidate();
-    const test = harness([[], [run], request(content.plan)]);
+    const test = harness([[], [{ guardrailId: run.guardrailId }], [{ id: run.guardrailId }], [run], request(content.plan)]);
     await complete(test, content);
     // Stored exactly as a Runner decodes it from the wire.
     const decoded = canonicalArtifactContent(content, resolve("../proto/tasklattice/guard/control/v1/runner_control.proto"));
@@ -252,14 +253,14 @@ describe("Validated candidate gate", () => {
     const content = candidate();
     if (mutate) mutate(content.plan);
     if (otherVersion) content.guardrailVersion = otherVersion;
-    const test = harness([[], [run], request(candidate().plan)]);
+    const test = harness([[], [{ guardrailId: run.guardrailId }], [{ id: run.guardrailId }], [run], request(candidate().plan)]);
     await complete(test, name === "missing" ? undefined : content);
     expect(stored(test)).toMatchObject({ status: "failed", failureReason: expect.any(String) });
     expect(stored(test)).not.toHaveProperty("candidateArtifact");
   });
 
   it("fails a candidate compiled for a different runtime profile than requested", async () => {
-    const test = harness([[], [run], request(candidate().plan, "iorails_native")]);
+    const test = harness([[], [{ guardrailId: run.guardrailId }], [{ id: run.guardrailId }], [run], request(candidate().plan, "iorails_native")]);
     await complete(test, candidate());
     expect(stored(test)).toMatchObject({ status: "failed" });
   });

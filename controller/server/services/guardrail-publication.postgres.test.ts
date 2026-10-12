@@ -13,6 +13,8 @@ import { createTestDatabase } from "../db/postgres-test-database.js";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
 import { testSuiteDigest } from "../domain/test-suite.js";
 import { ControlPlaneService } from "./control-plane.js";
+import { pruneTestingReportHistory } from "./testing-report-retention.js";
+import { parsePackage } from "../domain/guardrail-package.js";
 
 const url = process.env.GUARD_TEST_POSTGRES_URL;
 const catalogDir = resolve("../runner/toolkit/policy_library/assets");
@@ -163,6 +165,116 @@ describe.skipIf(!url)("Publishing the tested candidate in PostgreSQL", () => {
     await service.completeValidation({ runId: run.id, status, metrics: emptyValidationMetrics(run.metrics.total), results: [] });
     return run;
   }
+
+  async function seedHistory(guardrailId: string, prefix: string, status: "passed" | "failed" | "queued" | "running", count: number, version: string | null = null) {
+    await database.pool.query(`INSERT INTO guardrail_validation_run
+      (id, guardrail_id, guardrail_version, source_draft_revision, status, subject, created_at, completed_at, results)
+      SELECT $2 || '-' || n, $1, coalesce($5::text, 'unpublished-candidate-' || n), 1, $3, CASE WHEN $5::text IS NULL THEN 'draft' ELSE 'version' END,
+        now() + n * interval '1 second', CASE WHEN $3 IN ('passed', 'failed') THEN now() + n * interval '1 second' ELSE NULL END,
+        jsonb_build_array(jsonb_build_object('body', repeat('x', 4096))) FROM generate_series(1, $4::int) n`, [guardrailId, prefix, status, count, version]);
+    await database.pool.query(`INSERT INTO controller_outbox (id, kind, aggregate_id, payload)
+      SELECT id, 'guardrail.validation_requested', guardrail_id, jsonb_build_object('body', repeat('x', 4096))
+      FROM guardrail_validation_run WHERE guardrail_id=$1 AND starts_with(id, $2)`, [guardrailId, prefix]);
+  }
+
+  it("retains 2 Passed + 1 Failed independently for all 10 versions, plus a bounded draft history", async () => {
+    const { guardrail, version } = await releasedFixture();
+    const versions = [version.version];
+    for (let index = 1; index < 10; index++) {
+      await database.pool.query("UPDATE guardrail SET draft_revision=draft_revision+1 WHERE id=$1", [guardrail.id]);
+      const run = await service.requestValidation({ guardrailId: guardrail.id, actorId: "admin", compilerAvailable: true });
+      await service.completeValidation({ runId: run.id, status: "passed", metrics: emptyValidationMetrics(run.metrics.total), results: [], candidateArtifact: await runnerCandidate(run.id) });
+      versions.push((await service.requestGuardrailPublish({ guardrailId: guardrail.id, actorId: "admin" })).version);
+    }
+    for (const [index, versionId] of versions.entries()) {
+      await seedHistory(guardrail.id, `version-${index}-passed`, "passed", 4, versionId);
+      await seedHistory(guardrail.id, `version-${index}-failed`, "failed", 3, versionId);
+    }
+    await seedHistory(guardrail.id, "retention-passed", "passed", 9);
+    await seedHistory(guardrail.id, "retention-failed", "failed", 508);
+    await seedHistory(guardrail.id, "retention-queued", "queued", 1);
+    await seedHistory(guardrail.id, "retention-running", "running", 1);
+    const other = await releasedFixture();
+    await pruneTestingReportHistory(database.db);
+    const reports = (await service.queryValidationRuns({ guardrailId: guardrail.id, limit: 100 })).items;
+    for (const [index, versionId] of versions.entries()) {
+      const own = reports.filter(run => run.guardrailVersion === versionId);
+      expect(own.filter(run => run.status === "passed").map(run => run.id).sort()).toEqual([3, 4].map(n => `version-${index}-passed-${n}`));
+      expect(own.filter(run => run.status === "failed").map(run => run.id)).toEqual([`version-${index}-failed-3`]);
+    }
+    const drafts = reports.filter(run => !versions.includes(run.guardrailVersion));
+    expect(drafts.filter(run => run.status === "passed").map(run => run.id).sort()).toEqual([8, 9].map(n => `retention-passed-${n}`));
+    expect(drafts.filter(run => run.status === "failed").map(run => run.id)).toEqual(["retention-failed-508"]);
+    expect(reports).toHaveLength(35);
+    expect(await service.listValidationRuns(other.guardrail.id)).toHaveLength(1);
+    const summary = await service.getGuardrail(guardrail.id);
+    expect(summary).toMatchObject({ readiness: "ready", versionSummary: { total: 10, released: 10, pending: 0, missingEvidence: 0 } });
+    expect(summary.versions.every(item => item.testingEvidence?.release?.id === item.validationRunId)).toBe(true);
+    expect(JSON.stringify(summary.versions.map(item => item.testingEvidence))).not.toMatch(/results|testSuite"|candidateArtifact/);
+    const requests = (await database.pool.query("SELECT id FROM controller_outbox WHERE aggregate_id=$1 AND kind='guardrail.validation_requested'", [guardrail.id])).rows;
+    expect(requests.map(item => item.id).sort()).toEqual(reports.map(item => item.id).sort());
+    const exported = parsePackage((await service.packages.exportPackage(guardrail.id, versions)).bytes);
+    expect(JSON.stringify(exported.manifest)).not.toContain("testingEvidence");
+    // Resetting local operational data must also revoke the compact evidence.
+    await service.softDeleteGuardrail({ id: guardrail.id, actorId: "admin", reason: "retention reset test", confirmRecentTraffic: false });
+    const reset = (await database.pool.query("SELECT status, testing_evidence FROM guardrail_version WHERE guardrail_id=$1", [guardrail.id])).rows;
+    expect(reset).toHaveLength(10);
+    expect(reset.every(row => row.status === "pending" && row.testing_evidence === null)).toBe(true);
+  }, 30_000);
+
+  it("replaces only the same version's previous failure and oldest success, independently of other versions and drafts", async () => {
+    const { guardrail, version, run: publication } = await releasedFixture();
+    const pass1 = await versionReport(guardrail.id, version.version);
+    await database.pool.query("UPDATE guardrail SET draft_revision=draft_revision+1 WHERE id=$1", [guardrail.id]);
+    const candidate = await service.requestValidation({ guardrailId: guardrail.id, actorId: "admin", compilerAvailable: true });
+    await service.completeValidation({ runId: candidate.id, status: "passed", metrics: emptyValidationMetrics(candidate.metrics.total), results: [], candidateArtifact: await runnerCandidate(candidate.id) });
+    const otherVersion = await service.requestGuardrailPublish({ guardrailId: guardrail.id, actorId: "admin" });
+    const failure1 = await versionReport(guardrail.id, version.version, "failed");
+    const failure2 = await versionReport(guardrail.id, version.version, "failed");
+    const otherFailure = await versionReport(guardrail.id, otherVersion.version, "failed");
+    const rows = () => service.listValidationRuns(guardrail.id);
+    expect((await rows()).map(run => run.id).sort()).toEqual([publication.id, pass1.id, candidate.id, failure2.id, otherFailure.id].sort());
+    await expect(service.getValidationRun(failure1.id)).rejects.toMatchObject({ status: 404 });
+    expect((await database.pool.query("SELECT id FROM controller_outbox WHERE id=$1", [failure1.id])).rows).toEqual([]);
+    const pass2 = await versionReport(guardrail.id, version.version);
+    expect((await rows()).map(run => run.id).sort()).toEqual([pass1.id, pass2.id, candidate.id, failure2.id, otherFailure.id].sort());
+    const summary = await service.getGuardrail(guardrail.id);
+    expect(summary).toMatchObject({ readiness: "ready", versionSummary: { released: 2 } });
+    expect(summary.versions.find(row => row.version === version.version)?.testingEvidence?.release?.id).toBe(publication.id);
+    await seedHistory(guardrail.id, "separate-draft-failures", "failed", 8);
+    await pruneTestingReportHistory(database.db);
+    expect((await rows()).filter(run => run.subject === "version" && run.status === "failed").map(run => run.id).sort()).toEqual([failure2.id, otherFailure.id].sort());
+    // Late delivery of the replaced failure must not recreate its report or change the remaining failure.
+    await service.completeValidation({ runId: failure1.id, status: "passed", metrics: emptyValidationMetrics(0), results: [] });
+    await expect(service.getValidationRun(failure1.id)).rejects.toMatchObject({ status: 404 });
+    // Another version's passing result cannot release a version whose most recent test failed.
+    await database.pool.query("UPDATE guardrail_version SET status='pending', validation_run_id=NULL, released_at=NULL WHERE guardrail_id=$1 AND version=$2", [guardrail.id, otherVersion.version]);
+    await expect(service.releaseGuardrailVersion({ guardrailId: guardrail.id, version: otherVersion.version, actorId: "admin" }))
+      .rejects.toMatchObject({ code: "guardrail_version_test_required", detail: { lastRun: { id: otherFailure.id, status: "failed" } } });
+    const nextPass = await versionReport(guardrail.id, otherVersion.version);
+    expect(await service.releaseGuardrailVersion({ guardrailId: guardrail.id, version: otherVersion.version, actorId: "admin" })).toMatchObject({ status: "ready", validationRunId: nextPass.id });
+    // Removed versions join the separate history bucket immediately, without evicting another version's reports.
+    const otherReports = (await rows()).filter(run => run.guardrailVersion === otherVersion.version).map(run => run.id).sort();
+    await service.deleteGuardrailVersion({ guardrailId: guardrail.id, version: version.version, actorId: "admin" });
+    expect((await rows()).filter(run => run.guardrailVersion === otherVersion.version).map(run => run.id).sort()).toEqual(otherReports);
+    const history = (await rows()).filter(run => run.guardrailVersion !== otherVersion.version);
+    expect(history.filter(run => run.status === "passed")).toHaveLength(2);
+    expect(history.filter(run => run.status === "failed")).toHaveLength(1);
+  });
+
+  it("serializes concurrent completions and duplicate deliveries without exceeding retention or repeating completion", async () => {
+    const { guardrail, version } = await releasedFixture();
+    await seedHistory(guardrail.id, "concurrent-retention", "queued", 12);
+    await database.pool.query("UPDATE guardrail_validation_run SET subject='version', guardrail_version=$2 WHERE guardrail_id=$1 AND starts_with(id, 'concurrent-retention-')", [guardrail.id, version.version]);
+    const input = (n: number) => ({ runId: `concurrent-retention-${n}`, status: "passed" as const, metrics: emptyValidationMetrics(0), results: [] });
+    await Promise.all(Array.from({ length: 12 }, (_, n) => service.completeValidation(input(n + 1))));
+    await Promise.all(Array.from({ length: 12 }, (_, n) => service.completeValidation(input(n + 1))));
+    expect(await service.listValidationRuns(guardrail.id)).toHaveLength(2);
+    expect(await service.getGuardrail(guardrail.id)).toMatchObject({ readiness: "ready" });
+    const completed = (await database.pool.query("SELECT detail->>'runId' AS id, count(*)::int AS n FROM audit_event WHERE resource_id=$1 AND kind='guardrail.validation_completed' GROUP BY detail->>'runId'", [guardrail.id])).rows;
+    expect(completed).toHaveLength(13);
+    expect(completed.every(row => row.n === 1)).toBe(true);
+  });
 
   it("derives resource readiness from retained versions and matching evidence, independently of draft and latest test", async () => {
     const { guardrail, run, version } = await releasedFixture();

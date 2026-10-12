@@ -217,3 +217,35 @@ async def test_failed_apply_does_not_cache_unapplied_model_configuration():
     store.fail = False
     await client._apply_desired_state(state)
     assert store.providers is not None and store.generation == 23
+
+
+@pytest.mark.asyncio
+async def test_duplicate_validation_requests_share_execution_and_replay_terminal_failure():
+    import asyncio
+    from unittest.mock import Mock
+    client = RunnerControlClient(_settings(), Store(), Metrics())
+    client._metrics.job = Mock()
+    client._validator = SimpleNamespace(run=AsyncMock(side_effect=RuntimeError("synthetic test failure")))
+    request = protocol.ValidationRequest(run_id="same-run")
+    await asyncio.gather(client._validate(request), client._validate(request))
+    first = (await client._outgoing.get()).validation_result
+    second = (await client._outgoing.get()).validation_result
+    client._validator.run.assert_awaited_once()
+    assert first == second
+    assert not first.accepted
+    assert client._validation_result_bytes <= client._validation_result_budget
+
+
+@pytest.mark.asyncio
+async def test_validation_replay_cache_evicts_by_bytes():
+    from unittest.mock import Mock
+    client = RunnerControlClient(_settings(), Store(), Metrics())
+    client._metrics.job = Mock()
+    client._validator = SimpleNamespace(run=AsyncMock(side_effect=RuntimeError("synthetic test failure")))
+    await client._validate(protocol.ValidationRequest(run_id="run-1"))
+    client._validation_result_budget = client._validation_result_bytes
+    await client._validate(protocol.ValidationRequest(run_id="run-2"))
+    assert list(client._validation_results) == ["run-2"]
+    assert client._validation_result_bytes <= client._validation_result_budget
+    await client._validate(protocol.ValidationRequest(run_id="run-2"))
+    assert client._validator.run.await_count == 2

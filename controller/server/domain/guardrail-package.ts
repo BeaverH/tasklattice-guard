@@ -26,16 +26,16 @@ import { readZip, writeZip, type ZipLimits } from "./zip.js";
  * every Policy version the selected Guardrail versions use; import builds the
  * tree from its leaves up. Test reports are per run and per environment; they
  * never travel. Every file is canonical JSON, the manifest indexes the nodes,
- * the edges and every file by SHA-256, and signatures cover the manifest
- * bytes. Only this declared layout is accepted:
+ * the edges and every file by SHA-256. No environment setup is needed.
+ * Legacy v3 signatures are accepted as metadata. Declared layout:
  *
- *   manifest.json, signatures.json,
+ *   manifest.json (plus signatures.json in legacy v3),
  *   policies/<policyId>/<policyVersion>/policy.json
  *   guardrails/<guardrailId>/guardrail.json
  *   guardrails/<guardrailId>/versions/<version>/{version,test-suite,artifact,requirements}.json
  */
 export const PACKAGE_FORMAT = "tasklattice.guardrail-package";
-export const PACKAGE_SCHEMA_VERSION = 3;
+export const PACKAGE_SCHEMA_VERSION = 4;
 export const PACKAGE_UPLOAD_LIMIT_BYTES = 32 * 1024 * 1024;
 export const PACKAGE_ZIP_LIMITS: ZipLimits = { maxEntries: 1024, maxEntryBytes: 16 * 1024 * 1024, maxTotalBytes: 64 * 1024 * 1024 };
 export const PACKAGE_FILE_EXTENSION = ".guardrail.zip";
@@ -52,7 +52,7 @@ const edge = z.object({ id: segment, version: segment, digest }).strict();
 
 const manifestSchema = z.object({
   format: z.literal(PACKAGE_FORMAT),
-  schemaVersion: z.literal(PACKAGE_SCHEMA_VERSION),
+  schemaVersion: z.union([z.literal(3), z.literal(PACKAGE_SCHEMA_VERSION)]),
   contentContract: z.literal(ARTIFACT_CONTENT_CONTRACT),
   exportedAt: z.string().datetime(),
   source: identity,
@@ -135,7 +135,8 @@ export function buildPackage(input: {
   guardrail: { id: string; name: string };
   versions: Array<{ content: ArtifactContent; config: VersionConfig; testSuite: FrozenTestCase[]; policies: PolicyNode[] }>;
   exportedAt: Date;
-  sign: (manifest: Buffer) => PackageSignature[];
+  /** Only for writing legacy v3 packages; normal exports require no signing configuration. */
+  sign?: (manifest: Buffer) => PackageSignature[];
 }): Buffer {
   const files = new Map<string, Buffer>();
   const nodes = new Map<string, PolicyNode & { digest: string }>();
@@ -158,7 +159,7 @@ export function buildPackage(input: {
   }
   const manifest: PackageManifest = {
     format: PACKAGE_FORMAT,
-    schemaVersion: PACKAGE_SCHEMA_VERSION,
+    schemaVersion: input.sign ? 3 : PACKAGE_SCHEMA_VERSION,
     contentContract: ARTIFACT_CONTENT_CONTRACT,
     exportedAt: input.exportedAt.toISOString(),
     source: input.source,
@@ -174,23 +175,25 @@ export function buildPackage(input: {
   };
   const manifestBytes = jsonFile(manifest);
   files.set("manifest.json", manifestBytes);
-  files.set("signatures.json", jsonFile({ signatures: input.sign(manifestBytes) }));
+  if (input.sign) files.set("signatures.json", jsonFile({ signatures: input.sign(manifestBytes) }));
   return writeZip(files);
 }
 
 /**
  * Structural verification: archive safety, the declared file set, every file
  * hash, canonical JSON shapes and the tree itself (nodes, edges, digests).
- * Trust and Artifact semantics are checked afterwards.
+ * Artifact semantics are checked afterwards; importing needs no trust configuration.
  */
 export function parsePackage(archive: Buffer): ParsedPackage {
   if (archive.length > PACKAGE_UPLOAD_LIMIT_BYTES) throw packageError("The package exceeds the 32 MiB upload limit.");
   const files = readZip(archive, PACKAGE_ZIP_LIMITS);
   const manifestBytes = files.get("manifest.json");
   const signaturesBytes = files.get("signatures.json");
-  if (!manifestBytes || !signaturesBytes) throw packageError("The package must contain manifest.json and signatures.json.");
+  if (!manifestBytes) throw packageError("The package must contain manifest.json.");
   const manifest = parseJsonFile("manifest.json", manifestBytes, manifestSchema);
-  const signatures = parseJsonFile("signatures.json", signaturesBytes, signaturesSchema).signatures;
+  if (manifest.schemaVersion === 3 && !signaturesBytes) throw packageError("A legacy v3 package must contain signatures.json.");
+  // Legacy signatures are metadata, not an environment-specific import prerequisite.
+  const signatures = signaturesBytes ? parseJsonFile("signatures.json", signaturesBytes, signaturesSchema).signatures : [];
   const versionIds = manifest.versions.map(item => item.version);
   if (new Set(versionIds).size !== versionIds.length) throw packageError("The manifest lists a version more than once.");
   const policyKeys = manifest.policies.map(nodeKey);

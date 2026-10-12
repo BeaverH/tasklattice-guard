@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Download, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { Button } from './ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { DuplicateGuardrailSheet } from './guardrail-duplicate';
 import { DeleteGuardrailSheet, type GuardrailDeletionConfirmation } from './guardrail-delete-sheet';
 import { ExportGuardrailSheet } from './guardrail-export-sheet';
@@ -16,15 +16,13 @@ export function GuardrailRowActions({ guardrail }: { guardrail: Guardrail }) {
   const { t } = useTranslation();
   const canEdit = useAuth().user?.role === 'admin';
   const [action, setAction] = useState<'delete' | 'duplicate' | 'export' | null>(null);
-  const published = guardrail.status === "ready";
   return <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="size-11" aria-label={`${t("routing.actions")}: ${guardrail.name}`}><MoreHorizontal className="size-4" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onCloseAutoFocus={event => { if (action) event.preventDefault(); }}>
-        <DropdownMenuItem disabled={!published} onSelect={() => setAction('export')}><Download />{t('guardrails.exportEllipsis')}</DropdownMenuItem>
-        {!published && <DropdownMenuLabel>{t('guardrails.exportRequiresPublish')}</DropdownMenuLabel>}
+        <DropdownMenuItem onSelect={() => setAction('export')}><Download />{t('guardrails.exportEllipsis')}</DropdownMenuItem>
         {canEdit && <DropdownMenuItem onSelect={() => setAction('duplicate')}><Copy />{t("routing.duplicate")}</DropdownMenuItem>}
         {canEdit && <DropdownMenuItem variant="destructive" onSelect={() => setAction('delete')}><Trash2 />{t("routing.delete")}</DropdownMenuItem>}
       </DropdownMenuContent>

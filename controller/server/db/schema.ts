@@ -1,3 +1,4 @@
+import type { VersionTestingEvidence } from "../../shared/testing-report-retention.js";
 import type { RouterDraft } from "../../shared/traffic-routing.js";
 import type { ValidationProgress } from "../../shared/validation-progress.js";
 import {
@@ -304,6 +305,7 @@ export const guardrailVersions = pgTable("guardrail_version", {
   // the draft candidate run when published here, a run of this exact content
   // and suite when imported. Null while pending.
   validationRunId: text("validation_run_id"),
+  testingEvidence: jsonb("testing_evidence").$type<VersionTestingEvidence>(),
   releasedAt: timestamp("released_at", { withTimezone: true }),
   releasedBy: text("released_by").references(() => user.id),
   inspection: jsonb("inspection").$type<GuardrailInspection>(),
@@ -330,7 +332,7 @@ export const guardrailPackages = pgTable("guardrail_package", {
   content: bytea("content").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   sourceId: text("source_id").notNull(),
-  keyId: text("key_id").notNull(),
+  keyId: text("key_id"),
   guardrailId: text("guardrail_id").notNull(),
   manifest: jsonb("manifest").$type<PackageManifest>().notNull(),
   uploadedBy: text("uploaded_by").references(() => user.id),
@@ -343,11 +345,11 @@ export const guardrailVersionProvenance = pgTable("guardrail_version_provenance"
   guardrailId: text("guardrail_id").notNull(),
   version: text("version").notNull(),
   sourceId: text("source_id").notNull(),
-  sourceKeyId: text("source_key_id").notNull(),
+  sourceKeyId: text("source_key_id"),
   contentDigest: text("content_digest").notNull(),
   fileDigests: jsonb("file_digests").$type<Record<string, string>>().notNull(),
   requirements: jsonb("requirements").$type<ArtifactRequirements>().notNull(),
-  sourceSignature: jsonb("source_signature").$type<PackageSignature>().notNull(),
+  sourceSignature: jsonb("source_signature").$type<PackageSignature>(),
   packageId: text("package_id").notNull().references(() => guardrailPackages.id),
   importedBy: text("imported_by").references(() => user.id),
   importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
@@ -417,7 +419,10 @@ export const validationRuns = pgTable("guardrail_validation_run", {
   createdBy: text("created_by").references(() => user.id),
   createdAt,
   completedAt: timestamp("completed_at", { withTimezone: true }),
-}, (table) => [index("guardrail_validation_run_guardrail_idx").on(table.guardrailId, table.createdAt)]);
+}, (table) => [
+  index("guardrail_validation_retention_idx").on(table.guardrailId, table.status, sql`(coalesce(${table.completedAt}, ${table.createdAt})) DESC`, table.id.desc()),
+  index("guardrail_validation_run_guardrail_idx").on(table.guardrailId, table.createdAt),
+]);
 
 export const artifacts = pgTable("guardrail_artifact", {
   id: text("id").primaryKey(),

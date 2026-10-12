@@ -82,6 +82,7 @@ async def test_large_validation_round_trip_and_reconnect_sender_cleanup(tmp_path
                         if task.get_name() == "guard-control-writer"]
     finally:
         await server.stop(grace=0)
+    client._validator.run.assert_awaited_once()
     assert len(received) == 3
     for result in received:
         assert result.ByteSize() > 4 * 1024 * 1024

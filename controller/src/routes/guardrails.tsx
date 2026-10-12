@@ -138,7 +138,9 @@ export function GuardrailDetailPage() {
   const validationReadiness = useGuardrailValidationReadiness({ bindings: guardrailQuery.data?.policy_bindings ?? [], policies: policiesQuery.data?.items ?? EMPTY_POLICIES,
     enabled: Boolean(guardrailQuery.data), policiesReady: policiesQuery.isSuccess, policiesError: policiesQuery.isError });
   const versionsQuery = useQuery({ queryKey: queryKeys.guardrailVersions(guardrailId), queryFn: () => getGuardrailVersions(guardrailId) });
-  const validationRunsQuery = useQuery({ queryKey: queryKeys.validationRuns(guardrailId), queryFn: () => getValidationRuns(guardrailId) });
+  const reportPagination = useEventCursor(guardrailId);
+  const validationRunsQuery = useQuery({ queryKey: [...queryKeys.validationRuns(guardrailId), reportPagination.cursor], queryFn: () => getValidationRuns(guardrailId, { cursor: reportPagination.cursor }) });
+  const versionReports = validationRunsQuery.data?.versionReports ?? validationRunsQuery.data?.items ?? [];
   const testsQuery = useQuery({ queryKey: queryKeys.testCases(guardrailId), queryFn: () => getTestCases(guardrailId), enabled: Boolean(guardrailQuery.data) });
   const routersQuery = useQuery({ queryKey: queryKeys.routers, queryFn: getRouters });
   const endpointsQuery = useQuery({ queryKey: queryKeys.endpoints, queryFn: getEndpoints });
@@ -156,7 +158,7 @@ export function GuardrailDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [loggingOpen, setLoggingOpen] = useState(false);
   const [selectedValidationRun, setSelectedValidationRun] = useState<ValidationRun | null>(null);
-  const currentValidationRun = validationRunsQuery.data?.items.find(run => run.id === selectedValidationRun?.id) ?? selectedValidationRun;
+  const currentValidationRun = versionReports.find(run => run.id === selectedValidationRun?.id) ?? validationRunsQuery.data?.items.find(run => run.id === selectedValidationRun?.id) ?? selectedValidationRun;
   const [versionDetailRequested, setVersionDetailRequested] = useState(false);
   const [selectedVersionOverride, setSelectedVersionOverride] = useState<string | null>(null);
   const [compareBaseVersionNumber, setCompareBaseVersionNumber] = useState<string | null>(null);
@@ -172,7 +174,7 @@ export function GuardrailDetailPage() {
   const guardrailVersions = [...(versionsQuery.data?.items ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.version.localeCompare(a.version));
   const validationPending = isValidationRunning(guardrailQuery.data?.latest_validation_run);
   // A version being tested here: keep its state and report current until the run ends.
-  const versionTesting = (validationRunsQuery.data?.items ?? []).some((run) => run.subject === "version" && isValidationRunning(run)) || isValidationRunning(currentValidationRun);
+  const versionTesting = versionReports.some((run) => run.subject === "version" && isValidationRunning(run)) || isValidationRunning(currentValidationRun);
   useEffect(() => {
     if (!validationPending && !versionTesting) return;
     const timer = globalThis.setInterval(() => {
@@ -184,7 +186,7 @@ export function GuardrailDetailPage() {
   // Versions arrive newest first; that is only a default selection in this view.
   const selectedVersionNumber = selectedVersionOverride && guardrailVersions.some((item) => item.version === selectedVersionOverride) ? selectedVersionOverride : guardrailVersions[0]?.version ?? "";
   const selectedVersion = guardrailVersions.find((item) => item.version === selectedVersionNumber);
-  const selectedValidation = [...(validationRunsQuery.data?.items ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)).find((run) => run.guardrail_version === selectedVersionNumber) ?? null;
+  const selectedValidation = [...versionReports].sort((a, b) => b.created_at.localeCompare(a.created_at)).find((run) => run.guardrail_version === selectedVersionNumber) ?? null;
   const compareOptions = guardrailVersions.filter((item) => item.version !== selectedVersionNumber);
   const immutableQuery = useQuery({
     queryKey: queryKeys.guardrailVersion(guardrailId, selectedVersionNumber),
@@ -342,7 +344,7 @@ export function GuardrailDetailPage() {
             <TabsTrigger value="runtime"><Activity aria-hidden="true" />{t("guardrails.runtimeTab")}</TabsTrigger>
             <TabsTrigger value="event"><ShieldAlert aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.eventTab")}{metricsQuery.data?.findings_summary?.total ? <Badge variant="outline" className={metricsQuery.data?.findings_summary?.critical ? "border-red-200 bg-red-50 font-mono text-[10px] text-red-700" : "font-mono text-[10px]"}>{metricsQuery.data?.findings_summary?.total}</Badge> : null}</span></TabsTrigger>
             <TabsTrigger value="immutable"><History aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.versions")}{versionsQuery.data ? <Badge variant="outline" className="font-mono text-[10px]">{guardrailVersions.length}/{MAX_GUARDRAIL_VERSIONS}</Badge> : null}</span></TabsTrigger>
-            <TabsTrigger value="testing"><FileText aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.validationHistoryTab")}{validationRunsQuery.data?.items.length ? <Badge variant="outline" className="font-mono text-[10px]">{validationRunsQuery.data.items.length}</Badge> : null}</span></TabsTrigger>
+            <TabsTrigger value="testing"><FileText aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.validationHistoryTab")}{validationRunsQuery.data?.count ? <Badge variant="outline" className="font-mono text-[10px]">{validationRunsQuery.data.count}</Badge> : null}</span></TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="runtime" className="space-y-5 pt-5">
@@ -364,7 +366,7 @@ export function GuardrailDetailPage() {
             detailLoading={immutableQuery.isFetching}
             detailError={immutableQuery.error}
             comparisonError={compareQuery.error}
-            validationRuns={validationRunsQuery.data?.items ?? []}
+            validationRuns={versionReports}
             validationLoading={validationRunsQuery.isLoading}
             validationError={validationRunsQuery.error}
             onRetry={() => { void versionsQuery.refetch(); void immutableQuery.refetch(); void validationRunsQuery.refetch(); }}
@@ -388,6 +390,7 @@ export function GuardrailDetailPage() {
         </TabsContent>
         <TabsContent value="testing" className="pt-5">
           <GuardrailValidationHistory
+            pagination={<EventPagination page={reportPagination.page} busy={validationRunsQuery.isFetching} nextCursor={validationRunsQuery.data?.nextCursor} onNext={reportPagination.next} onPrevious={reportPagination.previous} onLatest={reportPagination.latest} />}
             runs={validationRunsQuery.data?.items ?? []}
             loading={validationRunsQuery.isLoading}
             error={validationRunsQuery.error}
@@ -399,7 +402,7 @@ export function GuardrailDetailPage() {
             onOpenTarget={openValidationTarget}
             description={t("immutableVersions.testingDescription")}
             emptyDescription={t("immutableVersions.localTestingEmpty")}
-            action={auth.user?.role === "admin" ? <GuardrailVersionTestControl guardrailName={guardrail.name} versions={guardrailVersions} runs={validationRunsQuery.data?.items ?? []} loading={versionsQuery.isPending || validationRunsQuery.isPending} error={versionsQuery.error || validationRunsQuery.error} submitting={versionTestMutation.isPending} onRun={version => versionTestMutation.mutateAsync(version)} onRetry={() => { void versionsQuery.refetch(); void validationRunsQuery.refetch(); }} draft={canManageDraft ? { running: testingDraft, reason: validationReadiness.reason, onReview: openDraftReview } : undefined} /> : undefined}
+            action={auth.user?.role === "admin" ? <GuardrailVersionTestControl guardrailName={guardrail.name} versions={guardrailVersions} runs={versionReports} loading={versionsQuery.isPending || validationRunsQuery.isPending} error={versionsQuery.error || validationRunsQuery.error} submitting={versionTestMutation.isPending} onRun={version => versionTestMutation.mutateAsync(version)} onRetry={() => { void versionsQuery.refetch(); void validationRunsQuery.refetch(); }} draft={canManageDraft ? { running: testingDraft, reason: validationReadiness.reason, onReview: openDraftReview } : undefined} /> : undefined}
           />
         </TabsContent>
       </Tabs>

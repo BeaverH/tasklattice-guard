@@ -274,49 +274,20 @@ helm upgrade --install tali-guard ./charts/tali-guard \
   --timeout 15m
 ```
 
-## Guardrail promotion (UAT → production)
+## Guardrail import/export
 
-UAT and production are separate installations. UAT signs release packages with
-a dedicated key (keep it separate from `security.artifactSigning`):
+File import and export work in every installation without package signing keys,
+source IDs, trusted-source ConfigMaps or environment checks. Export immutable
+versions, then choose the `.guardrail.zip` file in **Import Guardrail package**.
+Identical versions are skipped; conflicting immutable content is rejected.
+Old `controller.promotion.export` and `controller.promotion.trust` values are
+ignored and no longer mounted into the Controller.
 
-```bash
-kubectl create secret generic guard-package-signing --from-file=private-key.pem=uat-package.pem
-helm upgrade --install guard charts/tali-guard ... \
-  --set controller.promotion.export.existingSecret=guard-package-signing \
-  --set controller.promotion.export.sourceId=bank-uat \
-  --set controller.promotion.export.keyId=uat-2026
-```
-
-Production has the same features as UAT; promotion by import is a matter of
-procedure, not configuration. It lists the sources it trusts, with their public
-keys, in its values (changed through your normal change process); the chart
-renders them into a ConfigMap and rolls the Controller when they change:
-
-```yaml
-controller:
-  promotion:
-    trust:
-      sources:
-        - id: bank-uat
-          name: Bank UAT
-          keys:
-            - id: uat-2026
-              publicKeyPem: |
-                -----BEGIN PUBLIC KEY-----
-                ...
-                -----END PUBLIC KEY-----
-          reservedGuardrailIds: []
-```
-
-To manage the file outside Helm instead, set
-`controller.promotion.trust.existingConfigMap` to a ConfigMap whose `trust.json`
-holds `{"sources":[...]}` in the same shape; it takes precedence over `sources`.
-`values-dev-uat.yaml` and `values-dev-prod.yaml` are a working local pair
-(`npm run helm:deploy:promotion`).
-List `guardrail-default` in `reservedGuardrailIds` only for the source allowed to
-supply the Default Guardrail. Optionally mount a signed Default package with
-`controller.promotion.baselinePackage.existingConfigMap` (binary key
-`baseline.guardrail.zip`); it becomes the runtime baseline only if none is set.
+`values-dev-uat.yaml` and `values-dev-prod.yaml` provide an optional local pair
+(`npm run helm:deploy:promotion`) without extra package configuration.
+For automated initial provisioning only, `controller.promotion.baselinePackage`
+can still mount a Default package at startup; ordinary file import/export does
+not use this setting.
 
 ## Scaling contract
 

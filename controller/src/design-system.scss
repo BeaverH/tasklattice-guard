@@ -423,6 +423,13 @@ svg.lucide {
   height: 0.75rem;
   flex-shrink: 0;
 }
+.testing-report-status .guard-tag {
+  max-inline-size: none;
+}
+.testing-report-status .cds--tag__label {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
 
 // Carbon tooltips wrap their trigger; keep collapsed navigation centered within
 // the original sidebar row instead of shrinking to the icon button's width.

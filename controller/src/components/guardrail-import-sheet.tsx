@@ -7,15 +7,14 @@ import { queryKeys } from "@/features/query-keys";
 import { importGuardrailPackage, uploadGuardrailPackage, type EnvironmentCheck, type PackagePreview } from "@/lib/controller-api";
 import { EntitySheet } from "./entity-sheet";
 import { ErrorNotice, InfoNotice, StateBadge } from "./product-shell";
-import { useDeploymentCapabilities } from "@/lib/deployment";
 import { Button } from "./ui/button";
 import { toast } from "./ui/notifications";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
-type Step = "read" | "verify" | "environment" | "write";
-const STEPS: Step[] = ["read", "verify", "environment", "write"];
+type Step = "read" | "verify" | "write";
+const STEPS: Step[] = ["read", "verify", "write"];
 
-/** Upload a signed release package, review what it would change, then import it. */
+/** Upload a Guardrail package, review what it would change, then import it. */
 export function ImportGuardrailSheet({ onClose, returnFocusRef }: { onClose: () => void; returnFocusRef?: RefObject<HTMLElement | null> }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -52,11 +51,8 @@ export function ImportGuardrailSheet({ onClose, returnFocusRef }: { onClose: () 
     },
   });
   const busy = upload.isPending || importing.isPending;
-  // Import needs trusted sources configured; the entry stays visible either way.
-  const capabilities = useDeploymentCapabilities();
-  const unavailable = capabilities.known && !capabilities.packageImport.available;
   const done = (step: Step) => step === "read" ? Boolean(file) : step === "write" ? importing.isSuccess : Boolean(preview);
-  const active = (step: Step) => (step === "write" && importing.isPending) || ((step === "verify" || step === "environment") && upload.isPending);
+  const active = (step: Step) => (step === "write" && importing.isPending) || (step === "verify" && upload.isPending);
   const choose = (chosen: File | undefined) => {
     if (!chosen) return;
     setFile(chosen);
@@ -88,14 +84,14 @@ export function ImportGuardrailSheet({ onClose, returnFocusRef }: { onClose: () 
               <p className="text-xs text-muted-foreground">{t("guardrailPackage.dropHint")}</p>
             </div>
           </div>
-          <Button variant="outline" disabled={busy || unavailable} onClick={() => input.current?.click()}>{file ? t("guardrailPackage.chooseAnother") : t("guardrailPackage.chooseFile")}</Button>
+          <Button variant="outline" disabled={busy} onClick={() => input.current?.click()}>{file ? t("guardrailPackage.chooseAnother") : t("guardrailPackage.chooseFile")}</Button>
         </div>
         {file ? <ol className="flex flex-wrap gap-x-6 gap-y-2 text-sm" aria-label={t("guardrailPackage.importTitle")}>
           {STEPS.map(step => <li key={step} className="flex items-center gap-2" aria-current={active(step) ? "step" : undefined}>
             {active(step) ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : done(step) ? <Check className="size-4 text-[var(--success)]" /> : <Circle className="size-4 text-muted-foreground" />}
             <span className={done(step) || active(step) ? "" : "text-muted-foreground"}>{t(`guardrailPackage.step${step[0]!.toUpperCase()}${step.slice(1)}`)}</span>
           </li>)}
-        </ol> : <InfoNotice>{t(unavailable ? "guardrailPackage.importUnavailable" : "guardrailPackage.noProductionTesting")}</InfoNotice>}
+        </ol> : <InfoNotice>{t("guardrailPackage.noProductionTesting")}</InfoNotice>}
         {upload.error ? <ErrorNotice error={upload.error} /> : null}
         {preview ? <PackageSummary preview={preview} language={i18n.language} /> : null}
         {importing.error ? <ErrorNotice error={importing.error} /> : null}
@@ -108,8 +104,7 @@ function PackageSummary({ preview, language }: { preview: PackagePreview; langua
   const { t } = useTranslation();
   return <div className="space-y-4">
     <dl className="grid grid-cols-2 gap-4 border p-4 text-sm">
-      <div><dt className="text-xs text-muted-foreground">{t("guardrailPackage.source")}</dt><dd className="mt-1 font-medium">{preview.source.name} <span className="font-mono text-xs text-muted-foreground">({preview.source.id})</span></dd>
-        <dd className="mt-1 text-xs text-muted-foreground">{t("guardrailPackage.signedBy", { keyId: preview.keyId })} · {t("guardrailPackage.exportedAt", { time: new Date(preview.exportedAt).toLocaleString(language) })}</dd></div>
+      <div><dt className="text-xs text-muted-foreground">{t("guardrailPackage.exportedAt", { time: new Date(preview.exportedAt).toLocaleString(language) })}</dt></div>
       <div><dt className="text-xs text-muted-foreground">{t("guardrailPackage.guardrail")}</dt><dd className="mt-1 font-medium">{preview.guardrail.name} <span className="font-mono text-xs text-muted-foreground">({preview.guardrail.id})</span></dd>
         <dd className="mt-1 text-xs text-muted-foreground">{t(preview.guardrail.deleted ? "guardrailPackage.deletedGuardrail" : preview.guardrail.exists ? "guardrailPackage.existingGuardrail" : "guardrailPackage.newGuardrail")}</dd></div>
     </dl>
@@ -123,13 +118,12 @@ function PackageSummary({ preview, language }: { preview: PackagePreview; langua
     <Table>
       <TableHeader><TableRow>
         <TableHead>{t("guardrailPackage.version")}</TableHead><TableHead>{t("guardrailPackage.testSuite")}</TableHead>
-        <TableHead>{t("guardrailPackage.state")}</TableHead><TableHead>{t("guardrailPackage.environment")}</TableHead>
+        <TableHead>{t("guardrailPackage.state")}</TableHead>
       </TableRow></TableHeader>
       <TableBody>{preview.versions.map(item => <TableRow key={item.version}>
         <TableCell><div className="flex flex-col items-start gap-1"><span className="whitespace-nowrap font-mono text-sm">{item.version}</span></div></TableCell>
         <TableCell className="whitespace-nowrap text-sm">{t("guardrailPackage.testSuiteCases", { count: item.testSuite.total })}</TableCell>
         <TableCell className="whitespace-nowrap"><StateBadge state={item.state === "new" ? "ready" : item.state === "existing" ? preview.guardrail.deleted ? "unpublished" : "active" : "failed"} label={t(`guardrailPackage.state${item.state === "new" ? "New" : item.state === "existing" ? preview.guardrail.deleted ? "Retained" : "Existing" : "Conflict"}`)} /></TableCell>
-        <TableCell><EnvironmentStatus check={item.environment} /></TableCell>
       </TableRow>)}</TableBody>
     </Table>
   </div>;

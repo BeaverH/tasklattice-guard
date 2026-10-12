@@ -242,62 +242,29 @@ UAT authors and tests; production receives released versions, runs their own
 test suites unchanged and releases them. The design
 is `docs/guardrail-self-contained-promotion-design.zh-CN.md`.
 
-**Export (UAT).** **Guardrails → row Actions → Export…** (or **Export…** on a
-version) selects one or more published versions (none preselected) and
-downloads one signed `.guardrail.zip`, a resource tree (format version 3):
-`policies/<id>/<version>/policy.json` leaves for every Policy version the
-selected versions use (catalog definitions frozen before per-binding phrase
-expansion, Policy Studio versions as their Library snapshots), then
-`guardrails/<id>/guardrail.json` and, per version, `version.json` (its
-configuration), `test-suite.json`, `artifact.json` and `requirements.json`. The
-manifest lists the nodes and each version's edges to its Policy versions by
-digest. Test reports never travel. Export refuses versions that cannot prove
-what was tested, or that lack their Policy nodes, a complete Policy snapshot or
-a test suite. API:
-`GET /api/v1/guardrails/{id}/package?versions=a,b`. Configure the source identity
-and a package key that is separate from the Artifact signing key:
-`CONTROLLER_PACKAGE_SOURCE_ID`, `CONTROLLER_PACKAGE_SOURCE_NAME`,
-`CONTROLLER_PACKAGE_SIGNING_KEY_PATH`, optional `CONTROLLER_PACKAGE_SIGNING_KEY_ID`.
+**Export.** **Guardrails → Actions → Export…** (or a version's **Export…**)
+selects immutable versions and downloads one `.guardrail.zip`. No source ID,
+package signing key, trust file or Runner check is required. Pending imported
+versions can be exported immediately, without local reports or release.
 
-**Import (production).** UAT and production have exactly the same features;
-importing into production is a procedure (SOP), not a configuration. They differ
-only in package identity: `CONTROLLER_PACKAGE_TRUST_PATH` names a JSON file of trusted sources:
-`{"sources":[{"id","name","keys":[{"id","publicKeyPem"}],"reservedGuardrailIds":[]}]}`.
-**Guardrails → Create Guardrail ▾ (the arrow) → Import release package** uploads a package, shows the source, each version's
-Policy versions and Guardrail versions with new/existing/conflict state and a
-Runner load check, then builds what is new from the leaves up in one
-transaction: Policy versions join this Library (read only, owned by their
-source; a catalog version this installation does not ship is kept as a
-read-only version of that Policy), then the Guardrail and its versions. A
-Policy version with different content, or a Policy this environment or
-another source owns, rejects the whole package. Imported Guardrails have the same
-editable working draft and actions as locally created Guardrails; only their
-provenance differs. Each imported version arrives **pending**. In the version list, **Run tests** runs the version's
-own test suite here against its signed Artifact, unchanged; once the latest run
-passed for exactly that content and suite, **Release** makes it **ready** and
-binds that report (`POST /api/v1/guardrails/{id}/versions/{v}/test-runs`, then
-`.../release`). Only ready versions can be routed to, made the baseline or
-exported (the Router target picker lists pending versions greyed out); a later
-failed test does not revoke a release while matching Passed evidence remains.
-Administrators can permanently delete completed Testing Reports after reviewing
-the impact. The release switches to another Passed report for the same Artifact
-and frozen test suite, or returns to **pending** when none remains. Deleting the
-last proof is blocked while a Router or runtime baseline references the version
-or traffic is still settling. Frozen definitions and test cases remain intact,
-and deletion is audited. The registry shows the latest local report across draft
-and version tests; draft readiness continues to use draft tests only. Routing an imported
-version also requires a recent passing load check on every pool. A released
-imported version whose load check passed is held by the default pool, so
-**Playground** can talk to it before any Router serves it.
-**Policy Library** lists this environment's Policies, including those imported
-with a Guardrail (marked with their source, read only). Which Guardrails use a
-Policy, and whether that serves traffic, belongs to the Guardrail: a version's
-Policies tab links each Policy to that exact version in the Library. A Policy
-that any Guardrail version was built from cannot be deleted. The runtime baseline is a pinned Default version: an
-installation adopts its first published Default version, and every later switch
-is explicit (`PUT /api/v1/system/baseline`, or a startup package via
-`CONTROLLER_BASELINE_PACKAGE_PATH`). A source authorized for `guardrail-default`
-can add versions to the local Default.
+Format v4 contains a SHA-256 manifest, frozen Policy definitions, Guardrail
+configuration, Artifacts, runtime requirements and Test Cases. Test reports,
+credentials and model settings are not included. Legacy v3 packages remain
+readable; their source signatures are metadata, not authenticated identities.
+Archive limits, file digests and semantic consistency are still validated.
+
+**Import.** **Guardrails → Create Guardrail ▾ → Import Guardrail package**:
+choose a file, review versions and confirm import. Policy and Guardrail versions
+are imported atomically. Identical versions are skipped, including round trips
+back into locally created resources. The same ID/version with different content
+is rejected. Source labels do not restrict import, including Default Guardrail
+versions. Existing local drafts are preserved. A deleted Guardrail requires
+explicit restoration, which clears old operational data and keeps definitions.
+
+Import and export do not change traffic. Imported versions retain the ordinary
+Pending → Run tests → Release lifecycle before use; runtime load checks belong
+to routing and baseline operations, not file transfer. Artifact signing for
+Controller/Runner transport is unchanged and needs no extra package key.
 
 **CLI.** `guardctl` supports `export <guardrail-id> [--versions=a,b] [--out=file]`
 and `import <file> [--versions=a,b] [--confirm]` (preview only without `--confirm`).
@@ -317,15 +284,10 @@ npm run test:promotion          # full end-to-end regression against the pair
 npm run helm:delete:promotion
 ```
 
-The two releases have the same features; their values differ only in package
-identity (`controller.promotion.*`): UAT signs exports as `bank-uat`, PROD lists
-its trusted sources in `controller.promotion.trust.sources`. Package keys are generated once into
-`.local-secrets/promotion/` (git-ignored): UAT's signing key becomes the
-`guard-package-signing` Secret, and the public keys become
-`prod-trust.values.yaml`, layered last on PROD. The images use their own tag,
-so the development release (`tali-guard` in `tali`) is unaffected. PROD uses
-`127.0.0.1` so the two consoles keep separate sign-ins in one browser; both use
-the development `admin` / `password` account.
+The two releases have the same import/export features without package keys or
+trust configuration. The images use their own tag, so the development release
+(`tali-guard` in `tali`) is unaffected. PROD uses `127.0.0.1` so the two consoles
+keep separate sign-ins; both use the development `admin` / `password` account.
 
 Unit and PostgreSQL coverage:
 `GUARD_TEST_POSTGRES_URL=... npx vitest run server/services/guardrail-packages.postgres.test.ts`.

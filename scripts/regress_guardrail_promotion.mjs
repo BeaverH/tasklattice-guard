@@ -12,7 +12,7 @@
  * checks, Router approval and runtime evaluation. Model-free content only.
  */
 import assert from "node:assert/strict";
-import { generateKeyPairSync, createPrivateKey, sign } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -82,8 +82,7 @@ const policyFiles = bytes => new Map([...readZip(bytes, LIMITS)].filter(([path])
 /** The Policy nodes one parsed version uses, as buildPackage takes them. */
 const nodesOf = (parsed, item) => item.policies.map(ref => parsed.policies.find(node => node.id === ref.id && node.version === ref.version))
   .map(({ id, version, kind, definition }) => ({ id, version, kind, definition }));
-const signer = (keyFile, keyId) => manifest => [{ keyId, algorithm: "ed25519", signature: sign(null, manifest, createPrivateKey(readFileSync(join(work, "keys", keyFile)))).toString("base64") }];
-/** Re-issue parsed versions under another source, Guardrail or content, properly signed. */
+/** Re-issue parsed versions under another source, Guardrail or content, without environment configuration. */
 function reissue(parsed, { source = parsed.manifest.source, guardrail = parsed.manifest.guardrail, sign: signWith, mutate = content => content }) {
   return buildPackage({ source, guardrail, exportedAt: new Date(), sign: signWith,
     versions: parsed.versions.map(item => {
@@ -152,7 +151,7 @@ writeFileSync(join(work, "packages", `${guardrail.id}-v1-v2.guardrail.zip`), bot
 writeFileSync(join(work, "packages", `${guardrail.id}-v2.guardrail.zip`), latestOnly);
 const exported = parsePackage(both);
 assert.deepEqual(exported.versions.map(item => item.version), [v1, v2]);
-assert.equal(exported.manifest.source.id, "bank-uat");
+assert.equal(exported.manifest.source.id, "tasklattice-guard");
 assert(!("recommendedVersion" in exported.manifest), "A package names its versions; it recommends none.");
 // A resource tree: the custom Policy is a leaf carried as its Library version, used by both Guardrail versions.
 const policyLeaf = exported.policies.find(node => node.id === policy.id);
@@ -171,9 +170,9 @@ assert.deepEqual([...policyFiles(reexported)].filter(([path]) => path.startsWith
 report("uat-export-stable-after-library-change");
 
 // ---------------------------------------------------------------- PROD: same features, import by procedure
-// The two deployments differ only in their package keys, never in features.
-assert.deepEqual(await prod.call("/api/v1/deployment/capabilities"), { packageExport: { available: false, sourceId: null }, packageImport: { available: true } });
-assert.deepEqual(await uat.call("/api/v1/deployment/capabilities"), { packageExport: { available: true, sourceId: "bank-uat" }, packageImport: { available: false } });
+// Import/export is always available without additional deployment configuration.
+assert.deepEqual(await prod.call("/api/v1/deployment/capabilities"), { packageExport: { available: true, sourceId: null }, packageImport: { available: true } });
+assert.deepEqual(await uat.call("/api/v1/deployment/capabilities"), { packageExport: { available: true, sourceId: null }, packageImport: { available: true } });
 assert((await prod.call("/api/v1/policies")).items.length > 0, "PROD has the same editable Policy Library.");
 const coldStatus = await (await fetch(new URL("/api/v1/system/status", prod.base))).json();
 assert.equal(await count(prodDb, "SELECT count(*) AS n FROM policy_record"), 0);
@@ -182,7 +181,7 @@ report("prod-cold-start", { status: coldStatus.status, reasons: coldStatus.reaso
 const preview = await prod.upload(both);
 assert.deepEqual(preview.blockers, []);
 assert.deepEqual(preview.versions.map(item => [item.version, item.state]), [[v1, "new"], [v2, "new"]]);
-for (const item of preview.versions) assert.equal(item.environment?.status, "compatible", `PROD Runner load check: ${JSON.stringify(item.environment)}`);
+for (const item of preview.versions) assert.equal(item.environment, null, "Import preview does not contact Runners.");
 const imported = await prod.call(`/api/v1/guardrail-packages/${preview.packageId}/imports`, { body: {}, expected: 201 });
 assert.deepEqual([imported.guardrailId, imported.imported, imported.existing], [guardrail.id, [v1, v2], []]);
 // Leaves first: the custom Policy joined PROD's Library; the catalog Policies were already here.
@@ -224,6 +223,7 @@ for (const version of [v1, v2]) {
 assert.equal(await count(prodDb, `SELECT count(*) AS n FROM guardrail_validation_run WHERE guardrail_id = '${guardrail.id}' AND subject <> 'version'`), 0, "PROD never compiles a draft of an imported Guardrail.");
 report("prod-tested-and-released", { versions: [v1, v2] });
 
+for (const version of [v1, v2]) await prod.call(`${guardrailPath}/versions/${version}/environment-check`, { body: {} });
 // Released and load-checked, the default pool holds the versions, so they can
 // be tried (Playground) before any Router serves them.
 await until("PROD records a compatible load check for both imported versions", prodVersions,
@@ -280,7 +280,7 @@ report("prod-serves-released-content", { guardrailVersion: v2 });
 const library = (await prod.call("/api/v1/policies")).items;
 const custom = library.find(item => item.id === policy.id);
 assert(custom, "The custom Policy of the imported Guardrail is in the Policy Library.");
-assert.deepEqual([custom.version, custom.origin, custom.source_id], ["1", "imported", "bank-uat"], "Production holds the version it received, not UAT's newer v2.");
+assert.deepEqual([custom.version, custom.origin, custom.source_id], ["1", "imported", "tasklattice-guard"], "Production holds the version it received, not UAT's newer v2.");
 assert.deepEqual(custom.rules.map(rule => rule.id).sort(), phases.map(phase => `flow/${phase}/promotion_${phase}`).sort());
 assert.equal(custom.test_cases.length, 4, "The Library version carries its full Test Cases.");
 assert.equal((await prod.call(`/api/v1/policies/${policy.id}`, { method: "PATCH", body: { name: "Edited in PROD" }, expected: 409 })).error.code, "policy_imported_read_only");
@@ -296,33 +296,34 @@ tampered.set(artifactPath, Buffer.from(tampered.get(artifactPath).toString().rep
 assert.equal((await prod.upload(writeZip(tampered), "tampered.guardrail.zip", 422)).error.code, "guardrail_package_digest_mismatch");
 const stranger = generateKeyPairSync("ed25519").privateKey;
 const forged = reissue(exported, { sign: manifest => [{ keyId: "uat-2026", algorithm: "ed25519", signature: sign(null, manifest, stranger).toString("base64") }] });
-assert.equal((await prod.upload(forged, "forged.guardrail.zip", 422)).error.code, "guardrail_package_untrusted");
-const conflicting = reissue(exported, { sign: signer("uat-package.pem", "uat-2026"), mutate: content => content.guardrailVersion === v2 ? { ...content, configYaml: `${content.configYaml}# changed\n` } : content });
+assert.deepEqual((await prod.upload(forged, "legacy.guardrail.zip")).blockers, [], "Legacy signatures need no configured trust keys.");
+const conflicting = reissue(exported, { mutate: content => content.guardrailVersion === v2 ? { ...content, configYaml: `${content.configYaml}# changed\n` } : content });
 const conflictPreview = await prod.upload(conflicting, "conflict.guardrail.zip");
 assert.deepEqual(conflictPreview.versions.map(item => item.state), ["existing", "conflict"]);
 assert.equal((await prod.call(`/api/v1/guardrail-packages/${conflictPreview.packageId}/imports`, { body: {}, expected: 409 })).error.code, "guardrail_version_conflict");
-const takeover = reissue(exported, { source: { id: "bank-uat-b", name: "Second UAT" }, sign: signer("other-package.pem", "uat-b") });
+const takeover = reissue(exported, { source: { id: "bank-uat-b", name: "Second UAT" }, });
 const takeoverPreview = await prod.upload(takeover, "takeover.guardrail.zip");
-assert(takeoverPreview.blockers.some(item => item.code === "guardrail_ownership_conflict"));
-assert.equal((await prod.call(`/api/v1/guardrail-packages/${takeoverPreview.packageId}/imports`, { body: {}, expected: 409 })).error.code, "guardrail_ownership_conflict");
+assert.deepEqual(takeoverPreview.blockers, []);
+assert.deepEqual((await prod.call(`/api/v1/guardrail-packages/${takeoverPreview.packageId}/imports`, { body: {}, expected: 201 })).imported, []);
 // Export names its version: the Default version serving as UAT's runtime baseline.
 const uatBaseline = (await uat.call("/api/v1/system/baseline")).version;
 assert(uatBaseline, "UAT adopts its first Default version as the baseline.");
 const uatDefault = await uat.call(`/api/v1/guardrails/guardrail-default/package?versions=${uatBaseline}`, { binary: true });
 const unauthorized = await prod.upload(uatDefault, "default.guardrail.zip");
-assert(unauthorized.blockers.some(item => item.code === "guardrail_reserved_id"), JSON.stringify(unauthorized.blockers));
-assert.equal((await prod.call(`/api/v1/guardrail-packages/${unauthorized.packageId}/imports`, { body: {}, expected: 409 })).error.code, "guardrail_reserved_id");
+assert.deepEqual(unauthorized.blockers, []);
+
 assert.equal(await count(prodDb, "SELECT count(*) AS n FROM guardrail_version"), versionsBefore, "Rejected packages wrote nothing.");
-report("prod-rejections", { tampered: 422, untrusted: 422, conflict: 409, takeover: 409, reservedDefault: 409 });
+report("prod-content-validation", { tampered: 422, conflict: 409, legacy: "accepted", differentSource: "accepted", default: "accepted" });
 
 // ---------------------------------------------------------------- a dependency this environment lacks
-const future = reissue(parsePackage(latestOnly), { guardrail: { id: `${guardrail.id}-future`, name: `Future runtime ${runId}` }, sign: signer("uat-package.pem", "uat-2026"),
+const future = reissue(parsePackage(latestOnly), { guardrail: { id: `${guardrail.id}-future`, name: `Future runtime ${runId}` },
   mutate: content => ({ ...content, dependencyManifest: [...content.dependencyManifest, ["action", "GuardFutureAction", "9.0.0"]] }) });
 const futurePreview = await prod.upload(future, "future.guardrail.zip");
-const futureCheck = futurePreview.versions[0].environment;
-assert.equal(futureCheck.status, "missing", JSON.stringify(futureCheck));
-assert.match(futureCheck.pools[0].reason, /GuardFutureAction@9\.0\.0/, "The real Runner names the missing dependency.");
+assert.equal(futurePreview.versions[0].environment, null);
 await prod.call(`/api/v1/guardrail-packages/${futurePreview.packageId}/imports`, { body: {}, expected: 201 });
+const futureCheck = await prod.call(`/api/v1/guardrails/${guardrail.id}-future/versions/${v2}/environment-check`, { body: {} });
+assert.equal(futureCheck.status, "missing", JSON.stringify(futureCheck));
+assert.match(futureCheck.pools[0].reason, /GuardFutureAction@9\.0\.0/);
 // Its own suite fails here: this environment cannot run it, so it cannot be released.
 const futureRun = await testInProd(`${guardrail.id}-future`, v2);
 assert.equal(futureRun.status, "failed", "A version this environment cannot run fails its test here.");
@@ -339,7 +340,7 @@ report("prod-missing-dependency", { status: futureCheck.status, reason: futureCh
 
 // ---------------------------------------------------------------- runtime baseline
 const systemSource = { id: "bank-uat-system", name: "UAT system baseline" };
-const baselinePackage = reissue(parsePackage(uatDefault), { source: systemSource, sign: signer("system-package.pem", "system") });
+const baselinePackage = reissue(parsePackage(uatDefault), { source: systemSource, });
 const baselinePreview = await prod.upload(baselinePackage, "baseline.guardrail.zip");
 assert.deepEqual(baselinePreview.blockers, []);
 const previousBaseline = await prod.call("/api/v1/system/baseline");

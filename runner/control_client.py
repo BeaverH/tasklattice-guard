@@ -7,6 +7,7 @@ import importlib.metadata
 import logging
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -67,6 +68,12 @@ class RunnerControlClient:
         self._heartbeat_interval = 10
         self._sequence = 0
         self._capability_tasks: set[asyncio.Task] = set()
+        self._validation_lock = asyncio.Lock()
+        # Reconnect retries replay results without executing the test suite again.
+        # Bound both the number and serialized size of retained results.
+        self._validation_results: OrderedDict[str, bytes] = OrderedDict()
+        self._validation_result_bytes = 0
+        self._validation_result_budget = 32 * 1024 * 1024
         self._compiler = None
         if settings.compiler_capable:
             self._compiler = compiler or DefaultRunnerCompiler()
@@ -369,6 +376,18 @@ class RunnerControlClient:
         ))
 
     async def _validate(self, request: protocol.ValidationRequest) -> None:
+        async with self._validation_lock:
+            cached = self._validation_results.get(request.run_id)
+            if cached is not None:
+                self._validation_results.move_to_end(request.run_id)
+                await self._send(protocol.RunnerMessage(
+                    message_id=str(uuid.uuid4()), sent_at_unix_ms=_now_ms(),
+                    validation_result=protocol.ValidationResult.FromString(cached),
+                ))
+                return
+            await self._execute_validation(request)
+
+    async def _execute_validation(self, request: protocol.ValidationRequest) -> None:
         if self._validator is None:
             return
         async def report_progress(phase: str, completed: int, passed: int) -> None:
@@ -420,6 +439,14 @@ class RunnerControlClient:
             )
         finally:
             self._metrics.job("validation", False)
+        encoded = result.SerializeToString()
+        while self._validation_results and (len(self._validation_results) >= 64
+                or self._validation_result_bytes + len(encoded) > self._validation_result_budget):
+            _, previous = self._validation_results.popitem(last=False)
+            self._validation_result_bytes -= len(previous)
+        if len(encoded) <= self._validation_result_budget:
+            self._validation_results[request.run_id] = encoded
+            self._validation_result_bytes += len(encoded)
         await self._send(protocol.RunnerMessage(
             message_id=str(uuid.uuid4()), sent_at_unix_ms=_now_ms(), validation_result=result,
         ))

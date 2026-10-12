@@ -1,3 +1,7 @@
+import { pruneTestingReports, reportCompletionTime, testEvidenceColumns, toTestEvidence } from "./testing-report-retention.js";
+import { latestTestEvidence, matchesTestEvidence } from "../../shared/testing-report-retention.js";
+import { queryTestingReports, validationSummaryColumns, validationDetailColumns, testingReportsQuery } from "./testing-reports.js";
+import type { z } from "zod";
 import type { TestingReportDeletionImpact } from "../../shared/testing-report-deletion.js";
 import { assertGuardrailVersionCapacity, guardrailVersionCapacityIssue } from "./guardrail-version-limit.js";
 import { clearGuardrailOperationalData, guardrailTelemetryFilter } from "./guardrail-operational-data.js";
@@ -22,7 +26,7 @@ import { boundedRead } from '../db/read-budget.js';
 import { asText, findingSeverity, securityFinding, increment, jsonAggregate, jsonArrayLength, jsonElements, jsonObject, jsonText, jsonValue, literal, lowerText, rowValue, scalar, timestampValue } from '../db/postgres-expressions.js';
 import { advisoryTransactionLock } from '../db/postgres-locks.js';
 
-import { and, asc, count, countDistinct, desc, eq, exists, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, max, min, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, exists, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, max, min, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { ControllerConfig } from "../config.js";
 import type { ControllerDatabase } from "../db/client.js";
@@ -952,8 +956,9 @@ export class ControlPlaneService {
       }
       await tx.insert(auditEvents).values({ id: randomUUID(), kind: "guardrail.version_deleted", actorId: input.actorId, resourceType: "guardrail", resourceId: input.guardrailId,
         detail: { version: input.version, artifactId: record.artifactId, unrestorableRevisions: impact.unrestorableRevisions } });
-      // Keep artifacts and telemetry: deleting a version must not purge evidence.
+      // Keep artifacts and telemetry; apply report retention after this version moves into unversioned history.
       await tx.delete(guardrailVersions).where(and(eq(guardrailVersions.guardrailId, input.guardrailId), eq(guardrailVersions.version, input.version)));
+      await pruneTestingReports(tx, input.guardrailId);
       const [remaining] = await tx.select({ version: guardrailVersions.version }).from(guardrailVersions)
         .where(and(eq(guardrailVersions.guardrailId, input.guardrailId), eq(guardrailVersions.status, "ready"))).limit(1);
       if (!remaining) await tx.update(guardrails).set({ status: "draft", updatedAt: new Date() }).where(eq(guardrails.id, input.guardrailId));
@@ -1100,18 +1105,22 @@ export class ControlPlaneService {
     return { ...stored, excluded: input.excluded };
   }
 
-  async listValidationRuns(guardrailId?: string | undefined) {
-    const query = this.db.select().from(validationRuns);
-    const rows = await (guardrailId
-      ? query.where(eq(validationRuns.guardrailId, guardrailId)).orderBy(desc(validationRuns.createdAt))
-      : query.orderBy(desc(validationRuns.createdAt)));
-    return rows.map(publicValidationRun);
+  async queryValidationRuns(query: z.input<typeof testingReportsQuery>) {
+    return queryTestingReports(this.db, query);
   }
 
-  async getValidationRun(id: string) {
-    const [run] = await this.db.select().from(validationRuns).where(eq(validationRuns.id, id));
+  async listValidationRuns(guardrailId?: string | undefined) {
+    return (await this.queryValidationRuns({ guardrailId })).items;
+  }
+
+  async getValidationRun(id: string, summaryOnly = false): Promise<
+    Omit<typeof validationRuns.$inferSelect, "results" | "candidateArtifact" | "candidatePolicies" | "candidateInspection" | "testSuite">
+    & { results?: typeof validationRuns.$inferSelect.results }
+  > {
+    const [run] = await this.db.select(summaryOnly ? validationSummaryColumns : validationDetailColumns)
+      .from(validationRuns).where(eq(validationRuns.id, id));
     if (!run) throw new NotFoundError("Validation Run", id);
-    return publicValidationRun(run);
+    return run;
   }
 
   async testingReportDeletionImpact(runId: string) {
@@ -1179,11 +1188,14 @@ export class ControlPlaneService {
       ne(validationRuns.id, run.id), eq(validationRuns.status, "passed"),
       eq(validationRuns.candidateDigest, artifact.checksum), eq(validationRuns.testSuiteDigest, suiteDigest),
     )).orderBy(desc(validationRuns.completedAt), desc(validationRuns.id)).limit(1) : [];
-    const pendingVersion = version?.status === "ready" && !replacement ? version.version : null;
+    const archivedRelease = version?.testingEvidence?.release;
+    const archivedReplacement = archivedRelease?.id === version?.validationRunId && archivedRelease?.id !== run.id
+      && matchesTestEvidence(archivedRelease, artifact?.checksum ?? null, suiteDigest) ? archivedRelease : null;
+    const pendingVersion = version?.status === "ready" && !replacement && !archivedReplacement ? version.version : null;
     const [guardrail] = pendingVersion ? await tx.select().from(guardrails).where(eq(guardrails.id, run.guardrailId)) : [];
     const usage = guardrail && version ? await this.versionDeletionImpact(tx, guardrail, version) : null;
     return { runId: run.id, guardrailId: run.guardrailId, version: run.guardrailVersion, running,
-      deletable: !running && (!usage || usage.deletable), pendingVersion, replacementRunId: replacement?.id ?? null,
+      deletable: !running && (!usage || usage.deletable), pendingVersion, replacementRunId: replacement?.id ?? archivedReplacement?.id ?? null,
       references: usage?.references ?? [], blockers: usage?.blockers ?? [] };
   }
 
@@ -1261,10 +1273,11 @@ export class ControlPlaneService {
       if (!version) throw new NotFoundError("Guardrail version", `${input.guardrailId}@${input.version}`);
       if (version.status === "ready") return version;
       const [artifact] = version.artifactId ? await tx.select().from(artifacts).where(eq(artifacts.id, version.artifactId)) : [];
-      const [run] = await tx.select().from(validationRuns).where(and(
+      const [retained] = await tx.select(testEvidenceColumns).from(validationRuns).where(and(
         eq(validationRuns.guardrailId, input.guardrailId), eq(validationRuns.guardrailVersion, input.version),
         eq(validationRuns.subject, "version"), inArray(validationRuns.status, ["passed", "failed"]),
-      )).orderBy(desc(validationRuns.completedAt)).limit(1);
+      )).orderBy(desc(reportCompletionTime), desc(validationRuns.id)).limit(1);
+      const run = latestTestEvidence(retained ? toTestEvidence(retained) : null, version.testingEvidence?.latest);
       const suiteDigest = version.testSuite ? testSuiteDigest(version.testSuite) : null;
       if (!artifact || !run || run.status !== "passed" || run.candidateDigest !== artifact.checksum || run.testSuiteDigest !== suiteDigest) {
         throw new ConflictError(
@@ -1276,7 +1289,8 @@ export class ControlPlaneService {
       const [state] = await tx.update(controllerState).set({ desiredGeneration: increment(controllerState.desiredGeneration), updatedAt: new Date() })
         .where(eq(controllerState.id, "singleton")).returning();
       if (!state) throw new Error("Controller state is not initialized.");
-      const [released] = await tx.update(guardrailVersions).set({ status: "ready", validationRunId: run.id, releasedAt: new Date(), releasedBy: input.actorId })
+      const [released] = await tx.update(guardrailVersions).set({ status: "ready", validationRunId: run.id, releasedAt: new Date(), releasedBy: input.actorId,
+        testingEvidence: { ...version.testingEvidence, ...(run.id === version.testingEvidence?.latest?.id ? { release: run } : {}) } })
         .where(and(eq(guardrailVersions.guardrailId, input.guardrailId), eq(guardrailVersions.version, input.version))).returning();
       await tx.update(guardrails).set({ status: "active", updatedAt: new Date() })
         .where(and(eq(guardrails.id, input.guardrailId), eq(guardrails.status, "draft")));
@@ -1413,6 +1427,11 @@ export class ControlPlaneService {
     }
     let resumeDefault = false;
     await this.db.transaction(async (tx) => {
+      const [found] = await tx.select({ guardrailId: validationRuns.guardrailId }).from(validationRuns).where(eq(validationRuns.id, input.runId));
+      if (!found) return;
+      // Same lock order as publication, report deletion and retention; completions serialize per Guardrail.
+      const [guardrail] = await tx.select({ id: guardrails.id }).from(guardrails).where(eq(guardrails.id, found.guardrailId)).for("update");
+      if (!guardrail) return;
       const [run] = await tx.select().from(validationRuns).where(eq(validationRuns.id, input.runId)).for("update");
       // A deleted Guardrail may still have an in-flight Runner response. Acknowledge it without recreating data.
       if (!run) return;
@@ -1437,6 +1456,7 @@ export class ControlPlaneService {
         resourceType: "guardrail", resourceId: run.guardrailId,
         detail: { runId: input.runId, status: candidate.status, complianceRate: input.metrics.complianceRate, ...("digest" in candidate ? { candidateDigest: candidate.digest } : {}) },
       });
+      await pruneTestingReports(tx, run.guardrailId);
     });
     // Reconcile after committing the result. Initialization is idempotent and
     // will re-check the current revision/customization before requesting a
@@ -2396,9 +2416,10 @@ export class ControlPlaneService {
     });
   }
 
-  async pendingOutbox(kind: string, limit = 50) {
+  async pendingOutbox(kind: string, limit = 50, excludedRunIds: string[] = []) {
     return this.db.select().from(outboxEvents).where(and(
       eq(outboxEvents.kind, kind), isNull(outboxEvents.processedAt), lte(outboxEvents.availableAt, new Date()),
+      excludedRunIds.length ? notInArray(sql`${outboxEvents.payload}->>'runId'`, excludedRunIds) : undefined,
     )).orderBy(outboxEvents.createdAt).limit(limit);
   }
 
@@ -2630,23 +2651,26 @@ export class ControlPlaneService {
     // Resource readiness is derived from retained versions and local evidence,
     // never from the mutable draft, traffic references or the cached lifecycle flag.
     const versionRows = await this.db.select({ version: guardrailVersions.version, status: guardrailVersions.status,
-      testSuite: guardrailVersions.testSuite, checksum: artifacts.checksum }).from(guardrailVersions)
+      testSuite: guardrailVersions.testSuite, checksum: artifacts.checksum,
+      runId: guardrailVersions.validationRunId, testingEvidence: guardrailVersions.testingEvidence }).from(guardrailVersions)
       .leftJoin(artifacts, eq(artifacts.id, guardrailVersions.artifactId)).where(eq(guardrailVersions.guardrailId, row.id));
     const passedReports = versionRows.length ? await this.db.select({ version: validationRuns.guardrailVersion,
       contentDigest: validationRuns.candidateDigest, suiteDigest: validationRuns.testSuiteDigest }).from(validationRuns)
       .where(and(eq(validationRuns.guardrailId, row.id), eq(validationRuns.status, "passed"))) : [];
     const evidence = new Set(passedReports.map(report => JSON.stringify([report.version, report.contentDigest, report.suiteDigest])));
     const released = versionRows.filter(version => version.status === "ready" && version.checksum && version.testSuite
-      && evidence.has(JSON.stringify([version.version, version.checksum, testSuiteDigest(version.testSuite)]))).length;
+      && (evidence.has(JSON.stringify([version.version, version.checksum, testSuiteDigest(version.testSuite)]))
+        || (version.testingEvidence?.release?.id === version.runId
+          && matchesTestEvidence(version.testingEvidence?.release, version.checksum, testSuiteDigest(version.testSuite))))).length;
     const pending = versionRows.filter(version => version.status === "pending").length;
     const versionSummary = { total: versionRows.length, released, pending, missingEvidence: versionRows.length - pending - released };
     const baselineVersion = row.id === DEFAULT_GUARDRAIL_ID ? await this.baselineVersion() : null;
     // The draft's own testing state; runs against existing versions are not about
     // the draft, regardless of where the Guardrail was created.
-    const [latestValidation] = await this.db.select().from(validationRuns)
+    const [latestValidation] = await this.db.select(validationSummaryColumns).from(validationRuns)
       .where(and(eq(validationRuns.guardrailId, row.id), eq(validationRuns.subject, "draft")))
       .orderBy(desc(validationRuns.createdAt)).limit(1);
-    const [latestTestingReport] = await this.db.select().from(validationRuns)
+    const [latestTestingReport] = await this.db.select(validationSummaryColumns).from(validationRuns)
       .where(eq(validationRuns.guardrailId, row.id)).orderBy(desc(validationRuns.createdAt), desc(validationRuns.id)).limit(1);
     const [caseCount] = await this.db.select({ value: count() }).from(testCases)
       .where(eq(testCases.guardrailId, row.id));
@@ -2666,8 +2690,8 @@ export class ControlPlaneService {
       baselineVersion,
       copyOrigin: copyOrigin ? publicOrigin : null,
       draftConfig: normalizeGuardrailDraft(row.draftConfig),
-      latestValidationRun: latestValidation ? publicValidationRun(latestValidation) : null,
-      latestTestingReport: latestTestingReport ? publicValidationRun(latestTestingReport) : null,
+      latestValidationRun: latestValidation ?? null,
+      latestTestingReport: latestTestingReport ?? null,
       testCaseCount: caseCount?.value ?? 0,
       excludedTestCaseCount: row.excludedTestCaseIds.length,
       // The draft revision the last publication came from; null before any.

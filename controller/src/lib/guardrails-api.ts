@@ -280,6 +280,7 @@ function mapVersion(value: controllerApi.GuardrailVersion, guardrail: controller
     status: value.status,
     released_at: value.releasedAt,
     release_run_id: value.validationRunId ?? null,
+    testing_evidence: value.testingEvidence ?? null,
     origin: value.origin ?? "local",
     environment_check: value.environmentCheck ?? null,
     provenance: value.provenance ?? null,
@@ -505,11 +506,17 @@ export const updateGuardrailLoggingSettings = (id: string, level: LoggingLevel, 
 
 type ValidationObserver = { onProgress?: (run: ValidationRun) => void };
 export const createValidationRun = (guardrailId: string, observer?: ValidationObserver) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/guardrails/${encodeURIComponent(guardrailId)}/test-runs`, { method: "POST" }).then(run => waitForValidation(run, observer));
-export const resumeValidationRun = (runId: string, observer?: ValidationObserver) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/test-runs/${encodeURIComponent(runId)}`).then(run => waitForValidation(run, observer));
-export async function getValidationRuns(guardrailId?: string): Promise<Collection<ValidationRun>> {
-  const suffix = guardrailId ? `?guardrailId=${encodeURIComponent(guardrailId)}` : "";
-  const response = await controllerApi.requestController<{ items: controllerApi.ValidationRun[]; count: number }>(`/api/v1/test-runs${suffix}`);
-  return { items: response.items.map(mapValidationRun), count: response.count };
+export const resumeValidationRun = (runId: string, observer?: ValidationObserver) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/test-runs/${encodeURIComponent(runId)}?view=summary`).then(run => waitForValidation(run, observer));
+export async function getValidationRuns(guardrailId?: string, options: { cursor?: string | undefined; q?: string; status?: string } = {}): Promise<Collection<ValidationRun> & { nextCursor?: string | null; versionReports?: ValidationRun[] }> {
+  const params = new URLSearchParams();
+  if (guardrailId) params.set("guardrailId", guardrailId);
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.q) params.set("q", options.q);
+  if (options.status && options.status !== "all") params.set("status", options.status);
+  const suffix = params.size ? `?${params}` : "";
+  const response = await controllerApi.requestController<{ items: controllerApi.ValidationRun[]; count: number; nextCursor?: string | null; versionReports?: controllerApi.ValidationRun[] }>(`/api/v1/test-runs${suffix}`);
+  return { items: response.items.map(mapValidationRun), count: response.count,
+    nextCursor: response.nextCursor, versionReports: response.versionReports?.map(mapValidationRun) };
 }
 export const getValidationRun = (runId: string) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/test-runs/${encodeURIComponent(runId)}`).then(mapValidationRun);
 export const getPlaygroundModels = () => controllerApi.requestController<Collection<PlaygroundModel>>("/api/v1/playground/models");
@@ -603,7 +610,9 @@ function mapValidationRun(value: controllerApi.ValidationRun): ValidationRun {
       escalation_rate: value.metrics.escalationRate,
       p95_latency_ms: value.metrics.p95LatencyMs,
     },
-    results: value.results.map(mapValidationResult),
+    results: (value.results ?? []).map(mapValidationResult),
+    details_loaded: value.results !== undefined,
+    completed_at: value.completedAt,
     excluded_case_ids: value.excludedCaseIds,
     created_at: value.createdAt,
   };
@@ -660,7 +669,7 @@ async function waitForValidation(initial: controllerApi.ValidationRun, observer?
   observer?.onProgress?.(mapValidationRun(current));
   while ((current.status === "queued" || current.status === "running") && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
-    current = await controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/test-runs/${encodeURIComponent(initial.id)}`);
+    current = await controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/test-runs/${encodeURIComponent(initial.id)}?view=summary`);
     observer?.onProgress?.(mapValidationRun(current));
   }
   if (current.status === "queued" || current.status === "running") throw new Error("Timed out waiting for the test report. The test may still be running.");

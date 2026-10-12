@@ -63,6 +63,68 @@ const activeConfiguration = (revisionId: string, revision: number) => ({
 });
 
 describe("Runner model-configuration convergence", () => {
+  it("keeps a long test assigned across retry ticks, serializes dispatch and retries after disconnect", async () => {
+    const event = { id: "job-1", createdAt: new Date(), payload: { runId: "run-1", testCases: [], plan: { guardrail_version: "20261012-030000.000Z", safety_level: "strict", output_delivery: "full_buffered" } } };
+    const service = { ...serviceMock(), pendingOutbox: vi.fn(async (kind: string) => kind === "guardrail.validation_requested" ? [event] : []),
+      markValidationRunning: vi.fn(), deferOutbox: vi.fn(), rejectValidation: vi.fn() };
+    const server = new RunnerControlServer(config, service as unknown as ControlPlaneService,
+      metricsMock() as unknown as ControllerMetrics, { activeConfiguration: vi.fn().mockResolvedValue(null) } as unknown as ModelConfigurationService);
+    const dispatch = () => (server as unknown as { dispatchValidationRequests(): Promise<void> }).dispatchValidationRequests();
+    const stream = streamMock();
+    const hello = registration("compiler");
+    hello.registration.compilerCapable = true;
+    await handle(server, stream, hello, null);
+    stream.write.mockClear();
+    await Promise.all([dispatch(), dispatch(), dispatch()]);
+    // The outbox still returns this event (as it would after the 30s deferral).
+    await dispatch();
+    expect(stream.write).toHaveBeenCalledOnce();
+    expect(service.markValidationRunning).toHaveBeenCalledOnce();
+    server.removeRunnerConnection("compiler", "boot-compiler");
+    const replacement = streamMock();
+    const connection = await handle(server, replacement, hello, null);
+    replacement.write.mockClear();
+    await dispatch();
+    expect(replacement.write).toHaveBeenCalledOnce();
+    await handle(server, replacement, { validationResult: { runnerId: "compiler", runId: "run-1", accepted: false, reason: "test failed" } }, connection);
+    event.id = "job-2";
+    event.payload.runId = "run-2";
+    await dispatch();
+    expect(replacement.write).toHaveBeenCalledTimes(2);
+  });
+
+  it("dispatches the next queued job to an idle compiler while an older job is still running", async () => {
+    const events = ["run-1", "run-2"].map((runId, index) => ({
+      id: runId, createdAt: new Date(index), payload: { runId, testCases: [],
+        plan: { guardrail_version: "20261012-030000.000Z", safety_level: "strict", output_delivery: "full_buffered" } },
+    }));
+    const service = { ...serviceMock(),
+      pendingOutbox: vi.fn(async (kind: string, limit: number, excludedRunIds: string[] = []) =>
+        kind === "guardrail.validation_requested"
+          ? events.filter(event => !excludedRunIds.includes(event.payload.runId)).slice(0, limit) : []),
+      markValidationRunning: vi.fn(), deferOutbox: vi.fn(),
+    };
+    const server = new RunnerControlServer(config, service as unknown as ControlPlaneService,
+      metricsMock() as unknown as ControllerMetrics, { activeConfiguration: vi.fn().mockResolvedValue(null) } as unknown as ModelConfigurationService);
+    const dispatch = () => (server as unknown as { dispatchValidationRequests(): Promise<void> }).dispatchValidationRequests();
+    const streams = [streamMock(), streamMock()];
+    for (const [index, stream] of streams.entries()) {
+      const hello = registration(`compiler-${index}`);
+      hello.registration.compilerCapable = true;
+      await handle(server, stream, hello, null);
+      stream.write.mockClear();
+    }
+    await dispatch();
+    // Model a long-running first job becoming available again after its retry delay.
+    await dispatch();
+    expect(streams[0]!.write).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      validationRequest: expect.objectContaining({ runId: "run-1" }),
+    }));
+    expect(streams[1]!.write).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      validationRequest: expect.objectContaining({ runId: "run-2" }),
+    }));
+  });
+
   it("accepts validation progress only from the registered compiler identity", async () => {
     const updateValidationProgress = vi.fn();
     const service = { ...serviceMock(), updateValidationProgress };

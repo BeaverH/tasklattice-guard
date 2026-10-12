@@ -20,12 +20,10 @@ import {
   policyImportedVersions,
   policyRecords,
   policyVersions,
-  validationRuns,
   testCases,
 } from "../db/schema.js";
 import { artifactContent, artifactContentDigest, ARTIFACT_CONTENT_DIGEST_VERSION, signArtifactDigest, type ArtifactContent } from "../domain/artifact-content.js";
 import { deriveRequirements } from "../domain/artifact-requirements.js";
-import { DEFAULT_GUARDRAIL_ID } from "../domain/defaults.js";
 import { summarizeAdmissions, type ArtifactAdmission, type EnvironmentCheck } from "../domain/environment-check.js";
 import { ConflictError, ControllerError, NotFoundError, ValidationError } from "../domain/errors.js";
 import {
@@ -45,14 +43,12 @@ import type { GuardrailDraftConfig } from "../domain/guardrail-plan.js";
 import type { PolicyDto } from "../policy-catalog/catalog.js";
 import type { ProgrammablePolicySnapshot } from "../policy-studio/model.js";
 import type { RouterDraft } from "../../shared/traffic-routing.js";
-import { loadPackageTrust, packageSigner, verifyPackageSignatures, type TrustedSource } from "./package-trust.js";
 
 type Transaction = Parameters<Parameters<ControllerDatabase["transaction"]>[0]>[0];
 type VersionState = "new" | "existing" | "conflict";
 type PolicyState = { state: VersionState; code?: string; message?: string };
 
-/** Reserved resource IDs a package may only supply with explicit trust. */
-const RESERVED_GUARDRAIL_IDS = new Set([DEFAULT_GUARDRAIL_ID]);
+const PACKAGE_SOURCE = { id: "tasklattice-guard", name: "TaskLattice Guard" };
 
 export type PackageVersionPreview = {
   version: string;
@@ -77,7 +73,7 @@ export type PackagePolicyPreview = {
 export type PackagePreview = {
   packageId: string;
   source: { id: string; name: string };
-  keyId: string;
+  keyId: string | null;
   exportedAt: string;
   guardrail: { id: string; name: string; exists: boolean; deleted: boolean };
   policies: PackagePolicyPreview[];
@@ -99,9 +95,8 @@ export class GuardrailPackageService {
     this.admission = admission;
   }
 
-  /** Build a signed package for published versions; nothing is read from a draft or the Library. */
+  /** Export immutable content without deployment-specific signing or test prerequisites. */
   async exportPackage(guardrailId: string, requested: string[] | undefined): Promise<{ filename: string; bytes: Buffer; versions: string[] }> {
-    const signer = packageSigner(this.config);
     const [guardrail] = await this.db.select().from(guardrails).where(and(eq(guardrails.id, guardrailId), isNull(guardrails.deletedAt)));
     if (!guardrail) throw new NotFoundError("Guardrail", guardrailId);
     // A package names its versions explicitly; there is no implied "current" one.
@@ -109,19 +104,15 @@ export class GuardrailPackageService {
     if (!selected.length) throw new ValidationError("Choose the versions to export.");
     const rows = await this.db.select().from(guardrailVersions).where(and(eq(guardrailVersions.guardrailId, guardrailId), inArray(guardrailVersions.version, selected)));
     const artifactRows = await this.db.select().from(artifacts).where(inArray(artifacts.id, rows.map(row => row.artifactId).filter((id): id is string => Boolean(id))));
-    const runRows = await this.db.select().from(validationRuns).where(inArray(validationRuns.id, rows.map(row => row.validationRunId).filter((id): id is string => Boolean(id))));
     const blockers: Array<{ version: string; missing: string[] }> = [];
     const included: Array<{ content: ArtifactContent; config: VersionConfig; testSuite: FrozenTestCase[]; policies: PolicyNode[] }> = [];
     for (const version of selected) {
       const row = rows.find(item => item.version === version);
       const artifact = artifactRows.find(item => item.id === row?.artifactId);
-      const run = runRows.find(item => item.id === row?.validationRunId);
       const missing = [
-        ...(!row ? ["version"] : row.status !== "ready" ? ["ready_status"] : []),
+        ...(!row ? ["version"] : []),
         ...(row && !artifact ? ["artifact"] : []),
         ...(artifact && artifact.contentDigestVersion !== ARTIFACT_CONTENT_DIGEST_VERSION ? ["content_digest_contract"] : []),
-        ...(row && (!run || run.status !== "passed" || run.guardrailId !== guardrailId || run.guardrailVersion !== version
-          || run.candidateDigest !== artifact?.checksum || !row.testSuite || run.testSuiteDigest !== testSuiteDigest(row.testSuite)) ? ["tested_candidate_evidence"] : []),
         ...(row && !row.inspection ? ["inspection_snapshot"] : []),
         // The suite is part of the version's definition; it travels with it.
         ...(row && (!row.testSuite || testSuiteDigest(row.testSuite) !== row.inspection?.testSuite.digest) ? ["test_suite"] : []),
@@ -143,14 +134,13 @@ export class GuardrailPackageService {
       included.push({ content: artifactContent(artifact), config: { name, runtimeProfile, draftConfig }, testSuite: row.testSuite, policies: row.policies });
     }
     if (blockers.length) {
-      throw new ConflictError("Some selected versions cannot be exported as self-contained releases.", "guardrail_package_incomplete", { versions: blockers });
+      throw new ConflictError("Some selected versions are missing content required for export.", "guardrail_package_incomplete", { versions: blockers });
     }
     const bytes = buildPackage({
-      source: { id: signer.sourceId, name: signer.sourceName },
+      source: PACKAGE_SOURCE,
       guardrail: { id: guardrail.id, name: guardrail.name },
       versions: included,
       exportedAt: new Date(),
-      sign: signer.sign,
     });
     const filename = `${guardrail.id}-${selected.length === 1 ? selected[0] : `${selected.length}-versions`}${PACKAGE_FILE_EXTENSION}`;
     return { filename, bytes, versions: [...selected].sort() };
@@ -164,11 +154,11 @@ export class GuardrailPackageService {
       id, content: bytes, sizeBytes: bytes.length, sourceId: verified.source.id, keyId: verified.keyId,
       guardrailId: verified.parsed.manifest.guardrail.id, manifest: verified.parsed.manifest, uploadedBy: actorId,
     }).onConflictDoNothing();
-    return this.preview(id, verified, true);
+    return this.preview(id, verified);
   }
 
   async previewPackage(packageId: string): Promise<PackagePreview> {
-    return this.preview(packageId, this.verify(await this.storedPackage(packageId)), false);
+    return this.preview(packageId, this.verify(await this.storedPackage(packageId)));
   }
 
   /**
@@ -180,15 +170,13 @@ export class GuardrailPackageService {
     const bytes = await this.storedPackage(packageId);
     const result = await this.db.transaction(async tx => {
       await advisoryTransactionLock(tx, "guardrail-package-import");
-      // Trust is re-evaluated now: a key revoked since the preview no longer counts.
+      // Recheck exact stored contents and conflicts inside the import transaction.
       const { parsed, source, keyId, signature, digests } = this.verify(bytes);
       const manifest = parsed.manifest;
       const selected = input.versions?.length ? [...new Set(input.versions)] : manifest.versions.map(item => item.version);
       const unknown = selected.filter(version => !manifest.versions.some(item => item.version === version));
       if (unknown.length) throw new ControllerError("The selected versions are not in this package.", 422, "guardrail_package_invalid", { versions: unknown });
       const [existing] = await tx.select().from(guardrails).where(eq(guardrails.id, manifest.guardrail.id)).for("update");
-      const ownership = this.ownership(manifest.guardrail.id, existing ?? null, source);
-      if (ownership) throw new ConflictError(ownership.message, ownership.code, { guardrailId: manifest.guardrail.id });
       const restored = Boolean(existing?.deletedAt);
       if (restored && !input.restoreDeleted) {
         throw new ConflictError("This Guardrail was deleted. Review the package and confirm Restore and import to restore it.", "guardrail_restore_required", { guardrailId: manifest.guardrail.id });
@@ -205,7 +193,7 @@ export class GuardrailPackageService {
       // Leaves: every Policy version the selected Guardrail versions use.
       const needed = new Set(parsed.versions.filter(item => selected.includes(item.version)).flatMap(item => item.policies.map(ref => `${ref.id}@${ref.version}`)));
       const leaves = parsed.policies.filter(node => needed.has(`${node.id}@${node.version}`));
-      const policyStates = await this.policyStates(tx, leaves, source);
+      const policyStates = await this.policyStates(tx, leaves);
       const blocked = leaves.filter(node => policyStates.get(node)!.state === "conflict");
       if (blocked.length) {
         const first = policyStates.get(blocked[0]!)!;
@@ -291,24 +279,17 @@ export class GuardrailPackageService {
       });
       return { guardrailId: manifest.guardrail.id, restored, imported: imported.map(item => item.version), existing: existingVersions, policies: policySummary };
     });
-    // Record a fresh Runner load check for what just arrived, without delaying
-    // the import. Routing re-checks anyway; this keeps the detail view current.
-    if (this.admission) {
-      void Promise.allSettled(result.imported.map(version => this.checkVersionEnvironment(result.guardrailId, version)));
-    }
     return result;
   }
 
   /**
    * Whether each Policy version is new here, already here with the same
-   * definition, or in conflict: same ID@version with other content, or a
-   * Policy this environment or another source owns.
+   * definition, or in conflict: the same ID@version has different content.
    */
-  private async policyStates(db: Transaction | ControllerDatabase, leaves: PackagePolicy[], source: TrustedSource): Promise<Map<PackagePolicy, PolicyState>> {
+  private async policyStates(db: Transaction | ControllerDatabase, leaves: PackagePolicy[]): Promise<Map<PackagePolicy, PolicyState>> {
     const catalog = new Map(this.catalog().flatMap(policy => [policy, ...(policy.published_versions ?? [])]).map(policy => [`${policy.id}@${policy.version}`, policy]));
     const ids = [...new Set(leaves.map(node => node.id))];
     const imported = ids.length ? await db.select().from(policyImportedVersions).where(inArray(policyImportedVersions.policyId, ids)) : [];
-    const records = ids.length ? await db.select().from(policyRecords).where(inArray(policyRecords.id, ids)) : [];
     const versions = ids.length ? await db.select({ policyId: policyVersions.policyId, version: policyVersions.version, checksum: policyVersions.checksum }).from(policyVersions).where(inArray(policyVersions.policyId, ids)) : [];
     const changed = (node: PackagePolicy): PolicyState => ({ state: "conflict", code: "policy_version_conflict",
       message: `Policy ${node.id} version ${node.version} already exists here with different content. Nothing was imported.` });
@@ -325,9 +306,6 @@ export class GuardrailPackageService {
       const snapshot = node.definition as unknown as ProgrammablePolicySnapshot;
       const stored = versions.find(row => row.policyId === node.id && String(row.version) === node.version);
       if (stored) return [node, stored.checksum === snapshot.checksum ? { state: "existing" } : changed(node)];
-      const record = records.find(row => row.id === node.id);
-      if (record?.origin === "local") return [node, { state: "conflict", code: "policy_ownership_conflict", message: `Policy ${node.id} was created in this environment; a package cannot add versions to it.` }];
-      if (record && record.sourceId !== source.id) return [node, { state: "conflict", code: "policy_ownership_conflict", message: `Policy ${node.id} belongs to source ${record.sourceId}; source ${source.id} cannot add versions to it.` }];
       if (catalog.has(key) || [...catalog.values()].some(policy => policy.id === node.id)) return [node, { state: "conflict", code: "policy_ownership_conflict", message: `Policy ${node.id} is a catalog Policy here; a package cannot replace it with a Policy Studio version.` }];
       return [node, { state: "new" }];
     }));
@@ -345,7 +323,7 @@ export class GuardrailPackageService {
     const [record] = await tx.select().from(policyRecords).where(eq(policyRecords.id, node.id)).for("update");
     if (!record) {
       await tx.insert(policyRecords).values({ id: node.id, name, description, source: "custom", origin: "imported", sourceId, owner, draft: draft as unknown as typeof policyRecords.$inferInsert["draft"] });
-    } else if (Number(node.version) > Math.max(0, ...(await tx.select({ version: policyVersions.version }).from(policyVersions).where(eq(policyVersions.policyId, node.id))).map(row => row.version))) {
+    } else if (record.origin === "imported" && Number(node.version) > Math.max(0, ...(await tx.select({ version: policyVersions.version }).from(policyVersions).where(eq(policyVersions.policyId, node.id))).map(row => row.version))) {
       // The record describes its newest version; it is never edited here.
       await tx.update(policyRecords).set({ name, description, owner, draft: draft as unknown as typeof policyRecords.$inferInsert["draft"], updatedAt: new Date() }).where(eq(policyRecords.id, node.id));
     }
@@ -404,25 +382,20 @@ export class GuardrailPackageService {
     return summarizeAdmissions(await this.admission(artifact));
   }
 
-  private async preview(packageId: string, verified: ReturnType<GuardrailPackageService["verify"]>, checkEnvironment: boolean): Promise<PackagePreview> {
+  private async preview(packageId: string, verified: ReturnType<GuardrailPackageService["verify"]>): Promise<PackagePreview> {
     const { parsed, source, keyId, digests } = verified;
     const manifest = parsed.manifest;
     const [existing] = await this.db.select().from(guardrails).where(eq(guardrails.id, manifest.guardrail.id));
     const states = await this.versionStates(this.db, parsed, digests);
-    const stored = await this.db.select({ version: guardrailVersions.version, environmentCheck: guardrailVersions.environmentCheck }).from(guardrailVersions)
+    const stored = await this.db.select({ version: guardrailVersions.version }).from(guardrailVersions)
       .where(eq(guardrailVersions.guardrailId, manifest.guardrail.id));
-    const ownership = this.ownership(manifest.guardrail.id, existing ?? null, source);
     const conflicts = [...states].filter(([, state]) => state === "conflict").map(([version]) => version);
-    const versions = await Promise.all(parsed.versions.map(async (item): Promise<PackageVersionPreview> => {
+    const versions = parsed.versions.map((item): PackageVersionPreview => {
       const state = states.get(item.version)!;
       const checksum = digests.get(item.version)!;
-      // Sign in memory only; nothing is stored or activated by a preview.
-      const environment = state === "new" && checkEnvironment && !ownership
-        ? await this.admit({ ...item.content, id: `preview-${randomUUID()}`, generation: 0, checksum, signature: signArtifactDigest(checksum, this.config.artifactSigningKeyPath) })
-        : stored.find(row => row.version === item.version)?.environmentCheck ?? null;
-      return { version: item.version, state, contentDigest: checksum, testSuite: { total: item.testSuite.length, digest: testSuiteDigest(item.testSuite) }, requirements: item.requirements, environment };
-    }));
-    const policyStates = await this.policyStates(this.db, parsed.policies, source);
+      return { version: item.version, state, contentDigest: checksum, testSuite: { total: item.testSuite.length, digest: testSuiteDigest(item.testSuite) }, requirements: item.requirements, environment: null };
+    });
+    const policyStates = await this.policyStates(this.db, parsed.policies);
     const policies = parsed.policies.map((node): PackagePolicyPreview => ({
       id: node.id, version: node.version, kind: node.kind, name: typeof node.definition.name === "string" ? node.definition.name : node.id,
       state: policyStates.get(node)!.state, digest: node.digest,
@@ -439,47 +412,39 @@ export class GuardrailPackageService {
       versions,
       blockers: [
         ...(capacityIssue ? [{ code: capacityIssue.code, message: capacityIssue.message }] : []),
-        ...(ownership ? [{ code: ownership.code, message: ownership.message }] : []),
         ...policyBlockers.map(item => ({ code: item.code!, message: item.message! })),
         ...(conflicts.length ? [{ code: "guardrail_version_conflict", message: `Versions ${conflicts.join(", ")} already exist with different content.` }] : []),
       ],
     };
   }
 
-  /** Structural, trust and semantic verification of exact package bytes. */
+  /** Structural and semantic verification; source labels never authorize or block imports. */
   private verify(bytes: Buffer) {
     const parsed = parsePackage(bytes);
-    const { source, signature } = verifyPackageSignatures(loadPackageTrust(this.config.packageTrustPath), parsed.manifest.source.id, parsed.manifestBytes, parsed.signatures);
+    const source = parsed.manifest.source;
     const digests = new Map(parsed.versions.map(item => [item.version, verifyPackageVersion(parsed, item, content => canonicalArtifactContent(content, this.config.protoPath))]));
-    return { parsed, source, keyId: signature.keyId, signature, digests };
-  }
-
-  private ownership(guardrailId: string, existing: typeof guardrails.$inferSelect | null, source: TrustedSource): { code: string; message: string } | null {
-    const id = guardrailId;
-    if (RESERVED_GUARDRAIL_IDS.has(id) && !source.reservedGuardrailIds.includes(id)) {
-      return { code: "guardrail_reserved_id", message: `Guardrail ${id} is a reserved system resource. Source ${source.id} is not authorized to supply it.` };
-    }
-    // A reserved system resource exists in every installation; an authorized
-    // source adds versions to it while the resource itself stays local.
-    if (RESERVED_GUARDRAIL_IDS.has(id)) return null;
-    if (existing && existing.origin !== "imported") return { code: "guardrail_ownership_conflict", message: `Guardrail ${id} was created in this environment; a package cannot take it over.` };
-    if (existing && existing.sourceId !== source.id) return { code: "guardrail_ownership_conflict", message: `Guardrail ${id} belongs to source ${existing.sourceId}; source ${source.id} cannot add versions to it.` };
-    return null;
+    return { parsed, source, keyId: null, signature: null, digests };
   }
 
   private async versionStates(db: Transaction | ControllerDatabase, parsed: ParsedPackage, digests: Map<string, string>): Promise<Map<string, VersionState>> {
     const id = parsed.manifest.guardrail.id;
     const versions = parsed.versions.map(item => item.version);
-    const rows = await db.select({ version: guardrailVersions.version, artifactId: guardrailVersions.artifactId, origin: guardrailVersions.origin }).from(guardrailVersions)
+    const rows = await db.select().from(guardrailVersions)
       .where(and(eq(guardrailVersions.guardrailId, id), inArray(guardrailVersions.version, versions)));
-    const provenance = await db.select().from(guardrailVersionProvenance)
-      .where(and(eq(guardrailVersionProvenance.guardrailId, id), inArray(guardrailVersionProvenance.version, versions)));
+    const contents = rows.length ? await db.select({ id: artifacts.id, checksum: artifacts.checksum }).from(artifacts)
+      .where(inArray(artifacts.id, rows.flatMap(row => row.artifactId ? [row.artifactId] : []))) : [];
+    const policyDigests = (nodes: PolicyNode[]) => nodes.map(node => `${node.id}@${node.version}:${policyNodeDigest(node.definition)}`).sort();
     return new Map(parsed.versions.map(item => {
       const row = rows.find(candidate => candidate.version === item.version);
       if (!row) return [item.version, "new" as const];
-      const origin = provenance.find(candidate => candidate.version === item.version);
-      // Same content is not enough: the frozen display, requirements and test suite must match too.
-      const same = origin && origin.contentDigest === digests.get(item.version) && canonicalJson(origin.fileDigests) === canonicalJson(item.fileDigests);
+      const content = contents.find(candidate => candidate.id === row.artifactId);
+      const inspection = row.inspection;
+      const config = inspection && { name: inspection.name, runtimeProfile: inspection.runtimeProfile, draftConfig: inspection.draftConfig };
+      // Round trips work for locally created and imported versions alike. Never overwrite a different definition.
+      const same = content?.checksum === digests.get(item.version)
+        && canonicalJson(config) === canonicalJson(item.config)
+        && row.testSuite && testSuiteDigest(row.testSuite) === testSuiteDigest(item.testSuite)
+        && row.policies && canonicalJson(policyDigests(row.policies)) === canonicalJson(item.policies.map(ref => `${ref.id}@${ref.version}:${ref.digest}`).sort());
       return [item.version, same ? "existing" as const : "conflict" as const];
     }));
   }

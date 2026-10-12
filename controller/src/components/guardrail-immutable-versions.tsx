@@ -1,3 +1,4 @@
+import { isValidationRunning } from "./validation-run-progress";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -20,7 +21,7 @@ import { Skeleton } from "./ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { releaseGuardrailVersion, testGuardrailVersion, type GuardrailVersion, type GuardrailVersionDetail, type ValidationRun } from "@/lib/api";
-import { versionReleaseState, type VersionReleaseState } from "@/lib/version-release";
+import { latestVersionTestEvidence, latestVersionTestStatus, versionReleaseState, type VersionReleaseState } from "@/lib/version-release";
 import { useAuth } from "@/lib/auth";
 import { checkGuardrailVersionEnvironment, getSystemBaseline, setSystemBaseline } from "@/lib/controller-api";
 import { queryKeys } from "@/features/query-keys";
@@ -86,11 +87,9 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
   const ordered = [...versions].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.version.localeCompare(a.version));
   const selectedIndex = ordered.findIndex(item => item.version === selectedVersion?.version);
   const currentPage = Math.min(page, Math.max(0, Math.ceil(ordered.length / PAGE_SIZE) - 1));
+  const latestTest = selectedVersion ? latestVersionTestEvidence(selectedVersion, validationRuns) : null;
+  const expiredTest = latestTest && !isValidationRunning(validation) && !validationRuns.some(run => run.id === latestTest.id) ? latestTest : null;
   const currentDetail = detail?.version === selectedVersion?.version ? detail : undefined;
-  const latestTests = new Map<string, ValidationRun>();
-  for (const run of [...validationRuns].sort((a, b) => b.created_at.localeCompare(a.created_at))) {
-    if (!latestTests.has(run.guardrail_version)) latestTests.set(run.guardrail_version, run);
-  }
   const baseline = useQuery({ queryKey: queryKeys.systemBaseline, queryFn: getSystemBaseline, enabled: isDefault });
   const [baselineReason, setBaselineReason] = useState("");
   const switchBaseline = useMutation({
@@ -143,7 +142,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
         {/* Testing a version runs its own suite against its signed Artifact, here. */}
         {isAdmin ? <DropdownMenuItem disabled={!version.test_suite_count || releaseOf(version).state === "testing" || testVersion.isPending} onSelect={() => testVersion.mutate(version.version)}><FlaskConical />{t("immutableVersions.runTests")}</DropdownMenuItem> : null}
         {isAdmin && version.status === "pending" ? <DropdownMenuItem variant="edit" disabled={releaseOf(version).state !== "releasable"} onSelect={() => setAction({ kind: "release", version: version.version })}><Rocket />{t("immutableVersions.release")}</DropdownMenuItem> : null}
-        <DropdownMenuItem disabled={version.status !== "ready"} onSelect={() => setAction({ kind: "export", version: version.version })}><Download />{t("guardrails.exportEllipsis")}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setAction({ kind: "export", version: version.version })}><Download />{t("guardrails.exportEllipsis")}</DropdownMenuItem>
         {/* The runtime baseline is pinned; switching it is always explicit. */}
         {isAdmin && isDefault ?
           <DropdownMenuItem variant="edit" disabled={baseline.data?.version === version.version || version.status !== "ready"} onSelect={() => setAction({ kind: "baseline", version: version.version })}><ShieldCheck />{t("guardrailPackage.setBaseline")}</DropdownMenuItem> : null}
@@ -152,7 +151,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       </DropdownMenuContent>
     </DropdownMenu></div>
   );
-  const testStatus = (run?: ValidationRun | null) => validationLoading
+  const testStatus = (run?: Pick<ValidationRun, "status"> | null) => validationLoading
     ? <span className="text-sm text-muted-foreground">{t("immutableVersions.loading")}</span>
     : validationError ? <span className="text-sm text-muted-foreground">{t("immutableVersions.testUnavailable")}</span>
       : run ? <StateBadge state={run.status} /> : <span className="text-sm text-muted-foreground">{t("immutableVersions.noTest")}</span>;
@@ -176,7 +175,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
                 <TableCell className="min-w-44"><span className="whitespace-nowrap"><ReleaseStateBadge state={releaseOf(version).state} /></span></TableCell>
                 <TableCell><time dateTime={version.created_at} className="text-muted-foreground">{new Date(version.created_at).toLocaleString(i18n.language)}</time></TableCell>
                 <TableCell className="tabular-nums">{version.policy_count ?? (detail?.version === version.version ? detail.policy_bindings.length : "—")}</TableCell>
-                <TableCell>{testStatus(latestTests.get(version.version))}</TableCell>
+                <TableCell>{testStatus(latestVersionTestStatus(version, validationRuns))}</TableCell>
                 <TableCell>{menu(version)}</TableCell>
               </TableRow>)}</TableBody>
             </Table>
@@ -225,7 +224,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
                       {selectedVersion.provenance ? <ReleaseSource version={selectedVersion} /> : null}
                       <section className="space-y-3 border-t pt-6">
                         <div><h3 className="text-base font-semibold">{t("guardrails.validationEvidence")}</h3><p className="mt-1 text-sm text-muted-foreground">{t("immutableVersions.testDescription")}</p></div>
-                        {validationError ? <RetryNotice error={validationError} onRetry={onRetry} /> : validationLoading ? <Skeleton className="h-20" /> : validation ? <div className="flex items-center justify-between gap-4 border p-4"><div><div className="flex items-center gap-3">{testStatus(validation)}<span className="text-sm">{t("guardrails.compliance", { rate: validation.metrics.compliance_rate })}</span></div><p className="mt-2 text-xs text-muted-foreground">{new Date(validation.created_at).toLocaleString(i18n.language)}</p></div><Button variant="outline" onClick={() => { setDrawerOpen(false); onOpenValidation(validation); }}><FlaskConical />{t("guardrails.openValidation")}</Button></div>
+                        {validationError ? <RetryNotice error={validationError} onRetry={onRetry} /> : validationLoading ? <Skeleton className="h-20" /> : expiredTest ? <div className="space-y-2 border p-4"><div className="flex items-center gap-3">{testStatus(expiredTest)}<time className="text-xs text-muted-foreground" dateTime={expiredTest.completedAt}>{new Date(expiredTest.completedAt).toLocaleString(i18n.language)}</time></div><p className="text-sm text-muted-foreground">{t("immutableVersions.reportExpired")}</p></div> : validation ? <div className="flex items-center justify-between gap-4 border p-4"><div><div className="flex items-center gap-3">{testStatus(validation)}<span className="text-sm">{t("guardrails.compliance", { rate: validation.metrics.compliance_rate })}</span></div><p className="mt-2 text-xs text-muted-foreground">{new Date(validation.created_at).toLocaleString(i18n.language)}</p></div><Button variant="outline" onClick={() => { setDrawerOpen(false); onOpenValidation(validation); }}><FlaskConical />{t("guardrails.openValidation")}</Button></div>
                           : <p className="border bg-muted/20 p-4 text-sm text-muted-foreground">{t("immutableVersions.noTestDescription")}</p>}
                       </section>
                     </TabsContent>
@@ -325,7 +324,7 @@ function ReleaseSource({ version }: { version: GuardrailVersion }) {
     <div><h3 className="text-base font-semibold">{t("guardrailPackage.provenanceTitle")}</h3><p className="mt-1 text-sm text-muted-foreground">{t("guardrailPackage.provenanceDescription")}</p></div>
     <div className="space-y-3 border p-4">
       <p className="text-sm">{t("guardrailPackage.importedFromSource", { source: provenance.sourceId })}</p>
-      <p className="text-xs text-muted-foreground">{t("guardrailPackage.importedAt", { time: new Date(provenance.importedAt).toLocaleString(i18n.language) })} · {t("guardrailPackage.signedBy", { keyId: provenance.sourceKeyId })}</p>
+      <p className="text-xs text-muted-foreground">{t("guardrailPackage.importedAt", { time: new Date(provenance.importedAt).toLocaleString(i18n.language) })}</p>
       <div><p className="mb-1 text-xs text-muted-foreground">{t("guardrailPackage.contentDigest")}</p><Digest value={provenance.contentDigest} /></div>
     </div>
   </section>;

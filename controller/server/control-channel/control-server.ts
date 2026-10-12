@@ -59,6 +59,8 @@ export class RunnerControlServer {
   private readonly grpc = new Server(controlChannelOptions);
   private readonly connections = new Map<string, Connection>();
   private timers: NodeJS.Timeout[] = [];
+  private dispatchingValidation = false;
+  private readonly activeValidations = new Map<string, Connection>();
   private readonly railValidations = new Map<string, { runnerId: string; bootId: string; finish: (result: RailValidationEvidence) => void }>();
   private readonly admissions = new Map<string, { runnerId: string; bootId: string; finish: (result: PoolAdmission) => void }>();
 
@@ -170,6 +172,9 @@ export class RunnerControlServer {
 
   private releaseConnection(connection: Connection): void {
     this.connections.delete(connection.runnerId);
+    for (const [runId, owner] of this.activeValidations) {
+      if (owner === connection) this.activeValidations.delete(runId);
+    }
     this.metrics.controlConnection(connection.poolId, false);
     for (const validation of this.railValidations.values()) {
       if (validation.runnerId === connection.runnerId && validation.bootId === connection.bootId)
@@ -281,7 +286,7 @@ export class RunnerControlServer {
         lastReconcileGeneration: -1,
       };
       const prior = this.connections.get(connection.runnerId);
-      if (prior) this.metrics.controlConnection(prior.poolId, false);
+      if (prior) this.releaseConnection(prior);
       this.connections.set(connection.runnerId, connection);
       this.metrics.controlConnection(connection.poolId, true);
       this.write(stream, {
@@ -335,7 +340,10 @@ export class RunnerControlServer {
       const result = message.validationResult;
       if (result.runnerId !== current.runnerId) throw new Error("Validation result identity does not match the registered stream.");
       this.metrics.observeJob("validation", result.accepted);
+      const owner = this.activeValidations.get(result.runId);
+      if (owner && owner !== current) throw new Error("Validation result belongs to another Runner stream.");
       await this.handleValidationResult(result);
+      this.activeValidations.delete(result.runId);
     } else if (message.artifactAdmissionResult) {
       const result = message.artifactAdmissionResult;
       const pending = this.admissions.get(result.requestId);
@@ -516,28 +524,48 @@ export class RunnerControlServer {
   }
 
   private async dispatchValidationRequests(): Promise<void> {
-    const compiler = [...this.connections.values()].find((item) => item.poolId === "default" && item.compilerCapable);
-    if (!compiler) return;
-    const events = [
-      ...await this.service.pendingOutbox("guardrail.validation_requested", 10),
-      ...await this.service.pendingOutbox("policy.validation_requested", 10),
-    ].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime()).slice(0, 10);
-    for (const event of events) {
+    // Timer ticks may overlap while PostgreSQL is slow. Reserve a single job per
+    // compiler until its result is committed or the stream disconnects.
+    if (this.dispatchingValidation) return;
+    this.dispatchingValidation = true;
+    try {
+      const busy = new Set(this.activeValidations.values());
+      const compiler = [...this.connections.values()].find(item => item.poolId === "default" && item.compilerCapable && !busy.has(item));
+      if (!compiler) return;
+      const excludedRunIds = [...this.activeValidations.keys()];
+      const events = [
+        ...await this.service.pendingOutbox("guardrail.validation_requested", 1, excludedRunIds),
+        ...await this.service.pendingOutbox("policy.validation_requested", 1, excludedRunIds),
+      ].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+      const event = events.find(item => !this.activeValidations.has(string(item.payload.runId)));
+      if (!event) return;
       const payload = event.payload;
-      this.write(compiler.stream, {
-        validationRequest: {
-          runId: string(payload.runId),
-          guardrailId: string(payload.guardrailId),
-          candidateVersion: string(payload.candidateVersion),
-          sourceDraftRevision: number(payload.sourceDraftRevision),
-          // A version run sends its signed Artifact to test as it is; a draft sends its plan.
-          ...(payload.artifact ? { artifact: artifactToWire(payload.artifact) } : { plan: planToWire(payload.plan ?? {}) }),
-          runtimeProfile: string(payload.runtimeProfile),
-          testCases: array(payload.testCases).map(validationTestToWire),
-        },
-      });
-      await this.service.markValidationRunning(event.id);
-      await this.service.deferOutbox(event.id, 30);
+      const runId = string(payload.runId);
+      this.activeValidations.set(runId, compiler);
+      try {
+        await this.service.markValidationRunning(event.id);
+        await this.service.deferOutbox(event.id, 30);
+        if (this.connections.get(compiler.runnerId) !== compiler) {
+          this.activeValidations.delete(runId);
+          return;
+        }
+        this.write(compiler.stream, {
+          validationRequest: {
+            runId,
+            guardrailId: string(payload.guardrailId),
+            candidateVersion: string(payload.candidateVersion),
+            sourceDraftRevision: number(payload.sourceDraftRevision),
+            ...(payload.artifact ? { artifact: artifactToWire(payload.artifact) } : { plan: planToWire(payload.plan ?? {}) }),
+            runtimeProfile: string(payload.runtimeProfile),
+            testCases: array(payload.testCases).map(validationTestToWire),
+          },
+        });
+      } catch (error) {
+        this.activeValidations.delete(runId);
+        throw error;
+      }
+    } finally {
+      this.dispatchingValidation = false;
     }
   }
 

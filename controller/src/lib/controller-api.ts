@@ -165,6 +165,7 @@ export type Guardrail = {
 };
 
 export type GuardrailVersion = {
+  testingEvidence?: import("../../shared/testing-report-retention").VersionTestingEvidence | null;
   hasSourceSnapshot?: boolean;
   /** Frozen Test Cases in this version; null when published before suites were frozen. */
   testSuiteCount?: number | null;
@@ -207,7 +208,7 @@ export type ArtifactRequirements = {
 
 export type VersionProvenance = {
   sourceId: string;
-  sourceKeyId: string;
+  sourceKeyId: string | null;
   contentDigest: string;
   packageId: string;
   importedAt: string;
@@ -218,7 +219,7 @@ export type VersionProvenance = {
 export type PackagePreview = {
   packageId: string;
   source: { id: string; name: string };
-  keyId: string;
+  keyId: string | null;
   exportedAt: string;
   guardrail: { id: string; name: string; exists: boolean; deleted: boolean };
   /** The tree's leaves: Policy versions, imported into the Library before the Guardrail. */
@@ -318,7 +319,7 @@ export type ValidationRun = {
     escalationRate: number;
     p95LatencyMs: number;
   };
-  results: Array<Record<string, unknown>>;
+  results?: Array<Record<string, unknown>>;
   excludedCaseIds: string[];
   failureReason: string | null;
   createdAt: string;

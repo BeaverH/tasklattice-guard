@@ -1,3 +1,4 @@
+import { testingReportsQuery } from "../services/testing-reports.js";
 import { runtimeLogOutcomes } from "../../shared/runtime-outcome.js";
 import { readSoftwareVersion } from "../services/software-version.js";
 import { parseSoftwareVersion } from "../../shared/software-version.js";
@@ -238,10 +239,10 @@ export function createHttpApp(input: {
     200,
     { "content-type": input.metrics.registry.contentType },
   ));
-  // Every deployment has the same features; release packages only need their keys configured.
+  // File import/export is always available; no deployment-specific setup.
   app.get("/api/v1/deployment/capabilities", context => context.json({
-    packageExport: { available: Boolean(input.config.packageExport), sourceId: input.config.packageExport?.sourceId ?? null },
-    packageImport: { available: Boolean(input.config.packageTrustPath) },
+    packageExport: { available: true, sourceId: null },
+    packageImport: { available: true },
   }));
   app.get("/api/v1/system/status", async (context) => {
     const desiredGeneration = await input.service.desiredGeneration();
@@ -784,11 +785,10 @@ export function createHttpApp(input: {
     }));
   });
   app.get("/api/v1/test-runs", authenticated, async (context) => {
-    const items = await input.service.listValidationRuns(context.req.query("guardrailId"));
-    return context.json({ items, count: items.length });
+    return context.json(await input.service.queryValidationRuns(testingReportsQuery.parse(context.req.query())));
   });
   app.get("/api/v1/test-runs/:runId", authenticated, async (context) => {
-    return context.json(await input.service.getValidationRun(context.req.param("runId")));
+    return context.json(await input.service.getValidationRun(context.req.param("runId"), context.req.query("view") === "summary"));
   });
   app.get("/api/v1/test-runs/:runId/deletion-impact", authenticated, async context => {
     return context.json(await input.service.testingReportDeletionImpact(context.req.param("runId")));

@@ -239,6 +239,20 @@
       "when": 1791600000001,
       "tag": "0033_imported_guardrail_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791760000000,
+      "tag": "0034_testing_report_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791760000001,
+      "tag": "0035_portable_guardrail_packages",
+      "breakpoints": true
     }
   ]
 }

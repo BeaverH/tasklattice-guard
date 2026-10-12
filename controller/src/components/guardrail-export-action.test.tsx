@@ -47,19 +47,19 @@ describe("Guardrail release package export", () => {
     expect(checked(dialog)).toEqual([]);
     expect((within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(dialog).getByRole("checkbox", { name: NEWEST }));
-    expect(within(dialog).getByText("guardrailPackage.selectedCount:1/2")).toBeTruthy();
+    expect(within(dialog).getByText("guardrailPackage.selectedCount:1/3")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }));
     await waitFor(() => expect(downloadGuardrailPackage).toHaveBeenCalledExactlyOnceWith("guard-1", [NEWEST]));
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("exports released imported versions with the same local test evidence requirement", async () => {
-    vi.mocked(getControllerGuardrail).mockResolvedValue({ id: "guard-1", versions: [version(NEWEST, { origin: "imported" }), version(LEGACY, { origin: "imported", validationRunId: null })] } as never);
+  it("exports pending imported versions without local test evidence", async () => {
+    vi.mocked(getControllerGuardrail).mockResolvedValue({ id: "guard-1", versions: [version(NEWEST, { origin: "imported" }), version(LEGACY, { origin: "imported", status: "pending", validationRunId: null })] } as never);
     vi.mocked(downloadGuardrailPackage).mockResolvedValue("guard-1.guardrail.zip");
     open();
     const dialog = await sheet();
-    expect((within(dialog).getByRole("checkbox", { name: LEGACY }) as HTMLInputElement).disabled).toBe(true);
+    expect((within(dialog).getByRole("checkbox", { name: LEGACY }) as HTMLInputElement).disabled).toBe(false);
     fireEvent.click(within(dialog).getByRole("checkbox", { name: NEWEST }));
     fireEvent.click(within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }));
     await waitFor(() => expect(downloadGuardrailPackage).toHaveBeenCalledExactlyOnceWith("guard-1", [NEWEST]));
@@ -71,16 +71,16 @@ describe("Guardrail release package export", () => {
     const dialog = await sheet();
     fireEvent.click(within(dialog).getByRole("checkbox", { name: OLDER }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: NEWEST }));
-    expect(within(dialog).getByText("guardrailPackage.selectedCount:2/2")).toBeTruthy();
+    expect(within(dialog).getByText("guardrailPackage.selectedCount:2/3")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }));
     await waitFor(() => expect(downloadGuardrailPackage).toHaveBeenCalledExactlyOnceWith("guard-1", [OLDER, NEWEST]));
   });
 
-  it("explains why a version cannot travel instead of exporting an incomplete release", async () => {
+  it("does not require an old test report to export immutable content", async () => {
     open();
     const dialog = await sheet();
-    expect((within(dialog).getByRole("checkbox", { name: LEGACY }) as HTMLInputElement).disabled).toBe(true);
-    expect(within(dialog).getByText("guardrailPackage.exportNoTest")).toBeTruthy();
+    expect((within(dialog).getByRole("checkbox", { name: LEGACY }) as HTMLInputElement).disabled).toBe(false);
+    expect(within(dialog).queryByText("guardrailPackage.exportNoTest")).toBeNull();
     expect((within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -96,18 +96,20 @@ describe("Guardrail release package export", () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
   });
 
-  it("says so when this environment cannot sign packages", async () => {
+  it("exports without deployment capabilities or signing configuration", async () => {
     vi.mocked(getDeploymentCapabilities).mockResolvedValue({ packageExport: { available: false, sourceId: null }, packageImport: { available: false } });
     open();
     const dialog = await sheet();
-    expect(await within(dialog).findByText("guardrailPackage.exportUnavailable")).toBeTruthy();
-    expect((within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).queryByText("guardrailPackage.exportUnavailable")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: NEWEST }));
+    expect(getDeploymentCapabilities).not.toHaveBeenCalled();
+    expect((within(dialog).getByRole("button", { name: "guardrailPackage.exportDownload" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("disables export before first publication", () => {
+  it("opens export independently of runtime readiness", () => {
     open(false);
     const item = screen.getByRole("menuitem", { name: "guardrails.exportEllipsis" });
-    expect(item.getAttribute("disabled")).not.toBeNull();
+    expect(item.getAttribute("disabled")).toBeNull();
   });
 
   it("keeps export available to readers without exposing write actions", () => {

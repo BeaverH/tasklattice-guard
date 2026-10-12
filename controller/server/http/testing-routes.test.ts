@@ -12,7 +12,7 @@ function setup(role = "admin") {
   const run = { id: "run-1", status: "queued" };
   const service = {
     requestValidation: vi.fn().mockResolvedValue(run),
-    listValidationRuns: vi.fn().mockResolvedValue([run]),
+    queryValidationRuns: vi.fn().mockResolvedValue({ items: [run], count: 1 }),
     getValidationRun: vi.fn().mockResolvedValue(run),
     testingReportDeletionImpact: vi.fn().mockResolvedValue({ runId: "run-1", pendingVersion: "version-1", deletable: true }),
     deleteTestingReport: vi.fn().mockResolvedValue(undefined),
@@ -42,11 +42,11 @@ describe("Testing HTTP paths", () => {
     const list = await app.request("/api/v1/test-runs?guardrailId=guard-1");
     expect(list.status).toBe(200);
     expect(await list.json()).toEqual({ items: [run], count: 1 });
-    expect(service.listValidationRuns).toHaveBeenCalledWith("guard-1");
+    expect(service.queryValidationRuns).toHaveBeenCalledWith({ guardrailId: "guard-1", limit: 25, q: "", status: "all" });
     const detail = await app.request("/api/v1/test-runs/run-1");
     expect(detail.status).toBe(200);
     expect(await detail.json()).toEqual(run);
-    expect(service.getValidationRun).toHaveBeenCalledWith("run-1");
+    expect(service.getValidationRun).toHaveBeenCalledWith("run-1", false);
   });
 
   it("reviews report deletion and requires the confirmed impact", async () => {

@@ -380,7 +380,7 @@ async function handleExport(args: string[]) {
   console.log(`Wrote ${out}`);
 }
 
-/** Verify a package against this environment, preview it, and import with --confirm. */
+/** Read a package, preview its contents, and import with --confirm. */
 async function handleImport(args: string[]) {
   const file = args.find(arg => !arg.startsWith('--'));
   if (!file || !existsSync(file)) {
@@ -396,15 +396,13 @@ async function handleImport(args: string[]) {
     return;
   }
   const preview = uploaded.data;
-  console.log(`Source:    ${preview.source.name} (${preview.source.id}), key ${preview.keyId}`);
-  console.log(`Guardrail: ${preview.guardrail.name} (${preview.guardrail.id})${preview.guardrail.deleted ? ' — deleted; restoration required' : preview.guardrail.exists ? '' : ' — new in this environment'}`);
+  console.log(`Guardrail: ${preview.guardrail.name} (${preview.guardrail.id})${preview.guardrail.deleted ? ' — deleted; restoration required' : preview.guardrail.exists ? '' : ' — new'}`);
   // Leaves first: Policy versions that would join this Library, then the Guardrail versions.
   const policies = (preview.policies ?? []) as Array<{ id: string; version: string; state: string }>;
   for (const item of policies.filter(policy => policy.state !== 'existing')) console.log(`  Policy ${item.id}@${item.version}  ${item.state}`);
   if (policies.some(policy => policy.state === 'existing')) console.log(`  ${policies.filter(policy => policy.state === 'existing').length} Policy version(s) already here`);
   for (const item of preview.versions) {
-    console.log(`  ${item.version}  ${item.state.padEnd(8)} test suite: ${item.testSuite.total} cases  environment: ${item.environment?.status ?? 'not checked'}`);
-    for (const pool of item.environment?.pools ?? []) if (!pool.admitted && !pool.unavailable) console.log(`      ${pool.poolId}/${pool.runnerId}: ${pool.reason}`);
+    console.log(`  ${item.version}  ${item.state.padEnd(8)} test suite: ${item.testSuite.total} cases`);
   }
   for (const blocker of preview.blockers) console.log(`Blocked: ${blocker.message}`);
   const requested = option(args, 'versions')?.split(',').filter(Boolean);

@@ -1,7 +1,6 @@
 import { gitBuildInfo } from "./git-build-info.mjs";
 import { spawn } from 'node:child_process';
-import { generateKeyPairSync } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -94,37 +93,8 @@ function capture(command, argv) {
   });
 }
 const secretValue = async (stack, name, key) => Buffer.from(await capture('kubectl', ['--context', context, '-n', stack.namespace, 'get', 'secret', name, '-o', `jsonpath={.data.${key.replaceAll('.', '\\.')}}`]), 'base64').toString();
-/** Package keys stay on this machine: UAT's signing key, plus the extra sources the regression signs with. */
-function promotionKeys() {
-  mkdirSync(`${promotion.work}/keys`, { recursive: true });
-  const pem = {};
-  for (const name of ['uat-package', 'other-package', 'system-package']) {
-    const path = `${promotion.work}/keys/${name}.pem`;
-    if (!existsSync(path)) {
-      const pair = generateKeyPairSync('ed25519');
-      writeFileSync(path, pair.privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
-      writeFileSync(`${promotion.work}/keys/${name}.pub.pem`, pair.publicKey.export({ type: 'spki', format: 'pem' }));
-    }
-    pem[name] = readFileSync(`${promotion.work}/keys/${name}.pub.pem`, 'utf8');
-  }
-  return pem;
-}
 async function deployPromotion(extra) {
-  const pem = promotionKeys();
   const { uat, prod } = promotion.stacks;
-  const signing = `${promotion.work}/uat-package-signing.json`;
-  writeFileSync(signing, JSON.stringify({ apiVersion: 'v1', kind: 'List', items: [
-    { apiVersion: 'v1', kind: 'Namespace', metadata: { name: uat.namespace } },
-    { apiVersion: 'v1', kind: 'Secret', type: 'Opaque', metadata: { name: 'guard-package-signing', namespace: uat.namespace },
-      stringData: { 'private-key.pem': readFileSync(`${promotion.work}/keys/uat-package.pem`, 'utf8') } },
-  ] }), { mode: 0o600 });
-  // Public keys only; JSON is valid YAML for --values.
-  const trust = `${promotion.work}/prod-trust.values.yaml`;
-  writeFileSync(trust, JSON.stringify({ controller: { promotion: { trust: { sources: [
-    { id: 'bank-uat', name: 'Bank UAT', keys: [{ id: 'uat-2026', publicKeyPem: pem['uat-package'] }] },
-    { id: 'bank-uat-b', name: 'Second UAT', keys: [{ id: 'uat-b', publicKeyPem: pem['other-package'] }] },
-    { id: 'bank-uat-system', name: 'UAT system baseline', keys: [{ id: 'system', publicKeyPem: pem['system-package'] }], reservedGuardrailIds: ['guardrail-default'] },
-  ] } } } }, null, 2));
   const controllerImage = `${env.CONTROLLER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-controller'}:${promotion.tag}`;
   const runnerImage = `${env.RUNNER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-runner'}:${promotion.tag}`;
   if (env.PROMOTION_SKIP_IMAGES !== '1') {
@@ -132,8 +102,7 @@ async function deployPromotion(extra) {
     env.RUNNER_IMAGE = runnerImage;
     await images();
   }
-  await run('kubectl', ['--context', context, 'apply', '-f', signing]);
-  for (const [stack, values] of [[uat, [uat.values]], [prod, [prod.values, trust]]]) {
+  for (const [stack, values] of [[uat, [uat.values]], [prod, [prod.values]]]) {
     await run('bash', ['scripts/helm-upgrade.sh', stack.release, chart, context, stack.namespace,
       '--values', devValues, ...values.flatMap(file => ['--values', file]),
       '--set', `controller.image.repository=${controllerImage.slice(0, controllerImage.lastIndexOf(':'))}`, '--set-string', `controller.image.tag=${promotion.tag}`,

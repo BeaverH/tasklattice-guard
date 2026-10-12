@@ -1,3 +1,4 @@
+import { EventPagination, useEventCursor } from "@/components/event-pagination";
 import { DeleteTestingReportSheet } from "@/components/delete-testing-report-sheet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -27,6 +28,7 @@ import {
   getGuardrails,
   getTestCases,
   getValidationRuns,
+  getValidationRun,
   restoreGuardrailTestCase,
   type TestCaseResult,
   type Guardrail,
@@ -40,18 +42,20 @@ export function ValidationPage() {
   const canManage = auth.user?.role === "admin";
   const requestedGuardrail = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("guardrail") ?? "";
   const guardrailsQuery = useQuery({ queryKey: queryKeys.guardrails, queryFn: getGuardrails });
-  const runsQuery = useQuery({ queryKey: queryKeys.allValidationRuns, queryFn: () => getValidationRuns() });
   const guardrails = (guardrailsQuery.data?.items ?? []).filter((item) => item.is_default || !item.system_managed);
-  const runs = runsQuery.data?.items ?? [];
   const [createOpen, setCreateOpen] = useState(false);
   useEffect(() => { if (requestedGuardrail && canManage) setCreateOpen(true); }, [canManage, requestedGuardrail]);
   const [selected, setSelected] = useState<ValidationRun | null>(null);
   const [search, setSearch] = useState("");
   const [guardrailId, setGuardrailId] = useState("all");
   const [status, setStatus] = useState("all");
+  const pagination = useEventCursor(JSON.stringify([search, guardrailId, status]));
+  const runsQuery = useQuery({ queryKey: [...queryKeys.allValidationRuns, { search, guardrailId, status, cursor: pagination.cursor }],
+    queryFn: () => getValidationRuns(guardrailId === "all" ? undefined : guardrailId, { q: search, status, cursor: pagination.cursor }) });
+  const runs = runsQuery.data?.items ?? [];
   const guardrailNames = useMemo(() => new Map(guardrails.map((item) => [item.id, item.name])), [guardrails]);
-  const guardrailIds = useMemo(() => [...new Set(runs.map((run) => run.guardrail_id))].sort((left, right) => (guardrailNames.get(left) ?? left).localeCompare(guardrailNames.get(right) ?? right, i18n.language)), [guardrailNames, i18n.language, runs]);
-  const filtered = useMemo(() => filterValidationRuns(runs, guardrailNames, search, guardrailId, status), [guardrailId, guardrailNames, runs, search, status]);
+  const guardrailIds = useMemo(() => [...guardrailNames.keys()].sort((left, right) => (guardrailNames.get(left) ?? left).localeCompare(guardrailNames.get(right) ?? right, i18n.language)), [guardrailNames, i18n.language]);
+  const filtered = runs;
   const refresh = async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.allValidationRuns }), queryClient.invalidateQueries({ queryKey: queryKeys.guardrails })]); };
   const rerun = useMutation({ mutationFn: (guardrailId: string) => createValidationRun(guardrailId), onSuccess: async (run) => { await refresh(); setSelected(run); toast[run.status === "passed" ? "success" : "error"](t(run.status === "passed" ? "guardrails.validationPassed" : "guardrails.validationFailed", { rate: run.metrics.compliance_rate })); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
 
@@ -63,8 +67,9 @@ export function ValidationPage() {
       {!guardrailsQuery.isLoading && !guardrails.length ? <div className="mt-5"><EmptyState title={t("validation.noGuardrails")} description={t("validation.noGuardrailsDescription")} /></div> : null}
       {!runsQuery.isLoading && guardrails.length ? (
         <section className="mt-5 overflow-hidden rounded-xl border bg-card shadow-xs">
-          <div className="grid gap-3 border-b bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(16rem,1fr)_minmax(14rem,18rem)_12rem_auto] lg:items-center"><label className="relative"><span className="sr-only">{t("validation.searchValidationRuns")}</span><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="field:min-h-11 field:bg-card field:pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("validation.searchValidationRuns")} /></label><Select value={guardrailId} onValueChange={setGuardrailId}><SelectTrigger className="field:min-h-11 min-w-0 field:bg-card" aria-label={t("validation.filterGuardrailId")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("validation.allGuardrailIds")}</SelectItem>{guardrailIds.map((id) => <SelectItem key={id} value={id}>{guardrailNames.get(id) ? `${guardrailNames.get(id)} · ${id}` : id}</SelectItem>)}</SelectContent></Select><Select value={status} onValueChange={setStatus}><SelectTrigger className="field:min-h-11 field:bg-card" aria-label={t("validation.filterStatus")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("validation.allStatuses")}</SelectItem><SelectItem value="passed">{t("states.passed")}</SelectItem><SelectItem value="failed">{t("states.failed")}</SelectItem><SelectItem value="incomplete">{t("states.incomplete")}</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground sm:text-right">{t("validation.validationRunCount", { count: filtered.length })}</p></div>
+          <div className="grid gap-3 border-b bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(16rem,1fr)_minmax(14rem,18rem)_12rem_auto] lg:items-center"><label className="relative"><span className="sr-only">{t("validation.searchValidationRuns")}</span><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="field:min-h-11 field:bg-card field:pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("validation.searchValidationRuns")} /></label><Select value={guardrailId} onValueChange={setGuardrailId}><SelectTrigger className="field:min-h-11 min-w-0 field:bg-card" aria-label={t("validation.filterGuardrailId")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("validation.allGuardrailIds")}</SelectItem>{guardrailIds.map((id) => <SelectItem key={id} value={id}>{guardrailNames.get(id) ? `${guardrailNames.get(id)} · ${id}` : id}</SelectItem>)}</SelectContent></Select><Select value={status} onValueChange={setStatus}><SelectTrigger className="field:min-h-11 field:bg-card" aria-label={t("validation.filterStatus")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("validation.allStatuses")}</SelectItem><SelectItem value="passed">{t("states.passed")}</SelectItem><SelectItem value="failed">{t("states.failed")}</SelectItem><SelectItem value="incomplete">{t("states.incomplete")}</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground sm:text-right">{t("validation.validationRunCount", { count: runsQuery.data?.count ?? 0 })}</p></div>
           {filtered.length ? <Table><TableHeader><TableRow className="hover:bg-transparent"><TableHead className="pl-4">{t("validation.validationRunColumn")}</TableHead><TableHead>{t("validation.guardrailColumn")}</TableHead><TableHead>{t("validation.targetColumn")}</TableHead><TableHead>{t("validation.casesColumn")}</TableHead><TableHead>{t("validation.statusColumn")}</TableHead><TableHead>{t("validation.passRateColumn")}</TableHead><TableHead>{t("validation.durationColumn")}</TableHead><TableHead>{t("validation.runAtColumn")}</TableHead><TableHead className="w-12"><span className="sr-only">{t("validation.openValidationRun")}</span></TableHead></TableRow></TableHeader><TableBody>{filtered.map((run) => <ValidationRow key={run.id} run={run} guardrailName={guardrailNames.get(run.guardrail_id)} locale={i18n.language} onOpen={() => setSelected(run)} />)}</TableBody></Table> : <EmptyState title={runs.length ? t("validation.noMatchingValidationRuns") : t("validation.noValidationRuns")} description={runs.length ? t("validation.noMatchingValidationRunsDescription") : t("validation.noValidationRunsDescription")} action={canManage && !runs.length ? <Button onClick={() => setCreateOpen(true)}><Plus />{t("validation.createValidationRun")}</Button> : undefined} />}
+          <EventPagination page={pagination.page} busy={runsQuery.isFetching} nextCursor={runsQuery.data?.nextCursor} onNext={pagination.next} onPrevious={pagination.previous} onLatest={pagination.latest} />
         </section>
       ) : null}
       <CreateValidationSheet open={createOpen} onOpenChange={setCreateOpen} guardrails={guardrails} initialGuardrailId={requestedGuardrail} onCreated={async (run) => { setCreateOpen(false); await refresh(); setSelected(run); }} />
@@ -78,10 +83,11 @@ export function filterValidationRuns(runs: ValidationRun[], guardrailNames: Map<
   return runs.filter((run) => (guardrailId === "all" || run.guardrail_id === guardrailId) && (status === "all" || run.status === status) && (!query || `${run.id} ${guardrailNames.get(run.guardrail_id) ?? run.guardrail_id}`.toLowerCase().includes(query)));
 }
 
-export function GuardrailValidationHistory({ runs, loading, error, canManage, running, blockedReason, onRun, onOpen, onOpenTarget, description, emptyDescription, action }: {
+export function GuardrailValidationHistory({ runs, loading, error, canManage, running, blockedReason, onRun, onOpen, onOpenTarget, description, emptyDescription, action, pagination }: {
   description?: string;
   emptyDescription?: string;
   action?: ReactNode;
+  pagination?: ReactNode;
   runs: ValidationRun[];
   loading: boolean;
   error: unknown;
@@ -106,19 +112,20 @@ export function GuardrailValidationHistory({ runs, loading, error, canManage, ru
       <TableBody>{orderedRuns.map((run) => <ValidationRow key={run.id} run={run} locale={i18n.language} showGuardrail={false} onOpen={() => onOpen(run)} onOpenTarget={() => onOpenTarget(run)} />)}</TableBody>
     </Table></div> : null}
     {!loading && !error && !orderedRuns.length ? <EmptyState title={t("validation.noValidationRuns")} description={emptyDescription ?? t("validation.noValidationRunsDescription")} action={canManage && !action ? <Button disabled={running || Boolean(blockedReason)} title={blockedReason ?? undefined} onClick={onRun}><Play />{t("guardrails.runReviewed")}</Button> : undefined} /> : null}
+    {pagination}
   </section>;
 }
 
 function ValidationRow({ run, guardrailName, locale, showGuardrail = true, onOpen, onOpenTarget }: { run: ValidationRun; guardrailName?: string; locale: string; showGuardrail?: boolean; onOpen: () => void; onOpenTarget?: () => void }) {
   const { t } = useTranslation();
-  return <TableRow role="button" tabIndex={0} className="cursor-pointer" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}><TableCell className="pl-4"><strong className="block text-sm font-medium">{t("validation.validationRunNamed", { id: shortId(run.id) })}</strong><span className="mt-1 block font-mono text-xs text-muted-foreground">{reportNumber(run.id)}</span></TableCell>{showGuardrail ? <TableCell><strong className="block text-sm font-medium">{guardrailName ?? run.guardrail_id}</strong>{guardrailName ? <span className="mt-1 block font-mono text-xs text-muted-foreground">{run.guardrail_id}</span> : null}</TableCell> : null}<TableCell className="text-xs"><ValidationTarget run={run} onOpen={onOpenTarget} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.total}</TableCell><TableCell><StateBadge state={isValidationRunning(run) ? "syncing" : run.status} label={isValidationRunning(run) ? t("guardrails.runningValidation") : undefined} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.compliance_rate}%</TableCell><TableCell className="font-mono text-xs">P95 {run.metrics.p95_latency_ms} ms</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground">{new Date(run.created_at).toLocaleString(locale)}</TableCell><TableCell><Button type="button" variant="ghost" size="icon" className="size-11" aria-label={t("validation.openValidationRun")} onClick={(event) => { event.stopPropagation(); onOpen(); }}><ChevronRight className="size-4 text-muted-foreground" /></Button></TableCell></TableRow>;
+  return <TableRow role="button" tabIndex={0} className="cursor-pointer" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}><TableCell className="pl-4"><strong className="block text-sm font-medium">{t("validation.validationRunNamed", { id: shortId(run.id) })}</strong><span className="mt-1 block max-w-52 truncate font-mono text-xs text-muted-foreground" title={reportNumber(run.id)}>{reportNumber(run.id)}</span></TableCell>{showGuardrail ? <TableCell><strong className="block text-sm font-medium">{guardrailName ?? run.guardrail_id}</strong>{guardrailName ? <span className="mt-1 block font-mono text-xs text-muted-foreground">{run.guardrail_id}</span> : null}</TableCell> : null}<TableCell className="text-xs"><ValidationTarget run={run} onOpen={onOpenTarget} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.total}</TableCell><TableCell className="testing-report-status whitespace-nowrap"><StateBadge state={isValidationRunning(run) ? "syncing" : run.status} label={isValidationRunning(run) ? t("guardrails.runningValidation") : undefined} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.compliance_rate}%</TableCell><TableCell className="font-mono text-xs">P95 {run.metrics.p95_latency_ms} ms</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground">{new Date(run.created_at).toLocaleString(locale)}</TableCell><TableCell><Button type="button" variant="ghost" size="icon" className="size-11" aria-label={t("validation.openValidationRun")} onClick={(event) => { event.stopPropagation(); onOpen(); }}><ChevronRight className="size-4 text-muted-foreground" /></Button></TableCell></TableRow>;
 }
 
 function ValidationTarget({ run, onOpen }: { run: ValidationRun; onOpen?: () => void }) {
   const { t } = useTranslation();
   const label = targetLabel(run, t);
   if (!onOpen) return <span className="font-mono text-xs">{label}</span>;
-  return <Button type="button" variant="link" className="-my-2 h-auto min-h-11 justify-start gap-1.5 px-0 py-2 font-mono text-xs" onClick={(event) => { event.stopPropagation(); onOpen?.(); }} onKeyDown={(event) => event.stopPropagation()}>{label}<ArrowUpRight className="size-3.5" /></Button>;
+  return <Button type="button" variant="link" className="-my-2 h-auto min-h-11 max-w-60 justify-start gap-1.5 whitespace-normal px-0 py-2 text-left font-mono text-xs" onClick={(event) => { event.stopPropagation(); onOpen?.(); }} onKeyDown={(event) => event.stopPropagation()}>{label}<ArrowUpRight className="size-3.5" /></Button>;
 }
 
 function CreateValidationSheet({ open, onOpenChange, guardrails, initialGuardrailId, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; guardrails: Guardrail[]; initialGuardrailId: string; onCreated: (run: ValidationRun) => Promise<void> }) {
@@ -143,9 +150,14 @@ function CreateValidationSheet({ open, onOpenChange, guardrails, initialGuardrai
   </EntitySheet>{guardrail ? <AddTestCaseSheet guardrail={guardrail} open={addOpen} onOpenChange={setAddOpen} onCreated={async () => { setAddOpen(false); await queryClient.invalidateQueries({ queryKey: queryKeys.testCases(guardrailId) }); }} /> : null}</>;
 }
 
-export function ValidationDetailSheet({ run, guardrail, canManage, running, blockedReason, onRunAgain, onRunVersionAgain, onOpenTarget, onClose }: { run: ValidationRun | null; guardrail?: Guardrail; canManage: boolean; running: boolean; blockedReason?: string | null; onRunAgain: (guardrailId: string) => void; onRunVersionAgain?: (run: ValidationRun) => void; onOpenTarget?: (run: ValidationRun) => void; onClose: () => void }) {
+export function ValidationDetailSheet({ run: selectedRun, guardrail, canManage, running, blockedReason, onRunAgain, onRunVersionAgain, onOpenTarget, onClose }: { run: ValidationRun | null; guardrail?: Guardrail; canManage: boolean; running: boolean; blockedReason?: string | null; onRunAgain: (guardrailId: string) => void; onRunVersionAgain?: (run: ValidationRun) => void; onOpenTarget?: (run: ValidationRun) => void; onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
+  const detailQuery = useQuery({ queryKey: queryKeys.validationRun(selectedRun?.id ?? ""),
+    queryFn: () => getValidationRun(selectedRun!.id), enabled: Boolean(selectedRun && selectedRun.details_loaded === false && !isValidationRunning(selectedRun)),
+    staleTime: Infinity, gcTime: 0 });
+  const run = detailQuery.data ?? selectedRun;
+
   const validationScope = useMutation({ mutationFn: ({ guardrailId, caseId, action }: { guardrailId: string; caseId: string; action: "exclude" | "restore" }) => action === "exclude" ? excludeGuardrailTestCase(guardrailId, caseId) : restoreGuardrailTestCase(guardrailId, caseId), onSuccess: async (_, variables) => { await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.testCases(variables.guardrailId) }), queryClient.invalidateQueries({ queryKey: queryKeys.guardrail(variables.guardrailId) }), queryClient.invalidateQueries({ queryKey: queryKeys.guardrails })]); toast.success(t(variables.action === "exclude" ? "guardrails.testCaseExcludedRerun" : "guardrails.testCaseRestored")); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
   const [deletingReport, setDeletingReport] = useState(false);
   useEffect(() => { setDeletingReport(false); }, [run?.id]);
@@ -169,7 +181,8 @@ export function ValidationDetailSheet({ run, guardrail, canManage, running, bloc
       </section>
       <InfoNotice title={t("validation.versionTargetReserved", { version: run.guardrail_version })}>{t(versionRun ? "immutableVersions.localTestReportDescription" : "validation.versionTargetReservedDescription")}</InfoNotice>
       {run.excluded_case_ids?.length ? <InfoNotice title={t("validation.excludedScopeTitle", { count: run.excluded_case_ids.length })}>{t("validation.excludedScopeDescription")}</InfoNotice> : null}
-      <ValidationCaseResults key={run.id} results={results} defaultFilter={run.status === "failed" ? "failed" : "all"} excludedCaseIds={guardrail?.excluded_test_case_ids ?? []} busyCaseId={validationScope.isPending ? validationScope.variables?.caseId : undefined} onValidationScopeChange={canManage && !versionRun && guardrail ? (caseId, action) => validationScope.mutate({ guardrailId: guardrail.id, caseId, action }) : undefined} />
+      {detailQuery.error ? <ErrorNotice error={detailQuery.error} /> : null}
+      {run.details_loaded === false ? <Skeleton className="h-72" /> : <ValidationCaseResults key={run.id} results={results} defaultFilter={run.status === "failed" ? "failed" : "all"} excludedCaseIds={guardrail?.excluded_test_case_ids ?? []} busyCaseId={validationScope.isPending ? validationScope.variables?.caseId : undefined} onValidationScopeChange={canManage && !versionRun && guardrail ? (caseId, action) => validationScope.mutate({ guardrailId: guardrail.id, caseId, action }) : undefined} />}
     </div>
   </EntitySheet>;
 }

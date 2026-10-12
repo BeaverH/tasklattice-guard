@@ -179,6 +179,8 @@ export type ValidationRun = {
   failure_reason?: string | null;
   metrics: ValidationMetrics;
   results: TestCaseResult[];
+  details_loaded?: boolean;
+  completed_at?: string | null;
   excluded_case_ids: string[];
   created_at: string;
 };
@@ -476,6 +478,7 @@ export type DeleteConfirmation = {
 };
 
 export type GuardrailVersion = {
+  testing_evidence?: import("../../shared/testing-report-retention").VersionTestingEvidence | null;
   guardrail_id: string;
   version: string;
   /** Frozen Test Cases in this version; null when published before suites were frozen. */

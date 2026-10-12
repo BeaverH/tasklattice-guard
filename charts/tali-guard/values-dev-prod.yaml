@@ -2,10 +2,7 @@
 #   npm run helm:deploy:promotion
 # Same features as UAT. By procedure (SOP), Guardrails reach production as
 # imported release packages; creating one here is still possible.
-#
-# Trusted package sources (controller.promotion.trust.sources) carry the UAT
-# public keys. The deploy command generates them into
-# .local-secrets/promotion/prod-trust.values.yaml and layers that file last.
+# Import and export work without package keys or trusted-source setup.
 
 fullnameOverride: tali-guard-prod
 

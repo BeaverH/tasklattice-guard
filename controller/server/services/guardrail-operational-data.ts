@@ -13,7 +13,7 @@ export async function clearGuardrailOperationalData(tx: Transaction, guardrailId
   const events = await tx.delete(runtimeEvents).where(eq(runtimeEvents.guardrailId, guardrailId));
   const calls = await tx.delete(routeAssignments).where(eq(routeAssignments.guardrailId, guardrailId));
   await tx.update(guardrailVersions).set({
-    status: "pending", validationRunId: null, releasedAt: null, releasedBy: null, environmentCheck: null,
+    status: "pending", validationRunId: null, testingEvidence: null, releasedAt: null, releasedBy: null, environmentCheck: null,
   }).where(eq(guardrailVersions.guardrailId, guardrailId));
   const resetAt = new Date();
   await tx.update(guardrails).set({ operationalResetAt: resetAt }).where(eq(guardrails.id, guardrailId));

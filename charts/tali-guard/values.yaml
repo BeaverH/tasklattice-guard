@@ -32,28 +32,8 @@ controller:
       memory: 256Mi
     limits:
       memory: 1Gi
-  # Guardrail promotion between isolated environments (UAT -> production).
-  # Every installation has the same features; these only configure the
-  # identity that signs exported packages and the sources trusted on import.
+  # File import/export needs no configuration. Optional startup baseline only.
   promotion:
-    # UAT: source identity and Ed25519 key that sign exported release
-    # packages. Keep this key separate from the Artifact signing key.
-    export:
-      sourceId: ""
-      sourceName: ""
-      keyId: ""
-      existingSecret: ""
-      privateKeyKey: private-key.pem
-    # Production: trusted package sources. List them in `sources` (public keys
-    # only; the chart renders the ConfigMap), or point existingConfigMap at a
-    # ConfigMap holding the same JSON:
-    # {"sources":[{"id","name","keys":[{"id","publicKeyPem"}],"reservedGuardrailIds"}]}.
-    trust:
-      sources: []
-      existingConfigMap: ""
-      key: trust.json
-    # Optional signed Default Guardrail package imported at startup; adopted as
-    # the runtime baseline only when none is set.
     baselinePackage:
       existingConfigMap: ""
       key: baseline.guardrail.zip

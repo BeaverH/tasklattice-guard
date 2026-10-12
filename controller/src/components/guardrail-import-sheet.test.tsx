@@ -40,14 +40,15 @@ function mount(client = new QueryClient()) {
 }
 
 describe("Guardrail package import", () => {
-  it("previews source, test suites and environment, then imports only what is new", async () => {
+  it("previews versions without environmental steps, then imports only what is new", async () => {
     vi.mocked(uploadGuardrailPackage).mockResolvedValue(preview());
     vi.mocked(importGuardrailPackage).mockResolvedValue({ guardrailId: "bank-assistant", restored: false, imported: [V2], existing: [V1], policies: { imported: ["policy-studio@1"], existing: ["local-network-addresses@2.0.0"] } });
     const { dialog, choose, onClose } = mount();
     expect(within(dialog).getByText("guardrailPackage.noProductionTesting")).toBeTruthy();
     choose();
     expect(await within(dialog).findByText(V2)).toBeTruthy();
-    expect(within(dialog).getByText(/GuardTopicJudgeAction/)).toBeTruthy();
+    expect(within(dialog).queryByText(/GuardTopicJudgeAction/)).toBeNull();
+    expect(within(dialog).queryByText("guardrailPackage.stepEnvironment")).toBeNull();
     expect(within(dialog).getByText("guardrailPackage.stateExisting")).toBeTruthy();
     // Each version arrives with its test suite, not the source's test report.
     expect(within(dialog).getAllByText(`guardrailPackage.testSuiteCases:${JSON.stringify({ count: 12 })}`)).toHaveLength(2);
@@ -65,10 +66,10 @@ describe("Guardrail package import", () => {
   });
 
   it("shows why a package cannot be imported and offers no import", async () => {
-    vi.mocked(uploadGuardrailPackage).mockResolvedValue(preview({ blockers: [{ code: "guardrail_ownership_conflict", message: "Guardrail bank-assistant belongs to source bank-uat." }] }));
+    vi.mocked(uploadGuardrailPackage).mockResolvedValue(preview({ blockers: [{ code: "guardrail_version_conflict", message: "This version already exists with different content." }] }));
     const { dialog, choose } = mount();
     choose();
-    expect(await within(dialog).findByText("Guardrail bank-assistant belongs to source bank-uat.")).toBeTruthy();
+    expect(await within(dialog).findByText("This version already exists with different content.")).toBeTruthy();
     expect((within(dialog).getByRole("button", { name: "guardrailPackage.import" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -103,21 +104,21 @@ describe("Guardrail package import", () => {
     expect(client.getQueryState(queryKeys.runtimeEvents)?.isInvalidated).toBe(true);
   });
 
-  it("does not offer restoration when the deleted Guardrail has an ownership conflict", async () => {
-    vi.mocked(uploadGuardrailPackage).mockResolvedValue(preview({ guardrail: { ...preview().guardrail, deleted: true }, blockers: [{ code: "guardrail_ownership_conflict", message: "Another source owns this Guardrail." }] }));
+  it("does not offer restoration when the deleted Guardrail has an version conflict", async () => {
+    vi.mocked(uploadGuardrailPackage).mockResolvedValue(preview({ guardrail: { ...preview().guardrail, deleted: true }, blockers: [{ code: "guardrail_version_conflict", message: "Version content conflicts." }] }));
     const { dialog, choose } = mount();
     choose();
-    await within(dialog).findByText("Another source owns this Guardrail.");
+    await within(dialog).findByText("Version content conflicts.");
     expect(within(dialog).queryByText("guardrailPackage.restoreNotice")).toBeNull();
     expect(within(dialog).getByRole("button", { name: "guardrailPackage.import" }).matches(":disabled")).toBe(true);
     expect(importGuardrailPackage).not.toHaveBeenCalled();
   });
 
   it("keeps a rejected upload visible so another file can be chosen", async () => {
-    vi.mocked(uploadGuardrailPackage).mockRejectedValueOnce(new Error("No signature on this package verifies with a trusted key."));
+    vi.mocked(uploadGuardrailPackage).mockRejectedValueOnce(new Error("The package contents do not match its manifest."));
     const { dialog, choose } = mount();
     choose("tampered.guardrail.zip");
-    expect(await within(dialog).findByText("No signature on this package verifies with a trusted key.")).toBeTruthy();
+    expect(await within(dialog).findByText("The package contents do not match its manifest.")).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "guardrailPackage.chooseAnother" })).toBeTruthy();
     expect(importGuardrailPackage).not.toHaveBeenCalled();
   });

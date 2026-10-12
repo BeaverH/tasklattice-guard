@@ -45,6 +45,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); auth.user.role = "admin"; });
 
 describe("Immutable version list and detail drawer", () => {
+  it("shows a retained failed outcome after its report expires without offering a dead report link", () => {
+    const archived = { ...version(3), testing_evidence: { latest: { id: "expired-test", status: "failed" as const,
+      candidateDigest: "checksum", testSuiteDigest: "suite", createdAt: "2026-10-04T01:00:00Z", completedAt: "2026-10-04T01:01:00Z" } } };
+    mount({ versions: [archived], selectedVersion: archived, detail: archived });
+    const dialog = open();
+    expect(within(dialog).getByText("immutableVersions.reportExpired")).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "guardrails.openValidation" })).toBeNull();
+    expect(within(dialog).queryByText("immutableVersions.noTestDescription")).toBeNull();
+  });
+
   it("opens the requested version when navigating from a Testing report", () => {
     const handled = vi.fn();
     mount({ selectedVersion: version(2), detail: version(2), openRequested: true, onOpenRequestHandled: handled });
@@ -155,8 +165,8 @@ describe("Immutable version list and detail drawer", () => {
     const view = mount({ versions: [pending(), version(2), version(1)], selectedVersion: pending(), detail: pending() }); open();
     expect(screen.getAllByText("immutableVersions.releaseStates.untested").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "uiCopy.versionActions" }));
-    // Not usable while pending: no export, and release needs a passed test.
-    expect(screen.getByRole("menuitem", { name: "guardrails.exportEllipsis" }).hasAttribute("disabled")).toBe(true);
+    // File export is independent of release; serving still needs a passed test.
+    expect(screen.getByRole("menuitem", { name: "guardrails.exportEllipsis" }).hasAttribute("disabled")).toBe(false);
     expect(screen.getByRole("menuitem", { name: "immutableVersions.release" }).hasAttribute("disabled")).toBe(true);
     view.unmount();
 

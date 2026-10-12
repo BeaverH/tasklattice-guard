@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import * as api from "@/lib/api";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -110,6 +111,20 @@ describe("Testing Report acceptance evidence", () => {
   });
   afterAll(() => vi.unstubAllGlobals());
   afterEach(cleanup);
+
+  it("loads case results only when a summary is opened", async () => {
+    const getDetail = vi.spyOn(api, "getValidationRun").mockResolvedValue({ ...validationRun, details_loaded: true, results: [result] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const props = { canManage: false, running: false, onRunAgain: vi.fn(), onClose: vi.fn() };
+    const view = render(<QueryClientProvider client={client}><TooltipProvider><ValidationDetailSheet {...props} run={null} /></TooltipProvider></QueryClientProvider>);
+    expect(getDetail).not.toHaveBeenCalled();
+    view.rerender(<QueryClientProvider client={client}><TooltipProvider><ValidationDetailSheet {...props} run={{ ...validationRun, details_loaded: false }} /></TooltipProvider></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByText(result.name)).toBeTruthy());
+    expect(getDetail).toHaveBeenCalledExactlyOnceWith(validationRun.id);
+    view.unmount();
+    client.clear();
+    getDetail.mockRestore();
+  });
 
   it.each(["validation", "testing-report"])("shows a Testing Report number for %s IDs and opens the original record", (prefix) => {
     const number = "54b2887b-c498-4e1d-be84-01105d2e6413";
