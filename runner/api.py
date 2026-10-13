@@ -626,9 +626,12 @@ def _telemetry_metadata(decision: ProtectionDecision) -> dict[str, Any]:
     risks = sorted({item.risk for item in decision.findings})
     return {
         "action": decision.action,
+        "protectionMode": decision.protection_mode,
+        "detectionDecision": decision.detection_decision,
+        "detectionError": decision.detection_error,
         "risks": risks,
         "findings": findings,
-        "executionStatus": "error" if any(item.verdict == "error" for item in decision.findings) or any(item.timed_out or item.verdict == "error" or item.status in {"error", "failed", "timeout"} for item in decision.trace) else "complete",
+        "executionStatus": "bypassed" if decision.protection_mode == "bypass" else "error" if decision.detection_error or any(item.verdict == "error" for item in decision.findings) or any(item.timed_out or item.verdict == "error" or item.status in {"error", "failed", "timeout"} for item in decision.trace) else "complete",
         "trace": trace,
         "usage": usage,
         "coverage": coverage,

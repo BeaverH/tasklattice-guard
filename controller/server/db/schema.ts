@@ -292,6 +292,12 @@ export const policyValidationRuns = pgTable("policy_validation_run", {
 }, (table) => [index("policy_validation_run_policy_idx").on(table.policyId, table.createdAt)]);
 
 export const guardrails = pgTable("guardrail", {
+  protectionMode: text("protection_mode").$type<import("../../shared/protection-mode.js").ProtectionMode>().notNull().default("enforce"),
+  protectionModeApplied: text("protection_mode_applied").$type<import("../../shared/protection-mode.js").ProtectionMode>().notNull().default("enforce"),
+  protectionModeGeneration: bigint("protection_mode_generation", { mode: "number" }).notNull().default(0),
+  protectionModeUpdatedAt: timestamp("protection_mode_updated_at", { withTimezone: true }),
+  protectionModeUpdatedBy: text("protection_mode_updated_by").references(() => user.id),
+  protectionModeReason: text("protection_mode_reason").notNull().default(""),
   // Retained across restore to reject telemetry from the previous installation.
   operationalResetAt: timestamp("operational_reset_at", { withTimezone: true }),
   copyOrigin: jsonb("copy_origin").$type<Record<string, unknown>>(),
@@ -551,6 +557,9 @@ export type RunnerLoad = {
 };
 
 export const runnerInstances = pgTable("runner_instance", {
+  protectionGeneration: bigint("protection_generation", { mode: "number" }).notNull().default(0),
+  protectionRejectedGeneration: bigint("protection_rejected_generation", { mode: "number" }).notNull().default(0),
+  protectionError: text("protection_error"),
   runnerId: text("runner_id").primaryKey(),
   bootId: text("boot_id").notNull(),
   poolId: text("pool_id").notNull().references(() => runnerPools.id),

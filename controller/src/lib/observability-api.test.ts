@@ -170,3 +170,10 @@ describe("privacy-safe runtime observability", () => {
     expect(findings.collection_status).toBe("not_collected");
   });
 });
+
+it("preserves the mode and real detector result separately from allowed traffic", () => {
+  const monitor = runtimeLogInteractions([{ ...event, decision: "allow", metadata: { protectionMode: "monitor", detectionDecision: "block", executionStatus: "complete" } }], { includeUncaptured: true })[0].entries[0];
+  expect(monitor).toMatchObject({ outcome: "allow", protection_mode: "monitor", detection_decision: "block", detection_error: null });
+  const bypass = runtimeLogInteractions([{ ...event, decision: "allow", metadata: { protectionMode: "bypass", executionStatus: "bypassed" } }], { includeUncaptured: true })[0].entries[0];
+  expect(bypass).toMatchObject({ outcome: "allow", protection_mode: "bypass", findings: [], detection_decision: null });
+});

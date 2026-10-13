@@ -19,6 +19,10 @@ const config = loadConfig({
   BETTER_AUTH_SECRET: "fixture-auth-secret-at-least-32-characters",
 });
 const service = {
+  protectionModes: {
+    async desiredState() { return { generation: 1, modes: { [input.artifact.guardrailId]: "bypass" } }; },
+    async recordResult(result) { if (!result.accepted) throw new Error(result.reason); },
+  },
   async registerRunner() { return 1; },
   async disconnectRunner() {},
   async desiredGeneration() { return 1; },

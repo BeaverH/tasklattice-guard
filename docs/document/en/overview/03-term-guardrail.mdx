@@ -248,16 +248,24 @@ A Guardrail is a stable identity with an editable draft and at most **10 immutab
 
 <a id="state-guardrail-readiness" />
 
-### What Ready means
+### Protection state and runtime mode
 
-**Ready means at least one immutable version is Released in this environment and still has a matching Passed report in this system.** Controller matches the Guardrail ID, version, Artifact content digest and frozen test-suite digest. Evidence for another version or another environment does not qualify.
+The UI shows **Not ready, Enforce, Monitor, or Bypass**. Enforce, Monitor and Bypass all require at least one retained Released version with matching local Passed evidence. Controller checks the Guardrail ID, version, Artifact digest and frozen test-suite digest. A tested but unpublished draft or a Pending imported version remains Not ready.
 
 <StateMachineDiagram kind="guardrail-readiness" locale="en" />
 
-- **Ready / ready:** at least one version qualifies. Other versions may be Pending, other reports may have failed, and the working draft may contain untested changes.
-- **Not ready / not_ready:** no version qualifies. Examples include a new draft, a passed draft with no publication, imported versions awaiting Release, or removal of the last usable version or its final matching Passed report.
-- Ready does not mean every version is released, the current draft passed, Runners are healthy, or requests use it. The most recent report alone does not determine readiness.
-- A version that passed but has not been explicitly Released is still Pending and does not make the resource Ready.
+| State | Online behavior |
+| --- | --- |
+| Not ready | Publish or Release a tested version before changing modes. |
+| Enforce | Detect and apply published policy actions. This is the default. |
+| Monitor | Detect and record findings, including errors and timeouts, but always allow original content. |
+| Bypass | Skip detection and allow original content; logs explicitly identify the bypass and do not fabricate passed checks. |
+
+An administrator opens **Actions → Change mode** on any Guardrail detail tab. Its submenu lists Enforce, Monitor and Bypass, marks the current applied mode with a bold asterisk (`*`) before its name, and labels the requested mode while a different mode is being applied. Selecting a different mode opens the right-hand drawer with that mode preselected; review the behavior, optionally add a reason, then apply it. Selecting or canceling alone does not change the running mode. To recover from Bypass, select Enforce or Monitor through the same submenu. The main badge retains the last fully applied mode while the panel shows the requested mode, Runner confirmations, and pending, offline, unsupported or rejected replicas. The Runtime tab only displays the mode and application progress. Use **Actions → Change mode → Retry rollout** after fixing the reported problem. Older Runners require an upgrade to support modes.
+
+The mode belongs to the Guardrail, covering every online version and Endpoint reference. It takes effect on new request/output checks; an open output stream keeps its starting mode. Monitor forwards stream chunks immediately and detects the complete response after the stream ends. Bypass acquires no detector. Detection failures in Monitor are recorded while allowing traffic; authentication, Endpoint state, routing and transport limits still apply.
+
+Draft tests, version tests and explicit Playground evaluation always execute real detection. Publishing a version, editing a draft, a failed retest or changing Router targets preserves the mode and immutable content. Removing the last released version or its final passing evidence, deleting the resource or restoring it resets the mode to Enforce. Modes and audit history are local operating data and are not exported or imported. Readiness does not imply healthy Runners or actual traffic.
 
 <a id="guardrail-registry-columns" />
 
@@ -266,7 +274,7 @@ A Guardrail is a stable identity with an editable draft and at most **10 immutab
 | Column | Meaning and navigation |
 | --- | --- |
 | Guardrail | Name and stable ID; opens the detail page. |
-| Readiness | Ready / Not ready, derived from retained released versions and local passing evidence. The heading explains the definition. |
+| Protection | Not ready / Enforce / Monitor / Bypass, with Runner application progress shown separately. |
 | Versions | `2/10` means two retained versions out of ten available slots, with separate Released and Pending counts. Opens the version list. Missing evidence in historical data is shown separately and never counted as Ready. |
 | Traffic versions | Exact versions pinned by published Routers with bound Endpoints, plus the runtime baseline. Each Router shows its own Active, Distributing or Failed rollout status and links to its detail page. Version links open that exact version. Unpublished drafts, disabled Routes, zero-weight Targets and Routers without Endpoints are excluded. |
 | Updated | The Guardrail resource update time, not the latest test, request or Router update. |
@@ -285,7 +293,7 @@ The diagram uses stored lifecycle values. The resource field `draft / active / d
 
 | Scope | States | What determines them |
 | --- | --- | --- |
-| Guardrail readiness | Ready / Not ready | At least one retained Released version with matching local Passed evidence. |
+| Guardrail UI state | Not ready / Enforce / Monitor / Bypass | Release evidence determines availability; the selected operating mode determines online behavior. |
 | Resource lifecycle | `draft / active / disabled` | Publication, Release, deletion and restoration operations; not a live evidence check. |
 | Working draft | Untested / Testing / Test failed / Tested / Published | Unpublished changes and the latest draft report for the current revision. A version retest does not test the working draft. |
 | Immutable Version | Pending / Released (`pending / ready`) | Local publication or explicit Release, and later evidence deletion or resource deletion. |
@@ -295,8 +303,8 @@ The diagram uses stored lifecycle values. The resource field `draft / active / d
 | --- | --- | --- |
 | Create in UI | Editable draft, no immutable version. | Not ready; no automatic routing. |
 | Test draft | Report binds the draft revision and executed candidate content. | In the normal user workflow, passing permits publication but does not itself create a version. |
-| Publish draft | Reuses the tested candidate and freezes Policies, Artifact and cases under its timestamp version. A new version starts Released without a separate Release step. | Ready with retained evidence; Routers stay pinned. The first Default Guardrail publication fills an empty runtime baseline; later baseline switches are explicit. |
-| Edit draft | Configuration, runtime profile and Test Case changes require testing the new revision. Renaming the Guardrail or changing its log level does not invalidate draft tests. Existing versions stay unchanged. | Ready remains while a qualifying version exists. Earlier version content is unaffected. |
+| Publish draft | Reuses the tested candidate and freezes Policies, Artifact and cases under its timestamp version. A new version starts Released without a separate Release step. | Defaults to Enforce on first release; later releases preserve the mode. Routers stay pinned. The first Default Guardrail publication fills an empty runtime baseline; later baseline switches are explicit. |
+| Edit draft | Configuration, runtime profile and Test Case changes require testing the new revision. Renaming the Guardrail or changing its log level does not invalidate draft tests. Existing versions stay unchanged. | The current protection mode remains while a qualifying version exists. Earlier version content is unaffected. |
 | Import | Verify signatures and static content, review, then confirm writes. Newly imported versions are Pending. First import seeds an editable draft; incremental imports do not overwrite it. | Reports and source release status do not travel. Test and Release here. Adding Pending versions does not invalidate existing qualifying releases. |
 | Retest version | Execute the signed Artifact and frozen cases unchanged. | Generates local evidence. Failure alone does not revoke an existing release. |
 | Change Router | Pin an exact version through the change approval and rollout workflow. | Does not change version content, test evidence or resource readiness. Check Router, Endpoint and Runtime logs for delivery. |
@@ -308,7 +316,7 @@ The diagram uses stored lifecycle values. The resource field `draft / active / d
 
 <StateMachineDiagram kind="guardrail-version" locale="en" />
 
-The diagram uses the two persisted states: `pending` and `ready`. The UI calls version `ready` **Released**, while resource `ready` is **Ready**. Publishing a tested draft creates a new Released version directly; importing a new version creates Pending. System initialization can also test and publish the built-in Default Guardrail automatically. Testing, test failed, ready to release and retest failed are additional indications, not extra version states.
+The diagram uses the two persisted states: `pending` and `ready`. The UI calls version `ready` **Released**, while a ready resource displays **Enforce, Monitor or Bypass**. Publishing a tested draft creates a new Released version directly; importing a new version creates Pending. System initialization can also test and publish the built-in Default Guardrail automatically. Testing, test failed, ready to release and retest failed are additional indications, not extra version states.
 
 <a id="guardrail-build-states" />
 

@@ -79,6 +79,8 @@ class ScanFailure(Exception):
 
 def validate_scan_decision(decision: ProtectionDecision) -> None:
     """Never turn an unevaluated or failed check into a successful safe result."""
+    if decision.protection_mode in {"monitor", "bypass"}:
+        return
     assessments = decision.assessments
     matched = any(a.status == "intervene" for a in assessments)
     short_circuit = decision.decision == "block" and matched
@@ -101,7 +103,8 @@ def scan_response(payload: ScanRequest, decision: ProtectionDecision, scan_id: s
                   started: datetime, completed: datetime) -> ScanResponse:
     validate_scan_decision(decision)
     # Assessments reflect terminal evaluations; raw findings may include superseded retries.
-    matched = decision.decision in {"block", "transform"} or any(a.status == "intervene" for a in decision.assessments)
+    enforced = decision.protection_mode == "enforce"
+    matched = enforced and (decision.decision in {"block", "transform"} or any(a.status == "intervene" for a in decision.assessments))
     outcome = "cleared"
     if matched:
         outcome = "flagged" if payload.flagOnly else {"block": "blocked", "transform": "redacted"}.get(decision.decision, "flagged")
@@ -116,7 +119,7 @@ def scan_response(payload: ScanRequest, decision: ProtectionDecision, scan_id: s
         outcome="failed" if matched else "passed", data={"type": "custom"},
         startedDate=started, completedDate=completed,
         scanDirection=payload.scanDirection, scannerId=scanner_id,
-    )] if payload.verbose else []
+    )] if payload.verbose and enforced else []
     return ScanResponse(id=UUID(scan_id), redactedInput=text, result=ScanResult(
         outcome=outcome,
         response=text if payload.scanDirection == "response" and decision.decision != "block" else None,

@@ -40,6 +40,7 @@ def test_both_controller_transports_use_finite_message_limits(monkeypatch, tmp_p
 
 class Store:
     generation = 0
+    protection_generation = 0
     providers = None
     fail = False
 
@@ -56,6 +57,9 @@ class Store:
 
 
 class Metrics:
+    def observe_control_message(self, *_args):
+        pass
+
     def set_control_state(self, **_kwargs):
         return None
 
@@ -249,3 +253,30 @@ async def test_validation_replay_cache_evicts_by_bytes():
     assert client._validation_result_bytes <= client._validation_result_budget
     await client._validate(protocol.ValidationRequest(run_id="run-2"))
     assert client._validator.run.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_modes_overtake_model_preparation_and_report_nacks(tmp_path):
+    import asyncio
+    from runner.artifact_store import ArtifactStore
+    from tests.test_runner_artifact_store import FIXTURE
+    store = ArtifactStore(FIXTURE / "public-key.pem", tmp_path / "state")
+    client = RunnerControlClient(_settings(), store, Metrics())
+    started, finish = asyncio.Event(), asyncio.Event()
+    async def prepare(_):
+        started.set()
+        await finish.wait()
+    client._apply_desired_state = prepare
+    async def incoming():
+        yield protocol.ControllerMessage(desired_state=protocol.DesiredState(generation=1))
+        await started.wait()
+        yield protocol.ControllerMessage(protection_state=protocol.GuardrailProtectionState(generation=2, modes={"g": "bypass"}))
+        result = await client._outgoing.get()
+        assert result.protection_result.accepted and result.protection_result.generation == 2
+        assert store.protection_mode("g") == "bypass" and not finish.is_set()
+        yield protocol.ControllerMessage(protection_state=protocol.GuardrailProtectionState(generation=3, modes={"g": "unknown"}))
+        result = await client._outgoing.get()
+        assert not result.protection_result.accepted and result.protection_result.reason
+        assert store.protection_mode("g") == "bypass"
+        finish.set()
+    await asyncio.wait_for(client._receive_messages(incoming()), 3)

@@ -94,3 +94,23 @@ function appWith(createGuardrail: ReturnType<typeof vi.fn>) {
     metrics: {} as ControllerMetrics,
   });
 }
+
+it("authorizes and validates mode changes before the independent Runner dispatch", async () => {
+  const update = vi.fn().mockResolvedValue({ mode: "monitor", appliedMode: "enforce", generation: 5 });
+  const distributeProtectionModes = vi.fn();
+  const auth = { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "admin-1", role: "viewer" } }) }, handler: vi.fn() };
+  const app = createHttpApp({ config, auth: auth as unknown as ControllerAuth,
+    service: { protectionModes: { update } } as unknown as ControlPlaneService,
+    runnerControl: { distributeProtectionModes } as unknown as RunnerControlServer, metrics: {} as ControllerMetrics });
+  const request = (body: unknown) => app.request("/api/v1/guardrails/guard-1/protection-mode", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  expect((await request({ mode: "bypass", expectedGeneration: 4 })).status).toBe(403);
+  expect(update).not.toHaveBeenCalled();
+  auth.api.getSession.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+  for (const body of [{ mode: "ready", expectedGeneration: 4 }, { mode: "bypass" }, { mode: "bypass", expectedGeneration: -1 }, { mode: "monitor", expectedGeneration: 4, reason: "x".repeat(501) }]) {
+    expect((await request(body)).status).toBe(400);
+  }
+  expect(update).not.toHaveBeenCalled();
+  expect((await request({ mode: "monitor", expectedGeneration: 4, reason: " observe " })).status).toBe(202);
+  expect(update).toHaveBeenCalledWith({ id: "guard-1", actorId: "admin-1", mode: "monitor", expectedGeneration: 4, reason: "observe" });
+  expect(distributeProtectionModes).toHaveBeenCalledOnce();
+});

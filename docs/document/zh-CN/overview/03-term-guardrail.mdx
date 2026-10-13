@@ -248,16 +248,24 @@ Guardrail 是稳定的资源身份，包含一个可编辑草稿和最多 **10 �
 
 <a id="state-guardrail-readiness" />
 
-### Ready 到底表示什么
+### 防护状态与运行模式
 
-**Ready（就绪）表示这个 Guardrail 至少有一个已在本环境发布的 Immutable Version，且系统内仍有一份针对该版本内容和冻结测试集的 Passed 报告。** Controller 比对 Guardrail ID、版本号、Artifact 内容摘要及测试集摘要；其他版本或其他环境的 Passed 报告不能替代。
+UI 仅显示 **Not ready、Enforce、Monitor、Bypass**。后三种状态都要求至少保留一个已在本环境发布且有匹配 Passed 依据的版本。Controller 核对 Guardrail ID、版本号、Artifact 摘要和冻结测试集摘要。仅通过测试但未发布的草稿、尚未 Release 的导入版本仍为 Not ready。
 
 <StateMachineDiagram kind="guardrail-readiness" locale="zh-CN" />
 
-- **Ready / ready：** 至少一个版本符合上述条件。其他版本可以 Pending，其他报告可以 Failed，当前草稿也可以有未测试的修改。
-- **Not ready / not_ready：** 没有符合条件的版本。例如刚创建、仅有已通过测试的草稿、只有尚未 Release 的导入版本，或最后一个可用版本/最后一份有效 Passed 报告已被删除。
-- Ready 不表示所有版本都已发布、当前草稿已通过、Runner 健康或业务请求已经使用它。它也不由“最新一份报告”的结果决定。
-- 仅测试通过但尚未 Release 的不可变版本仍是 Pending；先显式 Release，才成为就绪依据。
+| 状态 | 线上行为 |
+| --- | --- |
+| Not ready（未就绪） | 先发布或 Release 已通过测试的版本，才能修改模式。 |
+| Enforce（正常防护） | 执行检测并应用已发布策略的动作，默认使用此模式。 |
+| Monitor（仅观察） | 执行检测、保留命中及错误/超时记录，始终原文放行。 |
+| Bypass（应急放行） | 完全跳过检测、原文放行；日志明确标记跳过，不伪造检测通过的证据。 |
+
+管理员在 Guardrail 任意详情页签打开 **操作（Actions）→ 切换运行模式**。二级菜单列出 Enforce、Monitor、Bypass，在当前已生效模式名前用加粗星号（`*`）标记；正在切换到其他模式时，另行标记目标模式。选择其他模式后，右侧抽屉会预选该模式，确认行为、选填原因后应用；仅选择或取消不会改变运行模式。从 Bypass 恢复时，也通过同一菜单选择 Enforce 或 Monitor。Runner 全部确认前，主徽标保留最后完整生效的模式，同时显示目标模式、确认进度，以及等待、离线、不支持或应用失败的 Runner。运行页只展示当前模式和生效进度，排查后可在 **操作 → 切换运行模式 → 重试下发** 中重试；旧 Runner 需要升级后才能支持模式切换。
+
+模式属于 Guardrail，覆盖所有线上版本与 Endpoint 引用。新进入的请求/输出检测读取当前模式；已建立的输出流使用建立时的模式。Monitor 立即传递原始流片段，结束后检测完整回复；Bypass 不获取检测器。Monitor 的检测异常仅记录、不阻断；身份验证、Endpoint 状态、路由和传输限制仍有效。
+
+草稿测试、版本测试和显式 Playground 评估始终执行真实检测。发布新版、编辑草稿、复测失败或修改 Router 引用不改变模式，也不改变不可变版本内容。删除最后一个已发布版本或其最后一份通过依据、删除资源、恢复资源时，模式重置为 Enforce。模式和审计属于本环境运行数据，不随包导入导出。满足就绪条件并不保证 Runner 健康或已经接入流量。
 
 <a id="guardrail-registry-columns" />
 
@@ -266,7 +274,7 @@ Guardrail 是稳定的资源身份，包含一个可编辑草稿和最多 **10 �
 | 列 | 含义与入口 |
 | --- | --- |
 | Guardrail | 资源名称与稳定 ID；点击进入详情。 |
-| 就绪状态 | Ready / Not ready，按仍保留的已发布版本和本环境测试依据计算。列标题可查看定义。 |
+| 防护状态 | Not ready / Enforce / Monitor / Bypass，另行显示 Runner 生效进度。 |
 | 不可变版本 | `2/10` 表示当前保留 2 个版本，最多 10 个；同时分别列出已发布和待发布数量。点击打开版本列表。历史数据若缺少依据，会单独提示，不能计入 Ready。 |
 | 流量引用版本 | 列出已发布且绑定 Endpoint 的 Router 所固定的确切版本，以及运行时基线版本。每个 Router 单独显示 Active、Distributing 或 Failed，点击可查看下发状态；点击版本号可检查该版本。未发布草稿、停用 Route、零权重 Target 和未绑定 Endpoint 的 Router 不计入。 |
 | 更新时间 | Guardrail 资源的更新时间，不是最近测试、最近请求或 Router 更新时间。 |
@@ -281,11 +289,11 @@ Guardrail 是稳定的资源身份，包含一个可编辑草稿和最多 **10 �
 
 <StateMachineDiagram kind="guardrail-lifecycle" locale="zh-CN" />
 
-图中使用数据库的生命周期值。资源字段 `draft / active / disabled` **不直接等于界面的 Ready**。发布草稿或 Release 待发布版本后记录 active；删除或退回最后一个存储状态为已发布的版本后记录 draft；软删除记录 disabled 和 deletedAt。导入资源可以通过原归属来源的包，经确认后恢复同一 ID 为 draft。这不是普通启停开关。
+图中使用数据库的生命周期值。资源字段 `draft / active / disabled` **不直接等于界面的防护状态**。发布草稿或 Release 待发布版本后记录 active；删除或退回最后一个存储状态为已发布的版本后记录 draft；软删除记录 disabled 和 deletedAt。导入资源可以通过原归属来源的包，经确认后恢复同一 ID 为 draft。这不是普通启停开关。
 
 | 层级 | 状态 | 判断依据 |
 | --- | --- | --- |
-| Guardrail 就绪性 | Ready / Not ready | 至少一个保留的 Released 版本，且仍有匹配的本环境 Passed 报告。 |
+| Guardrail UI 状态 | Not ready / Enforce / Monitor / Bypass | 发布依据决定可用性，运行模式决定线上行为。 |
 | 资源生命周期 | `draft / active / disabled` | 发布、Release、删除与恢复操作，不是实时测试依据检查。 |
 | 工作草稿 | 未测试 / 测试中 / 测试失败 / 已测试 / 已发布 | 是否有未发布修改，以及当前修订的最新草稿报告；版本复测不等于测试工作草稿。 |
 | Immutable Version | Pending / Released（`pending / ready`） | 本地发布或显式 Release，以及后续测试依据删除或资源删除。 |
@@ -295,8 +303,8 @@ Guardrail 是稳定的资源身份，包含一个可编辑草稿和最多 **10 �
 | --- | --- | --- |
 | UI 创建 | 建立可编辑草稿，尚无版本。 | Not ready；没有自动接入流量。 |
 | 测试草稿 | 报告绑定当前草稿修订及实际执行的候选内容。 | 常规用户流程中，Passed 后允许发布；测试本身不创建版本。 |
-| 发布草稿 | 复用通过测试的候选内容及其时间戳版本号，冻结 Policy、Artifact 和用例。新版本直接为 Released，无需再点 Release。 | 保留通过依据即 Ready；Router 不变。Default Guardrail 首次发布且基线为空时会自动填充基线，此后切换须显式操作。 |
-| 修改草稿 | 配置、运行时 Profile、测试用例变化后须测试新修订；仅重命名或修改日志等级不使草稿测试失效。已有版本内容不变。 | 只要仍有合格版本，Guardrail 保持 Ready；旧版本内容不变。 |
+| 发布草稿 | 复用通过测试的候选内容及其时间戳版本号，冻结 Policy、Artifact 和用例。新版本直接为 Released，无需再点 Release。 | 首次发布默认 Enforce，后续发布保留模式；Router 不变。Default Guardrail 首次发布且基线为空时会自动填充基线，此后切换须显式操作。 |
+| 修改草稿 | 配置、运行时 Profile、测试用例变化后须测试新修订；仅重命名或修改日志等级不使草稿测试失效。已有版本内容不变。 | 只要仍有合格版本，Guardrail 保持当前防护模式；旧版本内容不变。 |
 | 导入 | 检查签名和静态内容，review 后确认写入。新导入版本为 Pending；首次导入建立可编辑草稿，后续追加不覆盖本地草稿。 | 不携带源环境报告/发布状态；在目标环境测试、Release。已有合格版本时，新增 Pending 不会让整个 Guardrail 失去 Ready。 |
 | 版本复测 | 对固定 Artifact 原样运行冻结用例，不改版本内容。 | 报告属于本环境；复测失败不撤销已有发布，但应检查原因。 |
 | Router 变更 | 固定具体版本，按变更审批和下发流程执行。 | 不改变版本内容、测试依据或资源 Ready；流量看 Router、Endpoint 和运行日志。 |
@@ -308,7 +316,7 @@ Guardrail 是稳定的资源身份，包含一个可编辑草稿和最多 **10 �
 
 <StateMachineDiagram kind="guardrail-version" locale="zh-CN" />
 
-图中使用两个持久化版本状态：`pending` 与 `ready`；界面中的版本 `ready` 显示为 **Released（已发布）**，资源的 `ready` 显示为 **Ready（就绪）**。发布已测试草稿直接创建 Released，新导入版本则为 Pending。系统初始化还可以自动测试并发布内置 Default Guardrail。测试中、测试失败、可发布、复测失败是附加提示，不是额外版本状态。
+图中使用两个持久化版本状态：`pending` 与 `ready`；界面中的版本 `ready` 显示为 **Released（已发布）**，满足就绪条件的资源显示为 **Enforce、Monitor 或 Bypass**。发布已测试草稿直接创建 Released，新导入版本则为 Pending。系统初始化还可以自动测试并发布内置 Default Guardrail。测试中、测试失败、可发布、复测失败是附加提示，不是额外版本状态。
 
 <a id="guardrail-build-states" />
 

@@ -38,6 +38,11 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 - 输入扫描不会调用业务模型。
 - 输出扫描不会自动获取模型回答。
 
+<a id="scan-protection-modes" />
+## Guardrail 防护模式
+
+Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用下述结果和完整性校验；Monitor 执行检测，但即使命中或检测失败也返回 `cleared` 并保留原文；Bypass 不执行检测，直接返回 `cleared` 和原文。后两种模式即使 `verbose=true`，`scannerResults` 也为空；运行日志记录模式及 Monitor 的真实检测依据。此时 `cleared` 表示允许继续，不代表内容已通过安全检测。身份校验、UUID 匹配、Endpoint 状态、请求校验及路由仍然有效，客户端不能通过请求 JSON 覆盖防护模式。
+
 <a id="scan-request" />
 ## 请求 JSON 与有效字段
 

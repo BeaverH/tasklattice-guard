@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 
 from .content_views import content_view, text_blocks
 from .context import CallContext, CallContextStore
-from .streaming import OutputStreamEvaluationError
+from .streaming import OutputStreamContract, OutputStreamEvaluationError, OutputStreamResult
+from .protection_modes import allowed_decision
 from .contracts import (
     AppliedIntervention,
     ContentBlockResult,
@@ -99,7 +100,7 @@ class GuardrailRuntimeService:
             on_resolved(resolution)
         await self.publish_assignment(resolution, request.call_id)
         try:
-            decision = await self._evaluate_resolved(request, resolution, stored)
+            decision = await self._evaluate_online(request, resolution, stored)
         except Exception as error:
             await self.complete_call(resolution, request.call_id, "timeout" if isinstance(error, TimeoutError) else "error", type(error).__name__)
             raise
@@ -112,6 +113,10 @@ class GuardrailRuntimeService:
     async def stream_output(self, request, source, *, ready, emit, observe, allow_new_output=False):
         """Pin once for the lifetime of one connection; NeMo owns incremental checks."""
         resolution, stored = self._resolve_call(request, allow_new_output=allow_new_output)
+        protection_mode = self._protection_mode(resolution)
+        if protection_mode != "enforce":
+            return await self._stream_permissive(request, source, resolution, stored, protection_mode,
+                ready=ready, emit=emit, observe=observe)
         retain = getattr(self._resolver, "retain_release", None)
         if retain is not None:
             try:
@@ -180,7 +185,8 @@ class GuardrailRuntimeService:
                     retain(resolution.effective_release_id)
                 await self.publish_assignment(resolution, request.context.call_id)
                 stored = CallContext(messages=(), content_blocks=(), resolution=resolution, expires_at=0)
-                decision = await self._evaluate_resolved(request, resolution, stored)
+                decision = await self._evaluate_online(request, resolution, stored,
+                    timeout_seconds=timeout_seconds * 0.9 if timeout_seconds else 25)
                 if validate_decision is not None:
                     validate_decision(decision)
                 outcome = "intervene" if decision.decision == "transform" else decision.decision
@@ -380,6 +386,63 @@ class GuardrailRuntimeService:
             mode=request.mode,
             content_results=ordered_results,
         )
+
+    def _protection_mode(self, resolution):
+        # Read at each new online operation, including output on a pinned call.
+        # Version tests and direct Playground evaluation never use this overlay.
+        return getattr(self._resolver, "protection_mode", lambda _: "enforce")(resolution.plan.guardrail_id)
+
+    async def _evaluate_online(self, request, resolution, stored, *, timeout_seconds=25, mode=None):
+        mode = mode or self._protection_mode(resolution)
+        if mode == "enforce":
+            return await self._evaluate_resolved(request, resolution, stored)
+        if mode == "bypass":
+            return allowed_decision(request, resolution, mode)
+        if mode != "monitor":
+            raise ValueError("Unsupported protection mode.")
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                detected = await self._evaluate_resolved(replace(request, mode="detect"), resolution, stored)
+            return allowed_decision(request, resolution, mode, detected=detected)
+        except Exception as error:
+            # Detector failure is evidence, not permission to stop monitored traffic.
+            # Cancellation, routing, authentication and transport failures are not swallowed.
+            return allowed_decision(request, resolution, mode, error=type(error).__name__)
+
+    async def _stream_permissive(self, request, source, resolution, stored, mode, *, ready, emit, observe):
+        await self.publish_assignment(resolution, request.call_id)
+        iterator = source.__aiter__()
+        parts, size, frames = [], 0, 0
+        outcome = "error"
+        try:
+            await ready(OutputStreamContract(resolution.plan.output_delivery, "interruptible",
+                "Original output is delivered without enforcement."), resolution)
+            async for text in iterator:
+                frames += 1
+                if not isinstance(text, str):
+                    raise OutputStreamEvaluationError("Output must be text.")
+                size += len(text)
+                if size > 1_000_000 or frames > 100_000:
+                    raise OutputStreamEvaluationError("Output exceeded the stream limits.")
+                if mode == "monitor":
+                    parts.append(text)
+                await emit(text)
+            # One complete-response observation preserves cross-chunk rules and context.
+            # No detector is acquired at all in Bypass, including cold/broken runtimes.
+            candidate = replace(request, texts=("".join(parts),),
+                content_blocks=text_blocks("output", ("".join(parts),), "model_output"))
+            decision = await self._evaluate_online(candidate, resolution, stored, mode=mode)
+            await observe(replace(decision, output_delivery="interruptible"))
+            outcome = "allow"
+            return OutputStreamResult("completed", size, 0 if mode == "bypass" else 1)
+        finally:
+            try:
+                close = getattr(iterator, "aclose", None)
+                if close is not None:
+                    async with asyncio.timeout(2):
+                        await close()
+            finally:
+                await self.complete_call(resolution, request.call_id, outcome)
 
 
 def _trusted_instruction(

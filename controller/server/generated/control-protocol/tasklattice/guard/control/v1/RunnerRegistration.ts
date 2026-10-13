@@ -36,6 +36,7 @@ export interface RunnerRegistration {
    * Last atomically activated desired-state generation, or zero before first sync.
    */
   'appliedGeneration'?: (number | string | Long);
+  'appliedProtectionGeneration'?: (number | string | Long);
 }
 
 /**
@@ -72,4 +73,5 @@ export interface RunnerRegistration__Output {
    * Last atomically activated desired-state generation, or zero before first sync.
    */
   'appliedGeneration': (string);
+  'appliedProtectionGeneration': (string);
 }

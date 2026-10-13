@@ -435,7 +435,8 @@ export type Guardrail = {
   safety_level: SafetyLevel;
   output_delivery: OutputDelivery;
   updated_at: string;
-  status: GuardrailReadinessState;
+  status: import("../../shared/protection-mode").GuardrailProtectionStatus;
+  protection?: import("../../shared/protection-mode").ProtectionModeSettings;
   version_summary?: { total: number; released: number; pending: number; missingEvidence: number };
   traffic_versions?: Array<{ version: string; baseline: boolean; routers: Array<{ id: string; name: string; status: string }> }>;
   latest_validation_run: ValidationRun | null;
@@ -894,6 +895,9 @@ export type RuntimeHttpRequest = {
 };
 
 export type RuntimeLogEntry = {
+  protection_mode?: "enforce" | "monitor" | "bypass";
+  detection_decision?: string | null;
+  detection_error?: string | null;
   execution_status?: "error" | "complete" | "unknown";
   call_completion?: { inferred: boolean; reason: string | null; completed_at: string | null; decision_id: string | null; route_id: string | null; target_id: string | null; router_revision: number | null };
   error_details?: Array<{ span_id: string; name: string; error_type: string | null; provider: string | null; model: string | null; policy: string | null; timed_out: boolean; timeout_ms: number | null }>;

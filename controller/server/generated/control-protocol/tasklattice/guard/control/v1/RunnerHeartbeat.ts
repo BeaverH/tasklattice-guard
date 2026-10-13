@@ -18,6 +18,7 @@ export interface RunnerHeartbeat {
    */
   'appliedGeneration'?: (number | string | Long);
   'load'?: (_tasklattice_guard_control_v1_RunnerLoad | null);
+  'appliedProtectionGeneration'?: (number | string | Long);
 }
 
 /**
@@ -35,4 +36,5 @@ export interface RunnerHeartbeat__Output {
    */
   'appliedGeneration': (string);
   'load': (_tasklattice_guard_control_v1_RunnerLoad__Output | null);
+  'appliedProtectionGeneration': (string);
 }

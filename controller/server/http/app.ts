@@ -1,3 +1,4 @@
+import { protectionModes } from "../../shared/protection-mode.js";
 import { formalValidationSchema } from "../../shared/formal-validation.js";
 import { testingReportsQuery } from "../services/testing-reports.js";
 import { runtimeLogOutcomes } from "../../shared/runtime-outcome.js";
@@ -764,6 +765,16 @@ export function createHttpApp(input: {
   app.delete("/api/v1/guardrails/:id/versions/:version", authenticated, administrator, async context => {
     await input.service.deleteGuardrailVersion({ guardrailId: context.req.param("id"), version: guardrailVersionInput.parse(context.req.param("version")), actorId: context.get("actor").id });
     return context.body(null, 204);
+  });
+  app.get("/api/v1/guardrails/:id/protection-mode", authenticated, async context => {
+    return context.json(await input.service.protectionModes.get(context.req.param("id")));
+  });
+  app.patch("/api/v1/guardrails/:id/protection-mode", authenticated, administrator, async context => {
+    const body = z.object({ mode: z.enum(protectionModes), expectedGeneration: z.number().int().nonnegative(),
+      reason: z.string().trim().max(500).default("") }).strict().parse(await context.req.json());
+    const result = await input.service.protectionModes.update({ ...body, id: context.req.param("id"), actorId: context.get("actor").id });
+    await input.runnerControl.distributeProtectionModes();
+    return context.json(result, 202);
   });
   app.get("/api/v1/guardrails/:id/logging", authenticated, async (context) => {
     return context.json(await input.service.guardrailLogging(context.req.param("id")));

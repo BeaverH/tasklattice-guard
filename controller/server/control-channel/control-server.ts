@@ -1,3 +1,4 @@
+import { PROTECTION_MODE_CAPABILITY } from "../../shared/protection-mode.js";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
@@ -53,6 +54,9 @@ type Connection = {
   appliedGeneration: number;
   appliedModelRevisionId: string;
   lastReconcileGeneration: number;
+  protectionCapable: boolean;
+  appliedProtectionGeneration: number;
+  lastProtectionGeneration: number;
 };
 
 export class RunnerControlServer {
@@ -182,6 +186,20 @@ export class RunnerControlServer {
     }
   }
 
+  async distributeProtectionModes(): Promise<void> {
+    await Promise.allSettled([...this.connections.values()].map(connection => this.reconcileProtectionModes(connection)));
+  }
+
+  private async reconcileProtectionModes(connection: Connection): Promise<void> {
+    if (!connection.protectionCapable || !this.service.protectionModes) return;
+    const protection = await this.service.protectionModes.desiredState();
+    if (this.connections.get(connection.runnerId) !== connection) return;
+    if (connection.lastProtectionGeneration < protection.generation) {
+      this.write(connection.stream, { protectionState: { generation: String(protection.generation), modes: protection.modes } });
+      connection.lastProtectionGeneration = protection.generation;
+    }
+  }
+
   async distributeDesiredState(poolId = "default", timeoutMs = 2_500): Promise<{
     desiredGeneration: number;
     distributionStatus: "ready" | "syncing";
@@ -284,6 +302,9 @@ export class RunnerControlServer {
         appliedGeneration: number(registration.appliedGeneration),
         appliedModelRevisionId: "",
         lastReconcileGeneration: -1,
+        protectionCapable: registration.labels?.[PROTECTION_MODE_CAPABILITY] === "1",
+        appliedProtectionGeneration: number(registration.appliedProtectionGeneration),
+        lastProtectionGeneration: -1,
       };
       const prior = this.connections.get(connection.runnerId);
       if (prior) this.releaseConnection(prior);
@@ -320,8 +341,22 @@ export class RunnerControlServer {
         throw error;
       }
       current.appliedGeneration = number(heartbeat.appliedGeneration);
+      if (current.protectionCapable) {
+        current.appliedProtectionGeneration = number(heartbeat.appliedProtectionGeneration);
+        await this.service.protectionModes?.recordResult({ runnerId: current.runnerId, bootId: current.bootId,
+          generation: current.appliedProtectionGeneration, accepted: true });
+      }
       const desired = await this.service.desiredGeneration();
-      if (number(heartbeat.appliedGeneration) !== desired) await this.reconcile(current);
+      if (number(heartbeat.appliedGeneration) !== desired || (current.protectionCapable && current.appliedProtectionGeneration !== desired)) await this.reconcile(current);
+    } else if (message.protectionResult) {
+      const result = message.protectionResult;
+      const generation = number(result.generation);
+      if (result.runnerId !== current.runnerId || !current.protectionCapable || generation > current.lastProtectionGeneration) {
+        throw new Error("Protection-mode result does not match the registered Runner and dispatched generation.");
+      }
+      await this.service.protectionModes.recordResult({ runnerId: current.runnerId, bootId: current.bootId,
+        generation, accepted: result.accepted, reason: result.reason });
+      if (result.accepted) current.appliedProtectionGeneration = Math.max(current.appliedProtectionGeneration, generation);
     } else if (message.validationProgress) {
       const progress = message.validationProgress;
       if (progress.runnerId !== current.runnerId || !current.compilerCapable || current.poolId !== "default") {
@@ -436,6 +471,9 @@ export class RunnerControlServer {
   private async reconcile(connection: Connection): Promise<void> {
     const started = performance.now();
     try {
+      // Send the operating overlay before materializing any model/Artifact state.
+      // Old Runners cannot ACK this message and remain visibly unsupported.
+      await this.reconcileProtectionModes(connection);
       const [desiredUnknown, modelConfiguration] = await Promise.all([
         this.service.desiredStateForPool(connection.poolId),
         this.models.activeConfiguration(true),
@@ -620,7 +658,7 @@ function normalizeLoad(load: RunnerHeartbeat__Output["load"]): RunnerLoad {
 
 function wireMessageType(message: ControllerBody): string {
   return [
-    "registrationAccepted", "desiredState", "compileRequest", "validationRequest", "drainRequest",
+    "registrationAccepted", "desiredState", "protectionState", "compileRequest", "validationRequest", "drainRequest",
   ].find((key) => key in message) ?? "unknown";
 }
 

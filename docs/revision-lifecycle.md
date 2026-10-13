@@ -19,7 +19,7 @@ The sole Router status derivation entry point is `controller/shared/router-lifec
 
 `activeRevision` is the revision the Controller currently wants active; it does not mean every Runner has applied it. The current revision in the revision list shows Active (green), Deploying (yellow), or Failed (red); other revisions show Previous (neutral badge). Previous indicates only a historical revision and does not imply it ever deployed successfully.
 
-Guardrail versions use `pending → ready` (Pending → Released). Release requires a local Passed report matching the Artifact and frozen test suite. Deleting its last matching proof returns the version to pending; another matching proof preserves release. Content stays immutable. Multiple versions can be referenced simultaneously, so there is no Guardrail-wide Active / Historical version pointer. Resource Ready requires at least one retained qualifying release; traffic references and Runner rollout are separate. See the [Guardrail lifecycle guide](document/en/overview/03-term-guardrail.mdx).
+Guardrail versions use `pending → ready` (Pending → Released). Release requires a local Passed report matching the Artifact and frozen test suite. Deleting its last matching proof returns the version to pending; another matching proof preserves release. Content stays immutable. Multiple versions can be referenced simultaneously, so there is no Guardrail-wide Active / Historical version pointer. The UI shows Not ready or Enforce / Monitor / Bypass. A mode requires at least one retained qualifying release; mode changes apply to all online versions without changing publication or tests. Runner confirmation is shown separately. See the [Guardrail lifecycle guide](document/en/overview/03-term-guardrail.mdx).
 
 ## Rollback
 

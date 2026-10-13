@@ -7,6 +7,7 @@ export const guardrailQueries = {
   list: () => queryOptions({
     queryKey: queryKeys.guardrails,
     queryFn: getGuardrails,
+    refetchInterval: 5000,
     select: (collection) => ({
       ...collection,
       items: [...collection.items].sort(

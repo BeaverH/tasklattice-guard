@@ -18,14 +18,19 @@ describe.skipIf(!url)("Scan defaults across divergent migration histories", () =
     const pool = new Pool({ connectionString: url, max: 1, options: `-c search_path=${namespace}` });
     try {
       await admin.query(`CREATE SCHEMA "${namespace}"`);
-      await pool.query(`CREATE TABLE endpoint (id text PRIMARY KEY${hasScanColumn ? ", scan_flag_only_default boolean NOT NULL DEFAULT true" : ""})`);
-      await pool.query("INSERT INTO endpoint(id) VALUES ('existing')");
-      if (hasScanColumn) await pool.query("UPDATE endpoint SET scan_flag_only_default=false");
-      // Simulate an installed main whose latest recorded migration is 0037.
-      // Drizzle skips 0036 by timestamp, even if that migration was never applied.
       const journal = JSON.parse(readFileSync(`${migrationsFolder}/meta/_journal.json`, "utf8")) as {
         entries: { tag: string; when: number }[];
       };
+      // Build the full installed schema so later migrations are exercised too.
+      // These installations missed the earlier Scan migration before 0037.
+      for (const entry of journal.entries) {
+        if (entry.tag > "0037_policy_resources" || entry.tag.startsWith("0036_")) continue;
+        await pool.query(readFileSync(`${migrationsFolder}/${entry.tag}.sql`, "utf8").replaceAll('"public".', `"${namespace}".`));
+      }
+      if (hasScanColumn) await pool.query("ALTER TABLE endpoint ADD COLUMN scan_flag_only_default boolean NOT NULL DEFAULT true");
+      await pool.query("INSERT INTO endpoint(id,name,adapter) VALUES ('existing','Existing','f5-scan')");
+      if (hasScanColumn) await pool.query("UPDATE endpoint SET scan_flag_only_default=false");
+      // Drizzle skips 0036 by timestamp even though it was never recorded.
       const policyMigration = journal.entries.find(entry => entry.tag === "0037_policy_resources")!;
       await pool.query("CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)");
       await pool.query("INSERT INTO __drizzle_migrations(hash,created_at) VALUES ('installed-main',$1)", [policyMigration.when]);
@@ -35,7 +40,7 @@ describe.skipIf(!url)("Scan defaults across divergent migration histories", () =
       await migrate(db, config);
       expect((await pool.query("SELECT scan_flag_only_default FROM endpoint WHERE id='existing'")).rows[0])
         .toEqual({ scan_flag_only_default: !hasScanColumn });
-      await pool.query("INSERT INTO endpoint(id) VALUES ('new')");
+      await pool.query("INSERT INTO endpoint(id,name,adapter) VALUES ('new','New','f5-scan')");
       expect((await pool.query("SELECT scan_flag_only_default FROM endpoint WHERE id='new'")).rows[0])
         .toEqual({ scan_flag_only_default: true });
 

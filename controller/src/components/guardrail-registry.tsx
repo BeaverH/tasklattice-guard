@@ -23,7 +23,7 @@ export function GuardrailRegistry({
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="resource-name-column">{t("guardrails.guardrail")}</TableHead>
-            <TableHead className="w-24"><ColumnHelp label={t("guardrails.registryReadiness")} help={t("guardrails.registryReadinessHelp")} /></TableHead>
+            <TableHead className="w-40"><ColumnHelp label={t("guardrails.registryReadiness")} help={t("guardrails.registryReadinessHelp")} /></TableHead>
             <TableHead className="w-36">{t("guardrails.registryVersions")}</TableHead>
             <TableHead className="w-72"><ColumnHelp label={t("guardrails.registryTraffic")} help={t("guardrails.registryTrafficHelp")} /></TableHead>
             <TableHead className="w-40">{t("guardrails.updated")}</TableHead>
@@ -50,7 +50,9 @@ export function GuardrailRegistry({
                 </Link>
                 <code className="resource-secondary" title={guardrail.id}>{guardrail.id}</code>
               </TableCell>
-              <TableCell><StateBadge state={guardrail.status} /></TableCell>
+              <TableCell><StateBadge state={guardrail.status} />
+                {guardrail.status !== "not_ready" && guardrail.protection && guardrail.protection.status !== "applied" ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{t(`protectionMode.states.${guardrail.protection.status}`)} · {t("protectionMode.switching", { mode: t(`states.${guardrail.protection.mode}`) })} · {t("protectionMode.progress", guardrail.protection)}</p> : null}
+              </TableCell>
               <TableCell>
                 <Link to="/guardrails/$guardrailId" params={{ guardrailId: guardrail.id }} search={{ tab: "immutable" }}
                   onClick={event => event.stopPropagation()} className="inline-flex min-h-11 items-center font-mono text-sm text-primary hover:underline"

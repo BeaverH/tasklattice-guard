@@ -54,7 +54,7 @@ const guardrail = {
   safety_level: "balanced",
   output_delivery: "window_buffered",
   updated_at: "2026-09-04T08:38:36Z",
-  status: "ready",
+  status: "enforce",
   latest_validation_run: null,
   router_count: 1,
   test_case_count: 140,
@@ -90,7 +90,7 @@ describe("GuardrailRegistry", () => {
     const link = screen.getByRole("link", { name: "Open Default Guardrail" });
     expect(link.getAttribute("href")).toBe("/guardrails/guardrail-default");
 
-    fireEvent.click(screen.getByText("ready"));
+    fireEvent.click(screen.getByText("enforce"));
     expect(onOpen).toHaveBeenCalledWith("guardrail-default");
   });
 

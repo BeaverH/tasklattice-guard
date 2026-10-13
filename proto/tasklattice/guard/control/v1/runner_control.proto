@@ -34,6 +34,7 @@ message RunnerMessage {
     CapabilityValidationResult capability_validation_result = 16;
     ValidationProgress validation_progress = 17;
     ArtifactAdmissionResult artifact_admission_result = 18;
+    GuardrailProtectionResult protection_result = 19;
   }
 }
 
@@ -53,6 +54,7 @@ message ControllerMessage {
     ValidationRequest validation_request = 14;
     CapabilityValidationRequest capability_validation_request = 15;
     ArtifactAdmissionRequest artifact_admission_request = 16;
+    GuardrailProtectionState protection_state = 17;
   }
 }
 
@@ -74,6 +76,7 @@ message RunnerRegistration {
   map<string, string> labels = 8;
   // Last atomically activated desired-state generation, or zero before first sync.
   int64 applied_generation = 9;
+  int64 applied_protection_generation = 10;
 }
 
 // Registration acknowledgement and heartbeat contract returned by Controller.
@@ -93,6 +96,27 @@ message RunnerHeartbeat {
   // Last atomically activated desired-state generation at observation time.
   int64 applied_generation = 4;
   RunnerLoad load = 5;
+  int64 applied_protection_generation = 6;
+}
+
+// Independent operating overlay: applying an emergency mode must not wait for
+// model credentials, Artifact compilation or prewarming. Versions stay immutable.
+message GuardrailProtectionState {
+  // Monotonic Controller generation for this complete map, independent of Artifact application.
+  int64 generation = 1;
+  // Complete resource-level map. Missing entries use enforce.
+  map<string, string> modes = 2;
+}
+
+// ACK/NACK for a persisted operating-mode snapshot on the registered Runner stream.
+message GuardrailProtectionResult {
+  string runner_id = 1;
+  // Echo the exact dispatched protection generation; stale results never supersede newer ones.
+  int64 generation = 2;
+  // True only after the entire map has been validated, persisted and atomically applied.
+  bool accepted = 3;
+  // Diagnostic for a NACK; empty on ACK. Never include credentials or request content.
+  string reason = 4;
 }
 
 // Delta counters and point-in-time pressure measurements for a fixed interval.

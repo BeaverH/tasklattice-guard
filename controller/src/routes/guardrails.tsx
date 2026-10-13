@@ -1,3 +1,4 @@
+import { GuardrailProtectionMode, useGuardrailProtectionActions } from "@/components/guardrail-protection-mode";
 import { MAX_GUARDRAIL_VERSIONS } from "../../shared/guardrail-version-limit";
 import { ImmutableVersionView } from "@/components/guardrail-immutable-versions";
 import { GuardrailVersionTestControl } from "@/components/guardrail-version-test-control";
@@ -133,7 +134,7 @@ export function GuardrailDetailPage() {
   const navigate = useNavigate({ from: "/guardrails/$guardrailId" });
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const guardrailQuery = useQuery({ queryKey: queryKeys.guardrail(guardrailId), queryFn: () => getGuardrail(guardrailId) });
+  const guardrailQuery = useQuery({ queryKey: queryKeys.guardrail(guardrailId), queryFn: () => getGuardrail(guardrailId), refetchInterval: 5000 });
   const policiesQuery = useQuery({ queryKey: queryKeys.policies, queryFn: getPolicies });
   const validationReadiness = useGuardrailValidationReadiness({ bindings: guardrailQuery.data?.policy_bindings ?? [], policies: policiesQuery.data?.items ?? EMPTY_POLICIES,
     enabled: Boolean(guardrailQuery.data), policiesReady: policiesQuery.isSuccess, policiesError: policiesQuery.isError });
@@ -271,6 +272,8 @@ export function GuardrailDetailPage() {
     ]);
   }
 
+  const protectionActions = useGuardrailProtectionActions(guardrailQuery.data, refresh);
+
   function openValidationTarget(run: ValidationRun) {
     setSelectedValidationRun(null);
     if (guardrailVersions.some((version) => version.version === run.guardrail_version)) {
@@ -317,7 +320,8 @@ export function GuardrailDetailPage() {
         <div className="flex shrink-0 items-start gap-2">
           {canManageDraft && hasDraft ? <Button className="min-h-11" variant="outline" onClick={openDraftReview}>{testingDraft ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(testingDraft ? "guardrails.viewTestProgress" : "guardrails.testDraft")}</Button> : null}
           {canManageDraft && guardrail.tested_current && !guardrail.published_current ? <Button onClick={() => { setDraftJustSaved(false); setDraftAction("publish"); }}><ShieldCheck />{t("guardrails.publishVersion")}</Button> : null}
-          {auth.user?.role === "admin" ? <MenuButton label={t("routing.actions")} kind="tertiary" size="md" menuAlignment="bottom-end" className="guard-actions-menu">
+          {auth.user?.role === "admin" ? <MenuButton ref={protectionActions.menuRef} label={t("routing.actions")} kind="tertiary" size="md" menuAlignment="bottom-end" className="guard-actions-menu">
+            {protectionActions.menuItems}
             {canManageDraft ? <MenuItem label={t("guardrails.editAction")} renderIcon={Pencil} onClick={() => setEditOpen(true)} /> : null}
             {canManageDraft ? <MenuItem label={t("guardrails.editTestCases")} renderIcon={FilePenLine} onClick={() => setTestCasesOpen(true)} /> : null}
             <MenuItem label={t("guardrails.editLogLevel")} renderIcon={ScrollText} onClick={() => setLoggingOpen(true)} />
@@ -334,6 +338,8 @@ export function GuardrailDetailPage() {
         </div>
       </div>
 
+      {protectionActions.feedback}
+
       {guardrail.is_default ? <div className="mt-5"><InfoNotice title={t("guardrails.defaultNoticeTitle")}>{t("guardrails.defaultNoticeDescription")}</InfoNotice></div> : null}
 
       {hasDraft ? <div className="mt-5"><GuardrailValidationReadiness readiness={validationReadiness} onEdit={canManageDraft ? () => setEditOpen(true) : undefined} onRetry={() => { void policiesQuery.refetch(); validationReadiness.refresh(); }} /></div> : null}
@@ -348,6 +354,7 @@ export function GuardrailDetailPage() {
           </TabsList>
         </div>
         <TabsContent value="runtime" className="space-y-5 pt-5">
+          <GuardrailProtectionMode guardrail={guardrail} />
           <GuardrailRuntimeView guardrailId={guardrail.id} metrics={metricsQuery.data} loading={metricsQuery.isLoading} error={metricsQuery.error} routers={routers} versions={guardrailVersions} window={window} onWindowChange={setWindow} />
         </TabsContent>
         <TabsContent value="event" className="space-y-5 pt-5">

@@ -156,7 +156,7 @@ def register_output_stream(api) -> None:
 
                 async def observe(decision):
                     nonlocal checks, check_started
-                    checks += 1
+                    checks += decision.protection_mode != "bypass"
                     await api._emit_telemetry(
                         request_id=str(uuid.uuid4()), call_id=protection.call_id, endpoint_id=endpoint_id,
                         phase="output", protocol=f"{protocol}-stream", mode=protection.mode,
