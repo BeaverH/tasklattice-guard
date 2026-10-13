@@ -21,9 +21,17 @@ from runner.toolkit.runtime.contracts import (
     RiskFinding,
 )
 from runner.toolkit.safety.providers import build_safety_model_provider
-from tests.control_plane.test_topic_allowlist import _request as topic_request
+from tests.control_plane.test_topic_allowlist import _request as local_topic_request
 from tests.data_plane.test_grounding_context import request_with_context
 from tests.test_safety_model_providers import _config, _request, _response
+
+
+def topic_request(content):
+    request = local_topic_request(content)
+    # Model parsing tests exercise the semantic contract, not the keyword rule.
+    contract = "tali.guard.topic-control.semantic.v1"
+    return replace(request, binding=replace(request.binding, contract_ref=contract),
+                   plan=replace(request.plan, steps=tuple(replace(step, contract_ref=contract) for step in request.plan.steps)))
 
 
 @pytest.mark.parametrize("verdict", sorted(EVALUATOR_VERDICTS))

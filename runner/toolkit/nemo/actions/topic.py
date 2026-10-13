@@ -11,13 +11,15 @@ from ...safety.taxonomy import taxonomy_for_evaluator
 from .contracts import ActionRequest, ActionResult, action_result
 from .model_call import action_usage, observe_model_call
 from .names import ACTION_TOPIC_JUDGE
+from ..evaluators.contracts import GuardEvaluator
 
 
-class TopicJudgeActionProvider:
-    """Judge organization-specific topic intent as a native NeMo Action."""
+class ChatTopicEvaluator:
+    """Topic evaluator for existing OpenAI-compatible classification models."""
 
-    name = ACTION_TOPIC_JUDGE
+    id = "chat-topic"
     version = "1.0.0"
+    contracts = frozenset({"tali.guard.topic-control.semantic.v1", "tali.guard.company-policy.v1"})
     rails = frozenset({"input", "output"})
     # Both capabilities classify an interaction against explicit, compiled
     # business boundaries with the dedicated NVIDIA Topic Control model.
@@ -46,7 +48,7 @@ class TopicJudgeActionProvider:
         self._transport = transport
         self._skip_tls_verify = skip_tls_verify
 
-    async def execute(self, request: ActionRequest) -> ActionResult:
+    async def evaluate(self, request: ActionRequest) -> ActionResult:
         credential = (self._api_key or "").strip() or (
             os.environ.get(self._api_key_env_var, "").strip()
             if self._api_key_env_var
@@ -135,6 +137,25 @@ class TopicJudgeActionProvider:
             reason=reason,
             usage=action_usage(call, len(request.content)),
         )
+
+
+class TopicJudgeActionProvider:
+    """Stable NeMo Action adapter; model-specific decisions belong to evaluators."""
+
+    name = ACTION_TOPIC_JUDGE
+    version = "1.0.0"
+
+    def __init__(self, *, evaluator: GuardEvaluator | None = None, **kwargs: Any) -> None:
+        self.evaluator = evaluator if evaluator is not None else ChatTopicEvaluator(**kwargs)
+        self.rails = self.evaluator.rails
+        self.capabilities = self.evaluator.capabilities
+
+    async def execute(self, request: ActionRequest) -> ActionResult:
+        if (request.rail_type not in self.rails
+            or request.capability not in self.capabilities
+            or request.binding.contract_ref not in self.evaluator.contracts):
+            return action_result(request, "error", request.content, reason="Topic evaluator does not support this contract or Rail.")
+        return await self.evaluator.evaluate(request)
 
 
 def topic_judge_prompt(parameters: tuple[tuple[str, str], ...]) -> str:

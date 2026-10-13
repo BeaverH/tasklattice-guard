@@ -20,8 +20,8 @@ export type Collection<T> = { items: T[]; count?: number; nextCursor?: string | 
 
 export type SystemStatus = PlatformStatusSnapshot;
 
-export type ModelProviderKind = "openai" | "qwen" | "deepseek" | "vllm" | "ollama" | "custom-openai-compatible";
-export type ModelProfile = "generic-chat" | "tali.qwen3guard.v1" | "tali.llama-guard-3.v1" | "tali.nemotron-content-safety.v1" | "tali.nemotron-safety-guard-v3.v1" | "tali.nemoguard-topic-control.v1" | "tali.openai-compatible-jailbreak.v1" | "tali.nemoguard-jailbreak-detect.v1" | "tali.taxonomy-judge.v1" | "tali.grounding-judge.v1" | "tali.automated-reasoning.v1";
+export type ModelProviderKind = "openai" | "qwen" | "typesafe" | "deepseek" | "vllm" | "ollama" | "custom-openai-compatible";
+export type ModelProfile = "generic-chat" | "tali.qwen3guard.v1" | "tali.llama-guard-3.v1" | "tali.nemotron-content-safety.v1" | "tali.nemotron-safety-guard-v3.v1" | "tali.nemoguard-topic-control.v1" | "tali.typesafe-jev-topic.v1" | "tali.openai-compatible-jailbreak.v1" | "tali.nemoguard-jailbreak-detect.v1" | "tali.taxonomy-judge.v1" | "tali.grounding-judge.v1" | "tali.automated-reasoning.v1";
 export type { CapabilityBindingId };
 export type ModelAssignments = {
   controlPlane: string | null;
@@ -469,9 +469,19 @@ function formatApiError(detail: unknown): string | undefined {
     if (messages.length) return messages.join("; ");
   }
   if (detail && typeof detail === "object") {
-    const issue = detail as { msg?: unknown; message?: unknown };
+    const issue = detail as { msg?: unknown; message?: unknown; fieldErrors?: unknown; formErrors?: unknown };
     if (typeof issue.msg === "string" && issue.msg) return issue.msg;
     if (typeof issue.message === "string" && issue.message) return issue.message;
+    // Controller Zod validation uses flatten(), unlike FastAPI's issue array.
+    const messages = Array.isArray(issue.formErrors) ? issue.formErrors.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+    if (issue.fieldErrors && typeof issue.fieldErrors === "object" && !Array.isArray(issue.fieldErrors)) {
+      for (const [field, errors] of Object.entries(issue.fieldErrors)) {
+        if (Array.isArray(errors)) for (const error of errors) {
+          if (typeof error === "string" && error.trim()) messages.push(`${field}: ${error}`);
+        }
+      }
+    }
+    if (messages.length) return messages.join("; ");
   }
   return undefined;
 }

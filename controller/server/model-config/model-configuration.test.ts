@@ -45,6 +45,40 @@ function setup(state = "draft", assigned = false, failProbe = false) {
 }
 
 describe("Capability configuration after registration", () => {
+  it("discovers TypeSafe's native model catalog and calls System One for connection evidence", async () => {
+    const { service, rows, fetcher } = setup();
+    rows.get(modelProviders)![0]!.kind = "typesafe";
+    rows.get(modelDefinitions)![0]!.profile = "tali.typesafe-jev-topic.v1";
+    rows.get(modelDefinitions)![0]!.model = "jev-1.13.0";
+    fetcher.mockResolvedValueOnce(Response.json({ models: [{ name: "jev-1.13.0" }, { name: "jev-latest" }] }));
+    expect((await service.discoverProviderModels("provider-1")).models.map(m => m.id)).toEqual(["jev-1.13.0", "jev-latest"]);
+    fetcher.mockResolvedValueOnce(Response.json({ model: "jev-1.13.0", answers: { greeting: { type: "noul", noul: 0.99 } } }));
+    expect((await service.testModelConnection(id, "admin")).connectionStatus).toBe("validated");
+    const calls = fetcher.mock.calls as unknown as Array<[string, RequestInit]>;
+    expect(calls[1]![0]).toBe("https://provider.test/v1/systemone");
+    expect(JSON.parse(String(calls[1]![1].body))).toEqual({ model: "jev-1.13.0", state: "Hello", questions: {
+      greeting: { type: "noul", instructions: "Does the text contain a greeting?" },
+    } });
+  });
+
+  it.each([true, "0.99", null, 1.1])("rejects invalid Jev connection probability %s", async (value) => {
+    const { service, rows, fetcher } = setup();
+    rows.get(modelProviders)![0]!.kind = "typesafe";
+    rows.get(modelDefinitions)![0]!.profile = "tali.typesafe-jev-topic.v1";
+    fetcher.mockResolvedValueOnce(Response.json({ model: "jev-1.13.0", answers: { greeting: { type: "noul", noul: value } } }));
+    expect((await service.testModelConnection(id, "admin")).connectionStatus).toBe("failed");
+  });
+
+  it("validates Jev assignment with only its Topic contract and leaves active assignments unchanged", async () => {
+    const { service, rows, railValidator } = setup();
+    rows.get(modelProviders)![0]!.kind = "typesafe";
+    rows.get(modelDefinitions)![0]!.profile = "tali.typesafe-jev-topic.v1";
+    const before = structuredClone(rows.get(modelConfigurationRevisions));
+    await service.previewAssignment("topic_control.input", id, "admin");
+    expect(rows.get(modelConfigurationRevisions)).toEqual(before);
+    expect(JSON.stringify(railValidator.mock.calls)).toContain("tali.typesafe-jev-topic.v1");
+    expect(JSON.stringify(railValidator.mock.calls)).not.toContain("company-policy");
+  });
   it("requires a successful preview before saving and preserves the evidence", async () => {
     const { service, rows } = setup();
     await expect(service.updateAssignment("content_safety.input", id, "admin"))
