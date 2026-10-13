@@ -42,6 +42,7 @@ export const modelCapabilityIds = [
   "content_safety",
   "jailbreak",
   "topic_control",
+  "company_policy",
   "pii_semantic",
   "contextual_grounding",
   "automated_reasoning",
@@ -64,7 +65,8 @@ export const capabilityProfileRefs = {
     "tali.nemoguard-jailbreak-detect.v1",
   ],
   topic_control: ["tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1", "tali.typesafe-jev-topic.v1"],
-  pii_semantic: ["tali.qwen3guard.v1"],
+  company_policy: ["tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1"],
+  pii_semantic: ["tali.openai-compatible-pii.v1", "tali.qwen3guard.v1"],
   contextual_grounding: ["tali.grounding-judge.v1"],
   automated_reasoning: ["tali.automated-reasoning.v1"],
 } as const satisfies Record<ModelCapabilityId, readonly string[]>;
@@ -85,7 +87,8 @@ export const capabilityProfilePreference = {
     "tali.qwen3guard.v1",
   ],
   topic_control: ["tali.nemoguard-topic-control.v1", "tali.taxonomy-judge.v1", "tali.typesafe-jev-topic.v1"],
-  pii_semantic: ["tali.qwen3guard.v1"],
+  company_policy: ["tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1"],
+  pii_semantic: ["tali.openai-compatible-pii.v1", "tali.qwen3guard.v1"],
   contextual_grounding: ["tali.grounding-judge.v1"],
   automated_reasoning: ["tali.automated-reasoning.v1"],
 } as const satisfies Record<ModelCapabilityId, readonly string[]>;
@@ -95,6 +98,7 @@ export type CapabilityBindingId =
   | "content_safety.output"
   | "jailbreak.input"
   | "topic_control.input"
+  | "company_policy.input"
   | "pii_semantic.input"
   | "pii_semantic.output"
   | "contextual_grounding.output"
@@ -136,8 +140,13 @@ export const capabilityBindingDefinitions = [
   }),
   binding({
     id: "topic_control.input", categoryId: "topic_control", capabilityRef: "topic_control", railType: "input",
-    implementationRef: "tali.runtime.topic-judge.v1", contractRefs: ["tali.guard.topic-control.semantic.v1", "tali.guard.company-policy.v1"],
+    implementationRef: "tali.runtime.topic-judge.v1", contractRefs: ["tali.guard.topic-control.semantic.v1"],
     profileRefs: capabilityProfileRefs.topic_control, profilePreference: capabilityProfilePreference.topic_control,
+  }),
+  binding({
+    id: "company_policy.input", categoryId: "topic_control", capabilityRef: "company_policy", railType: "input",
+    implementationRef: "tali.runtime.topic-judge.v1", contractRefs: ["tali.guard.company-policy.v1"],
+    profileRefs: capabilityProfileRefs.company_policy, profilePreference: capabilityProfilePreference.company_policy,
   }),
   binding({
     id: "pii_semantic.input", categoryId: "pii_detection", capabilityRef: "pii_semantic", railType: "input",

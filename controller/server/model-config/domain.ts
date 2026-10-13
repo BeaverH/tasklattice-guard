@@ -28,6 +28,7 @@ export const modelProfiles = [
   "tali.nemoguard-topic-control.v1",
   "tali.typesafe-jev-topic.v1",
   "tali.openai-compatible-jailbreak.v1",
+  "tali.openai-compatible-pii.v1",
   "tali.nemoguard-jailbreak-detect.v1",
   "tali.taxonomy-judge.v1",
   "tali.grounding-judge.v1",
@@ -107,8 +108,8 @@ export const providerRegistrationSchema = z.object({
 export const assignmentInputSchema = z.object({
   controlPlane: z.string().uuid().nullable(),
   bindings: z.object(
-    Object.fromEntries(capabilityBindingIds.map((id) => [id, z.string().uuid().nullable()])) as {
-      [Id in CapabilityBindingId]: z.ZodNullable<z.ZodString>;
+    Object.fromEntries(capabilityBindingIds.map((id) => [id, id === "company_policy.input" ? z.string().uuid().nullable().default(null) : z.string().uuid().nullable()])) as unknown as {
+      [Id in CapabilityBindingId]: z.ZodType<string | null>;
     },
   ),
 });
@@ -128,6 +129,7 @@ export const profileContracts: Record<ModelProfile, readonly string[]> = {
     "tali.guard.company-policy.v1",
   ],
   "tali.typesafe-jev-topic.v1": ["tali.guard.topic-control.semantic.v1"],
+  "tali.openai-compatible-pii.v1": ["tali.guard.pii.semantic.v1"],
   "tali.openai-compatible-jailbreak.v1": ["tali.guard.jailbreak.v1"],
   "tali.nemoguard-jailbreak-detect.v1": ["tali.guard.jailbreak.v1"],
   "tali.taxonomy-judge.v1": [
@@ -148,6 +150,7 @@ export const profileTransports: Record<ModelProfile, ModelTransport> = {
   "tali.nemoguard-topic-control.v1": "openai_chat",
   "tali.typesafe-jev-topic.v1": "typesafe_systemone",
   "tali.openai-compatible-jailbreak.v1": "openai_chat",
+  "tali.openai-compatible-pii.v1": "openai_chat",
   "tali.nemoguard-jailbreak-detect.v1": "nemoguard_jailbreak_detect",
   "tali.taxonomy-judge.v1": "openai_chat",
   "tali.grounding-judge.v1": "openai_chat",

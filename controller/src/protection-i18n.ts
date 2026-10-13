@@ -65,7 +65,7 @@ export const protectionEn = {
     retry: "Retry assignment status", configure: "Configure detector assignments (new tab)",
     checked: "Configuration revision {{revision}} · report timestamp {{time}}",
     states: { active: "Activated assignment", activating: "Activation in progress", validated: "Validated · not activated", failed: "Validation failed", unverified: "Rail validation required", missing: "Not assigned" },
-    capabilities: { content_safety: "Content safety", jailbreak: "Jailbreak detection", topic_control: "Topic control", pii_semantic: "Semantic PII", contextual_grounding: "Answer grounding", automated_reasoning: "Business rule reasoning" },
+    capabilities: { content_safety: "Content safety", jailbreak: "Jailbreak detection", topic_control: "Topic control", company_policy: "Company policy", pii_semantic: "Semantic PII", contextual_grounding: "Answer grounding", automated_reasoning: "Business rule reasoning" },
   },
   phrases: {
     useEntryActions: "Phrase actions",
@@ -189,7 +189,7 @@ export const protectionZh = {
     retry: "重试绑定状态", configure: "配置检测器绑定（新标签页）",
     checked: "配置修订 {{revision}} · 报告时间 {{time}}",
     states: { active: "绑定已激活", activating: "正在激活", validated: "已验证 · 未激活", failed: "验证失败", unverified: "需要 Rail 验证", missing: "未绑定" },
-    capabilities: { content_safety: "内容安全", jailbreak: "越狱检测", topic_control: "话题范围", pii_semantic: "语义 PII", contextual_grounding: "回答依据核查", automated_reasoning: "业务规则推理" },
+    capabilities: { content_safety: "内容安全", jailbreak: "越狱检测", topic_control: "话题范围", company_policy: "公司策略", pii_semantic: "语义 PII", contextual_grounding: "回答依据核查", automated_reasoning: "业务规则推理" },
   },
   phrases: {
     useEntryActions: "使用词语动作",

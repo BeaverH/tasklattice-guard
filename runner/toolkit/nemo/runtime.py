@@ -1916,7 +1916,13 @@ def _trace(
             and action.return_value["step_id"] in bindings_by_id
         )
         binding = bindings_by_id.get(binding_ids[0]) if binding_ids else None
-        result = results_by_id.get(binding.id) if binding is not None else None
+        # A Rail can execute local detection and then a semantic model. Its
+        # first action does not describe the final result (e.g. local safe,
+        # followed by a provider error). Stopping is not evidence of a hit.
+        observed_results = tuple(
+            results_by_id[item] for item in binding_ids if item in results_by_id
+        )
+        rail_results = _terminal_runtime_results(observed_results)
         capability = (
             binding.capability
             if binding is not None
@@ -1927,9 +1933,9 @@ def _trace(
             if binding is None
             else None
         )
-        error = result is not None and result.result.verdict == "error"
-        matched = result is not None and result.result.verdict == "matched"
-        unknown = result is not None and result.result.verdict == "unknown"
+        error = any(item.result.verdict == "error" for item in rail_results)
+        matched = any(item.result.verdict == "matched" for item in observed_results)
+        unknown = any(item.result.verdict == "unknown" for item in rail_results)
         modified = any(
             isinstance(action.return_value, dict)
             and action.return_value.get("modified") is True
@@ -1941,7 +1947,7 @@ def _trace(
         )
         verdict = (
             "error" if error else "unknown" if unknown else
-            "matched" if matched or rail.stop or modified else "not_matched"
+            "matched" if matched or (not rail_results and (rail.stop or modified)) else "not_matched"
         )
         route = (
             "fail_closed"

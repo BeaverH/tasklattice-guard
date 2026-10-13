@@ -101,6 +101,14 @@ class PolicyRuleSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class PolicyTestContextSpec:
+    trusted_instruction: str = ""
+    query: str = ""
+    grounding_sources: tuple[str, ...] = ()
+    expected_reasoning_result: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PolicyTestCaseSpec:
     id: str
     name: str
@@ -113,6 +121,7 @@ class PolicyTestCaseSpec:
     kind: PolicyTestKind = "scenario"
     required: bool = True
     parameter_names: tuple[str, ...] = ()
+    context: PolicyTestContextSpec | None = None
 
 
 @dataclass(frozen=True, slots=True)

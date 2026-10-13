@@ -78,6 +78,12 @@ and [self-hosted NIM request/response examples](https://docs.nvidia.com/nim/nemo
 
 ## TypeSafe Jev for input Topic Control
 
+Company Policy uses its own `company_policy.input` binding and the
+`tali.guard.company-policy.v1` contract. It does not inherit `topic_control.input`.
+Assign a compatible taxonomy judge or NeMoGuard Topic Control model separately;
+Jev remains limited to the Topic Control semantic contract. Missing Company
+bindings fail preparation instead of falling back to another detector's model.
+
 Register **TypeSafe AI** under **Settings → Providers** with the API base URL
 `https://api.typesafe.ai/v1` and your TypeSafe API key. Click **Choose models** to
 select a version directly; `jev-1.13.0` is preselected. Discovery is optional:
@@ -184,3 +190,31 @@ This does not change Controller–Runner mTLS or other Providers' verification.
 For model revision activation and rollback, see
 [revision lifecycles](revision-lifecycle.md). API clients should follow
 [model-binding validation conventions](api-contract.md#validation-credentials-for-model-bindings).
+
+## Generic semantic PII
+
+The `tali.openai-compatible-pii.v1` profile accepts an OpenAI-compatible chat model
+for `pii_semantic.input` and `pii_semantic.output`. The adapter asks for one JSON
+field, `verdict`, with `pii`, `safe`, or `unknown`. It evaluates the current target
+block, treats embedded instructions as data, and validates the response strictly.
+Unknown judgments and invalid/provider responses never become positive findings.
+
+PII Protection 1.1.0 first redacts exact identifiers and then checks the remaining
+text semantically, including text without identifier keywords. Chinese document
+labels alone are not exact PII matches. This also prevents an email match from
+skipping a personal name in the same block. A semantic transform replaces the
+whole target block with `[PII_REDACTED]`; it does not claim accurate model-generated
+character spans. The complete semantic check adds a model call per evaluated
+block. Qwen3Guard remains available as an alternative PII profile.
+
+The PII and Company adapters disable optional thinking for hosted NVIDIA
+Lightning, as does the Grounding adapter. Other judges retain their validated
+reasoning behavior; other model/provider combinations do not receive this option.
+Provider rate limits and Guardrail deadlines still apply.
+
+For providers with a small concurrency quota, set the Runner environment variable
+`GUARD_VALIDATION_MAX_CONCURRENCY=1` to run test cases sequentially (default: 8).
+This changes validation scheduling only, not live traffic admission or detector
+timeouts. Report sequential classification results separately from concurrent
+availability failures. A blocked request alone is not detection evidence: inspect
+the successful model call, detector verdict, and matched Policy/Rule together.

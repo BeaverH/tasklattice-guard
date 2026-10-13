@@ -785,6 +785,14 @@ class _RuntimeBuilder:
                 "Declared dedicated Evaluator Bindings are unavailable for: "
                 + ", ".join(sorted(set(missing_dedicated))) + "."
             )
+        for binding in config.action_bindings:
+            if binding.action_name == ACTION_TOPIC_JUDGE:
+                provider = self._providers.get((ACTION_TOPIC_JUDGE, "1.0.0"))
+                if (provider is None or binding.capability not in provider.capabilities
+                    or not set(binding.phases).issubset(provider.rails)
+                    or (hasattr(provider, "supports") and any(not provider.supports(binding.capability, binding.contract_ref, phase)
+                                                               for phase in binding.phases))):
+                    raise PlanCompilationError(f"No Topic/Company Evaluator Binding is available for: {binding.capability} -> {binding.contract_ref}.")
         unmapped_contracts = tuple(
             binding
             for binding in config.action_bindings

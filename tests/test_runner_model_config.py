@@ -15,6 +15,17 @@ from runner.toolkit.evaluation.contracts import (
 )
 
 
+def test_validation_concurrency_can_be_reduced_without_changing_serving(monkeypatch):
+    _required_runner_env(monkeypatch)
+    monkeypatch.setenv("GUARD_VALIDATION_MAX_CONCURRENCY", "1")
+    settings = RunnerSettings.from_env()
+    assert settings.validation_max_concurrency == 1
+    assert settings.max_concurrency == 64
+    monkeypatch.setenv("GUARD_VALIDATION_MAX_CONCURRENCY", "0")
+    with pytest.raises(ValueError, match="must be positive"):
+        RunnerSettings.from_env()
+
+
 def test_runner_loads_qwen_primary_and_llama_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

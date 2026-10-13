@@ -1,6 +1,6 @@
 id: model/contextual-grounding
 name: Grounding judge
-description: Regenerate output that is unsupported by the source context.
+description: Block output that is unsupported by the source context.
 stages:
 - output
 detector:

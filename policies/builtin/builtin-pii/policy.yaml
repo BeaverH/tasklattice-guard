@@ -4,11 +4,11 @@ kind: Policy
 metadata:
   id: builtin-pii
   name: PII Protection
-  description: Combines exact local detection with semantic escalation for uncertain personal information
-    on requests and responses. Requires a semantic PII model assignment; use focused local Policies for
-    model-free protection.
+  description: Redacts exact personal identifiers locally, then reviews every request
+    and response for remaining personal information with the independently assigned
+    semantic PII model.
   source: built_in
-  version: 1.0.0
+  version: 1.1.0
   tags:
   - namespace: protection
     value: privacy

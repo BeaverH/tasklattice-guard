@@ -175,3 +175,23 @@ async def test_local_cases_allow_progress_to_flush_before_the_suite_finishes(mon
     assert [result["caseId"] for result in results] == list(map(str, range(32)))
     assert status == "failed"
     assert metrics["total"] == 32
+
+
+def test_validation_accuracy_does_not_count_failure_or_unknown_as_detector_errors():
+    from runner.validator import _metrics
+
+    base = {"expectedDecision": "allow", "actualDecision": "block", "passed": False,
+            "actualFailure": None, "findings": [], "trace": [], "escalated": True, "latencyMs": 10}
+    results = [
+        {**base, "actualFailure": "timeout", "latencyMs": 30000},
+        {**base, "actualFailure": "provider_failure", "expectedDecision": "block", "actualDecision": "allow"},
+        {**base, "findings": [{"verdict": "unknown"}]},
+        {**base, "trace": [{"verdict": "unknown"}], "expectedDecision": "block", "actualDecision": "allow"},
+        {**base, "findings": [{"verdict": "matched"}]},
+        {**base, "expectedDecision": "block", "actualDecision": "allow"},
+        {**base, "actualDecision": "allow", "passed": True, "escalated": False},
+        {**base, "actualDecision": "allow", "passed": True, "escalated": False},
+    ]
+    assert _metrics(results) == {"total": 8, "passed": 2, "complianceRate": 25,
+                                "falsePositiveRate": 12.5, "falseNegativeRate": 12.5,
+                                "escalationRate": 75, "p95LatencyMs": 30000}

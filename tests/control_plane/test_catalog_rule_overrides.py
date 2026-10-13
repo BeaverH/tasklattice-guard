@@ -13,20 +13,21 @@ from runner.toolkit.evaluation.contracts import CONTRACT_PII_EXACT, CONTRACT_PII
 from runner.toolkit.nemo.action_registry import action_providers
 from runner.toolkit.nemo.actions import EvaluationActionProvider, EvaluationRoute, local_action_providers
 from runner.toolkit.nemo.evaluators.pii import PiiEvaluator
+from runner.toolkit.nemo.evaluators.contracts import evaluation_result
 from runner.toolkit.runtime.contracts import ProtectionRequest, RequestContext
 
 
-class UnexpectedSemanticCall:
-    """Register the required model dependency, but prove exact hits never call it."""
+class RemainingPiiReview:
+    """Deterministic semantic result for the Rule-action override tests."""
 
-    id = "must-not-call-semantic-model"
+    id = "remaining-pii-review"
     version = "1.0.0"
     capabilities = frozenset({"pii"})
     contracts = frozenset({CONTRACT_PII_SEMANTIC})
     rails = frozenset({"input", "output"})
 
     async def evaluate(self, request):
-        raise AssertionError("An exact PII hit must not invoke the semantic model.")
+        return evaluation_result(request, "not_matched", request.content)
 
 
 @pytest.fixture(scope="module")
@@ -70,7 +71,7 @@ def catalog_plans():
 async def test_catalog_rule_action_reaches_real_nemo_and_preserves_later_policies(catalog_plans, phase, action):
     providers = action_providers(*local_action_providers(), EvaluationActionProvider((
         EvaluationRoute("pii", CONTRACT_PII_EXACT, PiiEvaluator()),
-        EvaluationRoute("pii", CONTRACT_PII_SEMANTIC, UnexpectedSemanticCall()),
+        EvaluationRoute("pii", CONTRACT_PII_SEMANTIC, RemainingPiiReview()),
     )))
     preview = DraftPreviewRuntime(DefaultRunnerCompiler(), providers)
     text = "Contact alice@example.com"

@@ -3398,6 +3398,7 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
+          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -3633,6 +3634,16 @@
               }
             ]
           },
+          "company_policy.input": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
           "content_safety.input": {
             "anyOf": [
               {
@@ -3706,6 +3717,7 @@
         },
         "required": [
           "automated_reasoning.output",
+          "company_policy.input",
           "content_safety.input",
           "content_safety.output",
           "contextual_grounding.output",
@@ -3846,6 +3858,10 @@
               },
               {
                 "const": "automated_reasoning.output",
+                "type": "string"
+              },
+              {
+                "const": "company_policy.input",
                 "type": "string"
               },
               {
@@ -4029,6 +4045,7 @@
               "tali.nemotron-content-safety.v1",
               "tali.nemotron-safety-guard-v3.v1",
               "tali.openai-compatible-jailbreak.v1",
+              "tali.openai-compatible-pii.v1",
               "tali.qwen3guard.v1",
               "tali.taxonomy-judge.v1",
               "tali.typesafe-jev-topic.v1"
@@ -8738,6 +8755,7 @@
             "items": {
               "enum": [
                 "automated_reasoning.output",
+                "company_policy.input",
                 "content_safety.input",
                 "content_safety.output",
                 "contextual_grounding.output",
@@ -8992,6 +9010,7 @@
           "capability": {
             "enum": [
               "automated_reasoning",
+              "company_policy",
               "content_safety",
               "contextual_grounding",
               "jailbreak",
@@ -9003,6 +9022,7 @@
           "id": {
             "enum": [
               "automated_reasoning.output",
+              "company_policy.input",
               "content_safety.input",
               "content_safety.output",
               "contextual_grounding.output",
@@ -14534,6 +14554,7 @@
                 "content_safety.output",
                 "jailbreak.input",
                 "topic_control.input",
+                "company_policy.input",
                 "pii_semantic.input",
                 "pii_semantic.output",
                 "contextual_grounding.output",
@@ -14662,6 +14683,7 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
+          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -14840,6 +14862,7 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
+          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -14992,6 +15015,7 @@
                     "tali.nemoguard-topic-control.v1",
                     "tali.typesafe-jev-topic.v1",
                     "tali.openai-compatible-jailbreak.v1",
+                    "tali.openai-compatible-pii.v1",
                     "tali.nemoguard-jailbreak-detect.v1",
                     "tali.taxonomy-judge.v1",
                     "tali.grounding-judge.v1",
@@ -15119,6 +15143,7 @@
               "tali.nemotron-content-safety.v1",
               "tali.nemotron-safety-guard-v3.v1",
               "tali.openai-compatible-jailbreak.v1",
+              "tali.openai-compatible-pii.v1",
               "tali.qwen3guard.v1",
               "tali.taxonomy-judge.v1",
               "tali.typesafe-jev-topic.v1"
@@ -15298,6 +15323,7 @@
               "tali.nemoguard-topic-control.v1",
               "tali.typesafe-jev-topic.v1",
               "tali.openai-compatible-jailbreak.v1",
+              "tali.openai-compatible-pii.v1",
               "tali.nemoguard-jailbreak-detect.v1",
               "tali.taxonomy-judge.v1",
               "tali.grounding-judge.v1",
@@ -17257,6 +17283,9 @@
         "properties": {
           "content": {
             "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/getPoliciesByIdDefinitionResponseDefinitionTestsItemContext"
           },
           "covered_rule_ids": {
             "items": {
@@ -19968,6 +19997,7 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
+          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -20015,6 +20045,19 @@
                     "type": "null"
                   }
                 ]
+              },
+              "company_policy.input": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
               },
               "content_safety.input": {
                 "anyOf": [
@@ -20151,6 +20194,7 @@
               "tali.nemoguard-topic-control.v1",
               "tali.typesafe-jev-topic.v1",
               "tali.openai-compatible-jailbreak.v1",
+              "tali.openai-compatible-pii.v1",
               "tali.nemoguard-jailbreak-detect.v1",
               "tali.taxonomy-judge.v1",
               "tali.grounding-judge.v1",

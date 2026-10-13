@@ -81,7 +81,8 @@ class RunnerControlClient:
         self._materialization_key: str | None = None
         self._provider_observer = provider_observer
         self._validator = (
-            DefaultRunnerValidator(self._compiler, providers, self._store.verify)
+            DefaultRunnerValidator(self._compiler, providers, self._store.verify,
+                                   max_concurrency=getattr(settings, "validation_max_concurrency", 8))
             if self._compiler
             else None
         )
@@ -292,7 +293,8 @@ class RunnerControlClient:
                 self._providers = providers
                 if self._compiler is not None:
                     await prepare(self._compiler.configure_native_models, native_models or ())
-                    self._validator = DefaultRunnerValidator(self._compiler, providers, self._store.verify)
+                    self._validator = DefaultRunnerValidator(self._compiler, providers, self._store.verify,
+                                                             max_concurrency=getattr(self._settings, "validation_max_concurrency", 8))
                 if self._provider_observer is not None:
                     try:
                         await self._provider_observer(providers)

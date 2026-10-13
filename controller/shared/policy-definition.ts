@@ -8,6 +8,7 @@ const phase = z.enum(["input", "output"]);
 const action = z.enum(["allow", "block", "transform"]);
 const text = z.string().max(500_000);
 const identifier = z.string().min(1).max(256);
+export const policyTestContextSchema = z.object({ trusted_instruction: text.default(""), query: text.default(""), grounding_sources: z.array(text).default([]), expected_reasoning_result: z.string().nullable().default(null) });
 const tag = z.object({ namespace: z.string(), value: z.string(), label: z.string(), source: z.enum(["declared", "derived"]).default("declared") });
 
 /** Portable authoring data. Environment permissions and engine identities never travel here. */
@@ -39,7 +40,7 @@ export const policyDefinitionSchema = z.object({
     scope: z.enum(["rule", "policy"]).default("rule"), required: z.boolean().default(true),
     parameter_names: z.array(identifier).default([]), group: z.string().default("Policy tests"),
     expected_text: text.nullable().optional(), expected_matched_rules: z.array(identifier).nullable().optional(),
-    context: z.object({ trusted_instruction: text.default(""), query: text.default(""), grounding_sources: z.array(text).default([]), expected_reasoning_result: z.string().nullable().default(null) }).optional(),
+    context: policyTestContextSchema.optional(),
   }).strict()).max(5000),
   testing: z.object({ parameters: z.record(z.string(), z.string()).default({}) }).optional(),
   execution: z.object({ mode: z.literal("sequential"), input: z.literal("previous_output"), stop_on: z.literal("block") }).default({ mode: "sequential", input: "previous_output", stop_on: "block" }),

@@ -227,10 +227,23 @@ ZIP 保留元数据、Rule、测试、资源与说明，附带 `manifest.json`�
 | `detectors.yaml` | 平台管理的检测器名称、版本、底层适配器 |
 | `schemas/` | 从加载模型生成的 manifest、Rule、Test JSON Schema |
 
-当前内建包包含 **455 条 Rule、873 个用例**：本地回归执行 863 个，另 10 个依赖模型。历史 Topic Control 1.0.0 放在所属 Policy 的 `history/1.0.0/`，由该 Policy 的 manifest 声明，保留产品历史版本查询，不计入当前版本回归。相同 ID／版本的重复来源已去除。
+当前内建包包含 **455 条 Rule、875 个用例**：本地回归执行 863 个，另 12 个依赖模型。历史 Topic Control 1.0.0 放在所属 Policy 的 `history/1.0.0/`，由该 Policy 的 manifest 声明，保留产品历史版本查询，不计入当前版本回归。相同 ID／版本的重复来源已去除。
 
 不要直接编辑 `runner/toolkit/policy_library/assets/` 中的生成 Catalog。`runtime_adapter` 只允许内建策略维护现有运行身份，自建 Rule 的身份由 Policy ID 与 Rule ID 生成。当前自建包支持已注册的本地检测器，不开放任意代码上传或新的模型检测器注册。八种处理指令沿用现有协议；每个适配器支持的参数与替换方式都会校验，重新生成、澄清等仍需集成方执行相应处理。
 
 ### Rule handling contract
 
 `on_match.action` accepts only `allow`, `block`, or `transform`. Risk level remains independent. An allow records evidence without bypassing another Rule's block. Transform requires explicit replacement content or valid patches; local Rules declare `on_match.replacement`. Partial masking and whole-content replacement share the same action. Missing transformation output fails closed. Gateway/Agent code owns retries, clarification and fallback workflows. Removed action names are rejected, not aliased.
+
+### Correctness Policy 的真实验收
+
+`builtin-contextual-grounding@1.1.0` 的正反例均携带 `context.query` 和
+`context.grounding_sources`，分别检查一年保修的有依据回答与十年保修的矛盾回答。
+`builtin-automated-reasoning@1.1.0` 默认使用 `block`，样例需要在 Guardrail 中
+绑定参考逻辑策略 `warranty-duration@1`，并通过 `context.expected_reasoning_result`
+分别断言 `valid` 与 `invalid`。换用其他领域的逻辑策略时，应提供相应正反例。
+测试上下文会随目录包、生成 Catalog 和 Guardrail 继承用例传递。
+
+检测命中断言只接受 `matched`。`unknown` 表示证据不足或无法判定，仍可触发
+保护性拦截，但不能满足 Rule 命中或 `expectedMatches` 断言。缺少上下文等边界
+场景应单独检查拦截行为，不应声明该输入证明了检测器命中。

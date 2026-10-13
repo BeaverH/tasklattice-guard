@@ -129,5 +129,43 @@ describe("Guardrail Validation contract", () => {
       total: 2, passed: 1, complianceRate: 50, falsePositiveRate: 0,
       falseNegativeRate: 50, escalationRate: 50, p95LatencyMs: 100,
     });
+    const unavailable = { ...base, passed: false, actualDecision: "block" as const, escalated: true };
+    expect(validationMetrics([
+      { ...unavailable, actualFailure: "timeout", latencyMs: 30000 },
+      { ...unavailable, actualFailure: "provider_failure", expectedDecision: "block", actualDecision: "allow" },
+      { ...unavailable, findings: [{ verdict: "unknown" }] },
+      { ...unavailable, expectedDecision: "block", actualDecision: "allow", trace: [{ verdict: "unknown" }] },
+      { ...unavailable, findings: [{ verdict: "matched" }] },
+      { ...unavailable, expectedDecision: "block", actualDecision: "allow" },
+      { ...base }, { ...base },
+    ])).toEqual({ total: 8, passed: 2, complianceRate: 25, falsePositiveRate: 12.5,
+      falseNegativeRate: 12.5, escalationRate: 75, p95LatencyMs: 30000 });
+
   });
+});
+
+it.each(["builtin-contextual-grounding", "builtin-automated-reasoning"])("preserves real positive/negative context for %s through both catalog paths", async (id) => {
+  const { DeclarativeCompiler } = await import("../policy-studio/declarative.js");
+  const { buildGuardrailPlan, normalizeGuardrailDraft } = await import("./guardrail-plan.js");
+  const directory = resolve("../runner/toolkit/policy_library/assets");
+  const compiler = new DeclarativeCompiler(directory);
+  const asset = PolicyCatalog.load(directory).get(id)!;
+  const authored = compiler.compile(compiler.shipped(id)!);
+  for (const policy of [asset, authored]) {
+    const draft = normalizeGuardrailDraft({ policyBindings: [{ policyId: id, policyVersion: policy.version,
+      enabledRuleIds: policy.rules.map(rule => rule.id), enabledRails: ["output"],
+      reasoningPolicy: id === "builtin-automated-reasoning" ? { policyId: "warranty-duration", policyVersion: "1", confidenceThreshold: .8 } : null }] });
+    const cases = generatedTestCases("correctness", draft, [policy]);
+    expect(cases).toHaveLength(2);
+    expect(cases.map(test => test.expectedDecision)).toEqual(["block", "allow"]);
+    expect(cases.every(test => test.query === "How long is the warranty?" && test.targetSource === "model_output")).toBe(true);
+    expect(cases.map(test => test.content)).toEqual(["The warranty lasts ten years.", "The warranty lasts one year."]);
+    if (id === "builtin-contextual-grounding") {
+      expect(cases.every(test => test.groundingSources[0] === "The product warranty lasts one year.")).toBe(true);
+    } else {
+      expect(cases.map(test => test.expectedReasoningResult)).toEqual(["invalid", "valid"]);
+    }
+    const plan = buildGuardrailPlan({ guardrailId: "correctness", guardrailVersion: "20261013-130000.001Z", policies: [policy], draft });
+    expect(plan.steps).toEqual([expect.objectContaining({ on_unsafe: "block" })]);
+  }
 });

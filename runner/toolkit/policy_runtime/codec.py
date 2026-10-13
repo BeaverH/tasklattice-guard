@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from .domain import (
     PolicyImplementationRef, PolicyDetectorRef, PolicyParameterSpec,
-    PolicyRuleSpec, PolicySpec, PolicyTag, PolicyTestCaseSpec,
+    PolicyRuleSpec, PolicySpec, PolicyTag, PolicyTestCaseSpec, PolicyTestContextSpec,
 )
 from .pattern_validation import parse_pattern_validators
 from .conditions import validate_conditions, validate_terms
@@ -69,6 +69,10 @@ def _rule(policy_id: str, payload: dict[str, object]) -> PolicyRuleSpec:
 
 def _test_case(payload: dict[str, object]) -> PolicyTestCaseSpec:
     values = dict(payload)
+    if values.get("context") is not None:
+        context = dict(values["context"])
+        context["grounding_sources"] = tuple(context.get("grounding_sources", ()))
+        values["context"] = PolicyTestContextSpec(**context)
     values["covered_rule_ids"] = tuple(values.get("covered_rule_ids", ()))
     values["parameter_names"] = tuple(values.get("parameter_names", ()))
     return PolicyTestCaseSpec(**values)

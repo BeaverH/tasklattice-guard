@@ -28,6 +28,7 @@ class ChatTopicEvaluator:
     def __init__(
         self,
         *,
+        capability: str | None = None,
         base_url: str,
         model: str,
         api_key_env_var: str | None,
@@ -38,13 +39,23 @@ class ChatTopicEvaluator:
         transport: httpx.AsyncBaseTransport | None = None,
         skip_tls_verify: bool = False,
     ) -> None:
+        if capability is not None:
+            if capability not in self.capabilities:
+                raise ValueError("Unsupported topic judge capability.")
+            self.capabilities = frozenset({capability})
+            self.rails = frozenset({"input"})
+            self.contracts = frozenset({"tali.guard.company-policy.v1" if capability == "company_policy" else "tali.guard.topic-control.semantic.v1"})
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._provider_id = provider_id
         self._api_key_env_var = api_key_env_var
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
-        self._request_options = dict(request_options or {})
+        self._request_options = {}
+        if (self._base_url == "https://integrate.api.nvidia.com/v1"
+                and model == "nvidia/nemotron-3.5-lightning-30b-a3b"):
+            self._request_options["chat_template_kwargs"] = {"enable_thinking": False}
+        self._request_options.update(request_options or {})
         self._transport = transport
         self._skip_tls_verify = skip_tls_verify
 
@@ -145,17 +156,22 @@ class TopicJudgeActionProvider:
     name = ACTION_TOPIC_JUDGE
     version = "1.0.0"
 
-    def __init__(self, *, evaluator: GuardEvaluator | None = None, **kwargs: Any) -> None:
-        self.evaluator = evaluator if evaluator is not None else ChatTopicEvaluator(**kwargs)
-        self.rails = self.evaluator.rails
-        self.capabilities = self.evaluator.capabilities
+    def __init__(self, *, evaluator: GuardEvaluator | None = None,
+                 evaluators: tuple[GuardEvaluator, ...] | None = None, **kwargs: Any) -> None:
+        self.evaluators = evaluators if evaluators is not None else (evaluator if evaluator is not None else ChatTopicEvaluator(**kwargs),)
+        self.rails = frozenset(rail for item in self.evaluators for rail in item.rails)
+        self.capabilities = frozenset(cap for item in self.evaluators for cap in item.capabilities)
+
+    def supports(self, capability: str, contract: str, phase: str) -> bool:
+        return any(capability in item.capabilities and contract in item.contracts and phase in item.rails
+                   for item in self.evaluators)
 
     async def execute(self, request: ActionRequest) -> ActionResult:
-        if (request.rail_type not in self.rails
-            or request.capability not in self.capabilities
-            or request.binding.contract_ref not in self.evaluator.contracts):
-            return action_result(request, "error", request.content, reason="Topic evaluator does not support this contract or Rail.")
-        return await self.evaluator.evaluate(request)
+        for evaluator in self.evaluators:
+            if (request.rail_type in evaluator.rails and request.capability in evaluator.capabilities
+                and request.binding.contract_ref in evaluator.contracts):
+                return await evaluator.evaluate(request)
+        return action_result(request, "error", request.content, reason="Topic evaluator does not support this contract or Rail.")
 
 
 def topic_judge_prompt(parameters: tuple[tuple[str, str], ...]) -> str:

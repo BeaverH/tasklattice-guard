@@ -94,7 +94,8 @@ async def run_packages(packages: list[PolicyPackage], registry: dict, assets: Pa
                 try:
                     text = materialize_test_text(test.content, tuple(test.parameter_names), values)
                     decision = await runtime.evaluate(ProtectionRequest(phase=test.phase, texts=(text,), context=RequestContext(protocol="policy-regression")), **identity)
-                    matched = list(dict.fromkeys(f.rule_id for f in decision.findings if f.policy_id == package.definition.metadata.id))
+                    matched = list(dict.fromkeys(f.rule_id for f in decision.findings
+                        if f.policy_id == package.definition.metadata.id and f.verdict == "matched"))
                     expected = decision.decision != "allow" if test.expected_decision == "intervene" else decision.decision == test.expected_decision
                     if not decision.usage or decision.usage.fail_closed:
                         raise ValueError(f"Execution failed: {decision.reason}")
