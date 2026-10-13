@@ -132,7 +132,11 @@ that deployment initializes credentials inside Kubernetes independently.
 Helm commands accept `HELM_CONTEXT`, `HELM_NAMESPACE`, `HELM_RELEASE`,
 `HELM_DEV_VALUES`, and `HELM_TIMEOUT` as environment variables. For example:
 `HELM_NAMESPACE=guard-dev npm run helm:deploy:dev -- --values ./values-local.yaml`.
-The default context/namespace are `orbstack` / `tali`. Additional flags after
+All Guard development commands use `charts/tali-guard/values-dev-uat.yaml`.
+The default release/context/namespace remain `tali-guard` / `orbstack` / `tali`,
+with UI/runtime ports 38081/38082. The debug command uses this same file plus
+telemetry flags; its backend defaults can be changed with `HELM_OTLP_ENDPOINT`,
+`HELM_PYROSCOPE_ADDRESS` and `HELM_MONITORING_RELEASE`. Additional flags after
 `--` reach Helm as separate arguments. Make targets remain compatibility aliases
 only; new workflows should use npm. Legacy `HELM_VALUES_ARGS` is replaced by
 explicit arguments after `--`.
@@ -269,25 +273,23 @@ Controller/Runner transport is unchanged and needs no extra package key.
 **CLI.** `guardctl` supports `export <guardrail-id> [--versions=a,b] [--out=file]`
 and `import <file> [--versions=a,b] [--confirm]` (preview only without `--confirm`).
 
-**Local promotion pair (OrbStack).** Two Helm releases, each in its own
-namespace with its own database, Runner and keys:
+**Development environment.** `npm run helm:deploy:dev` uses only
+`values-dev-uat.yaml`. There is no separate migration target profile or automatic
+pair-deployment command; ordinary installations have identical import/export
+features without package keys or trust configuration.
 
-| Release | Namespace | Console | Runner | Values |
-| --- | --- | --- | --- | --- |
-| `tali-guard-uat` | `tali-uat` | http://localhost:38181 | :38182 | `values-dev.yaml` + `values-dev-uat.yaml` |
-| `tali-guard-prod` | `tali-prod` | http://127.0.0.1:38281 | :38282 | `values-dev.yaml` + `values-dev-prod.yaml` |
+`npm run test:promotion` remains an opt-in regression for two explicitly
+configured, isolated loopback test deployments. It does not deploy releases,
+read cluster Secrets or start database port-forwards. Supply these environment
+variables before running it:
 
-```bash
-npm run helm:deploy:promotion   # build :promotion images, install or upgrade both
-npm run helm:status:promotion
-npm run test:promotion          # full end-to-end regression against the pair
-npm run helm:delete:promotion
-```
+- `GUARD_PROMOTION_UAT_URL`, `GUARD_PROMOTION_UAT_RUNNER_URL`, `GUARD_PROMOTION_UAT_DB`, `GUARD_PROMOTION_UAT_EMAIL`
+- `GUARD_PROMOTION_PROD_URL`, `GUARD_PROMOTION_PROD_RUNNER_URL`, `GUARD_PROMOTION_PROD_DB`, `GUARD_PROMOTION_PROD_EMAIL`
+- `GUARD_PROMOTION_PASSWORD` and the target's `GUARD_PROMOTION_RUNNER_TOKEN`
+- Optional `GUARD_PROMOTION_WORKDIR` (default `.local-secrets/promotion`)
 
-The two releases have the same import/export features without package keys or
-trust configuration. The images use their own tag, so the development release
-(`tali-guard` in `tali`) is unaffected. PROD uses `127.0.0.1` so the two consoles
-keep separate sign-ins; both use the development `admin` / `password` account.
+Use separate databases and loopback hosts for the two test deployments. This
+regression writes test data and must not target production services.
 
 Unit and PostgreSQL coverage:
 `GUARD_TEST_POSTGRES_URL=... npx vitest run server/services/guardrail-packages.postgres.test.ts`.

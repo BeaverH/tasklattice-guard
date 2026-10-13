@@ -9,8 +9,15 @@ const env = process.env;
 if (env.CONTROLLER_REPOSITORY) env.TALI_GUARD_CONTROLLER_IMAGE_REPOSITORY ??= env.CONTROLLER_REPOSITORY;
 if (env.RUNNER_REPOSITORY) env.TALI_GUARD_RUNNER_IMAGE_REPOSITORY ??= env.RUNNER_REPOSITORY;
 const chart = 'charts/tali-guard';
-const devValues = env.HELM_DEV_VALUES ?? `${chart}/values-dev.yaml`;
-const debugValues = env.HELM_DEBUG_VALUES ?? `${chart}/values-debug.yaml`;
+const devValues = env.HELM_DEV_VALUES ?? `${chart}/values-dev-uat.yaml`;
+// Debug uses the same development values; only the telemetry switches differ.
+const debugArgs = () => [
+  '--set', 'observability.performanceDebug.enabled=true',
+  '--set-string', `observability.tracing.otlpEndpoint=${env.HELM_OTLP_ENDPOINT ?? 'http://tempo.monitoring.svc.cluster.local:4318'}`,
+  '--set-string', `observability.profiling.serverAddress=${env.HELM_PYROSCOPE_ADDRESS ?? 'http://pyroscope.monitoring.svc.cluster.local:4040'}`,
+  '--set-string', `observability.serviceMonitor.labels.release=${env.HELM_MONITORING_RELEASE ?? 'monitoring'}`,
+  '--set-string', `observability.prometheusRule.labels.release=${env.HELM_MONITORING_RELEASE ?? 'monitoring'}`,
+];
 const release = env.HELM_RELEASE ?? 'tali-guard';
 const namespace = env.HELM_NAMESPACE ?? 'tali';
 const context = env.HELM_CONTEXT ?? 'orbstack';
@@ -53,7 +60,7 @@ async function images(component) {
   if (!component || component === 'runner') await run('docker', ['build', '--build-arg', `TALI_BUILD_INFO=${buildInfo}`, '-f', 'Dockerfile.runner', '-t', env.RUNNER_IMAGE ?? `${env.RUNNER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-runner'}:dev`, '.']);
 }
 async function lint(extra = args) {
-  for (const values of [required, ['--values', devValues], ['--values', devValues, '--set', 'observability.serviceMonitor.enabled=true', '--set', 'observability.prometheusRule.enabled=true', '--set', 'observability.grafanaDashboard.enabled=true'], ['--values', devValues, '--values', debugValues]]) {
+  for (const values of [required, ['--values', devValues], ['--values', devValues, '--set', 'observability.serviceMonitor.enabled=true', '--set', 'observability.prometheusRule.enabled=true', '--set', 'observability.grafanaDashboard.enabled=true'], ['--values', devValues, ...debugArgs()]]) {
     await run('helm', ['lint', chart, '--strict', ...values, ...extra]);
   }
   await run('helm', ['lint', litellmChart, '--strict', '--values', litellmValues, ...extra]);
@@ -61,7 +68,7 @@ async function lint(extra = args) {
 async function deployGuard(debug, extra) {
   await images();
   await run('bash', ['scripts/helm-upgrade.sh', release, chart, context, namespace,
-    '--values', devValues, ...(debug ? ['--values', debugValues] : []),
+    '--values', devValues, ...(debug ? debugArgs() : []),
     '--set', `controller.image.repository=${env.CONTROLLER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-controller'}`,
     '--set-string', 'controller.image.tag=dev',
     '--set', `runner.image.repository=${env.RUNNER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-runner'}`,
@@ -69,77 +76,19 @@ async function deployGuard(debug, extra) {
     '--set-string', `rolloutRevision=${env.HELM_ROLLOUT_REVISION ?? Date.now().toString()}`,
     '--wait', '--timeout', env.HELM_TIMEOUT ?? '5m', ...extra]);
 }
-// Local Guardrail promotion pair on OrbStack: UAT authors, tests, publishes and
-// exports; PROD only receives. Two releases in their own namespaces, each with
-// its own database and keys; every switch lives in the values overlays. Images
-// use their own tag so the development release keeps running what it runs.
-const promotion = {
-  tag: env.PROMOTION_IMAGE_TAG ?? 'promotion',
-  work: env.GUARD_PROMOTION_WORKDIR ?? `${root}.local-secrets/promotion`,
-  stacks: {
-    uat: { release: 'tali-guard-uat', namespace: 'tali-uat', values: `${chart}/values-dev-uat.yaml`, url: 'http://localhost:38181', runner: 'http://localhost:38182' },
-    // A different host keeps the two consoles' sign-in cookies apart in one browser.
-    prod: { release: 'tali-guard-prod', namespace: 'tali-prod', values: `${chart}/values-dev-prod.yaml`, url: 'http://127.0.0.1:38281', runner: 'http://127.0.0.1:38282' },
-  },
-};
-const promotionStacks = Object.values(promotion.stacks);
-function capture(command, argv) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, argv, { cwd: root, env, stdio: ['ignore', 'pipe', 'inherit'] });
-    let output = '';
-    child.stdout.on('data', chunk => { output += chunk; });
-    child.on('error', reject);
-    child.on('exit', code => code === 0 ? resolve(output) : reject(new Error(`${command} ${argv.join(' ')} exited with ${code}`)));
-  });
-}
-const secretValue = async (stack, name, key) => Buffer.from(await capture('kubectl', ['--context', context, '-n', stack.namespace, 'get', 'secret', name, '-o', `jsonpath={.data.${key.replaceAll('.', '\\.')}}`]), 'base64').toString();
-async function deployPromotion(extra) {
-  const { uat, prod } = promotion.stacks;
-  const controllerImage = `${env.CONTROLLER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-controller'}:${promotion.tag}`;
-  const runnerImage = `${env.RUNNER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-runner'}:${promotion.tag}`;
-  if (env.PROMOTION_SKIP_IMAGES !== '1') {
-    env.CONTROLLER_IMAGE = controllerImage;
-    env.RUNNER_IMAGE = runnerImage;
-    await images();
-  }
-  for (const [stack, values] of [[uat, [uat.values]], [prod, [prod.values]]]) {
-    await run('bash', ['scripts/helm-upgrade.sh', stack.release, chart, context, stack.namespace,
-      '--values', devValues, ...values.flatMap(file => ['--values', file]),
-      '--set', `controller.image.repository=${controllerImage.slice(0, controllerImage.lastIndexOf(':'))}`, '--set-string', `controller.image.tag=${promotion.tag}`,
-      '--set', `runner.image.repository=${runnerImage.slice(0, runnerImage.lastIndexOf(':'))}`, '--set-string', `runner.image.tag=${promotion.tag}`,
-      '--set-string', `rolloutRevision=${env.HELM_ROLLOUT_REVISION ?? Date.now().toString()}`,
-      '--wait', '--timeout', env.HELM_TIMEOUT ?? '8m', ...extra]);
-  }
-  console.log(`UAT  ${uat.url}  (release ${uat.release}, namespace ${uat.namespace})`);
-  console.log(`PROD ${prod.url}  (release ${prod.release}, namespace ${prod.namespace})`);
-  console.log('Sign in to either with admin / password.');
-}
-/** End-to-end promotion regression against the deployed pair, through port-forwards to each database. */
+// Optional regression against two explicitly configured, isolated deployments.
+// Deployment lifecycle belongs to the single development profile above.
 async function testPromotion(extra) {
-  const forwards = [];
-  try {
-    const databases = {};
-    for (const [name, stack, port] of [['UAT', promotion.stacks.uat, 55481], ['PROD', promotion.stacks.prod, 55482]]) {
-      const fullname = stack.release;
-      const password = await secretValue(stack, `${fullname}-postgresql`, 'password');
-      const forward = spawn('kubectl', ['--context', context, '-n', stack.namespace, 'port-forward', `svc/${fullname}-postgresql`, `${port}:5432`], { stdio: 'ignore' });
-      forwards.push(forward);
-      databases[name] = `postgresql://guard:${encodeURIComponent(password)}@127.0.0.1:${port}/guard`;
-    }
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    Object.assign(env, {
-      GUARD_PROMOTION_WORKDIR: promotion.work,
-      GUARD_PROMOTION_UAT_URL: promotion.stacks.uat.url, GUARD_PROMOTION_UAT_RUNNER_URL: promotion.stacks.uat.runner,
-      GUARD_PROMOTION_PROD_URL: promotion.stacks.prod.url, GUARD_PROMOTION_PROD_RUNNER_URL: promotion.stacks.prod.runner,
-      GUARD_PROMOTION_UAT_DB: databases.UAT, GUARD_PROMOTION_PROD_DB: databases.PROD,
-      GUARD_PROMOTION_UAT_EMAIL: 'admin@tasklattice.local', GUARD_PROMOTION_PROD_EMAIL: 'admin@tasklattice.local', GUARD_PROMOTION_PASSWORD: env.GUARD_PROMOTION_PASSWORD ?? 'password',
-      GUARD_PROMOTION_RUNNER_TOKEN: await secretValue(promotion.stacks.prod, `${promotion.stacks.prod.release}-control`, 'runner-token'),
-    });
-    mkdirSync(`${promotion.work}/packages`, { recursive: true });
-    await run(process.execPath, ['--import', 'tsx', '../scripts/regress_guardrail_promotion.mjs', ...extra], false, `${root}controller`);
-  } finally {
-    forwards.forEach(forward => forward.kill());
+  for (const key of ['GUARD_PROMOTION_UAT_URL', 'GUARD_PROMOTION_UAT_RUNNER_URL',
+    'GUARD_PROMOTION_PROD_URL', 'GUARD_PROMOTION_PROD_RUNNER_URL',
+    'GUARD_PROMOTION_UAT_DB', 'GUARD_PROMOTION_PROD_DB',
+    'GUARD_PROMOTION_UAT_EMAIL', 'GUARD_PROMOTION_PROD_EMAIL',
+    'GUARD_PROMOTION_PASSWORD', 'GUARD_PROMOTION_RUNNER_TOKEN']) {
+    if (!env[key]) throw new Error(`Set ${key} for two isolated test deployments; test:promotion does not deploy or port-forward clusters.`);
   }
+  env.GUARD_PROMOTION_WORKDIR ??= `${root}.local-secrets/promotion`;
+  mkdirSync(`${env.GUARD_PROMOTION_WORKDIR}/packages`, { recursive: true });
+  await run(process.execPath, ['--import', 'tsx', '../scripts/regress_guardrail_promotion.mjs', ...extra], false, `${root}controller`);
 }
 async function deployLitellm(extra) {
   const image = litellmImage();
@@ -194,24 +143,14 @@ try {
       await run('kubectl', ['--context', context, '--namespace', namespace, 'get', 'pods,deploy,statefulset,service', '--selector', 'app.kubernetes.io/part-of=tasklattice-guard']); break;
     case 'helm-test': await run('helm', ['test', release, '--kube-context', context, '--namespace', namespace, '--logs', ...args]); break;
     case 'helm-delete': await run('helm', ['uninstall', release, '--kube-context', context, '--namespace', namespace, ...args]); break;
-    case 'promotion-deploy': await deployPromotion(args); break;
     case 'promotion-test': await testPromotion(args); break;
-    case 'promotion-status':
-      for (const stack of promotionStacks) {
-        await run('helm', ['status', stack.release, '--kube-context', context, '--namespace', stack.namespace, ...args]);
-        await run('kubectl', ['--context', context, '--namespace', stack.namespace, 'get', 'pods,service', '--selector', `app.kubernetes.io/instance=${stack.release}`]);
-      }
-      break;
-    case 'promotion-delete':
-      for (const stack of promotionStacks) await run('helm', ['uninstall', stack.release, '--kube-context', context, '--namespace', stack.namespace, ...args]);
-      break;
     case 'test-contracts':
       await run(process.execPath, ['--test', 'scripts/project-commands.test.mjs']);
       await run('.venv/bin/python', ['scripts/generate_control_protocol.py', '--check']);
       await run('.venv/bin/python', ['-m', 'pytest', '-q', '-m', 'contract', ...args]);
       await lint([]);
       for (const dashboard of ['overview', 'troubleshooting']) await run('jq', ['empty', `${chart}/grafana/dashboards/tasklattice-guard-${dashboard}.json`]);
-      for (const extra of [[], ['--set', 'observability.serviceMonitor.enabled=true', '--set', 'observability.prometheusRule.enabled=true', '--set', 'observability.grafanaDashboard.enabled=true'], ['--values', debugValues]]) await run('helm', ['template', release, chart, '--values', devValues, ...extra], true);
+      for (const extra of [[], ['--set', 'observability.serviceMonitor.enabled=true', '--set', 'observability.prometheusRule.enabled=true', '--set', 'observability.grafanaDashboard.enabled=true'], debugArgs()]) await run('helm', ['template', release, chart, '--values', devValues, ...extra], true);
       await run('helm', ['template', litellmRelease, litellmChart, '--values', litellmValues], true);
       break;
     default: throw new Error(`Unknown project command: ${action}`);

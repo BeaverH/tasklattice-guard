@@ -221,14 +221,18 @@ production profile: authenticated metrics scraping, SLO rules, alerts, and both
 Grafana dashboards are enabled, while full tracing and continuous profiling are
 disabled.
 
-Add [`values-debug.yaml`](../charts/tali-guard/values-debug.yaml) for a bounded
-production troubleshooting window:
+Use the debug settings documented in [`values.yaml`](../charts/tali-guard/values.yaml)
+for a bounded production troubleshooting window:
 
 ```bash
 helm upgrade --install tali-guard ./charts/tali-guard \
   --namespace guard-system \
   --values ./values-company-production.yaml \
-  --values ./charts/tali-guard/values-debug.yaml \
+  --set observability.performanceDebug.enabled=true \
+  --set-string observability.tracing.otlpEndpoint=http://tempo.monitoring.svc.cluster.local:4318 \
+  --set-string observability.profiling.serverAddress=http://pyroscope.monitoring.svc.cluster.local:4040 \
+  --set-string observability.serviceMonitor.labels.release=monitoring \
+  --set-string observability.prometheusRule.labels.release=monitoring \
   --wait --timeout 15m
 ```
 
@@ -238,7 +242,7 @@ Troubleshooting dashboards. Tempo and Pyroscope addresses are deliberately
 required rather than inferred. Disable the preset after the investigation to
 remove the full-sampling overhead; explicitly enabled individual observability
 components remain active. The preset never changes GuardRail runtime logging
-or content-capture settings. Its default Tempo/Pyroscope addresses and
+or content-capture settings. The example Tempo/Pyroscope addresses and
 `release: monitoring` selectors are intended for the repository's local stack;
 override them when production uses another namespace or Helm release name.
 

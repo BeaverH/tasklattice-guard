@@ -38,7 +38,7 @@ def litellm_config(docs: list[dict]) -> dict:
 
 def test_product_chart_carries_no_litellm_resources():
     output = subprocess.run(
-        ["helm", "template", "tali-guard", str(GUARD_CHART), "--namespace", "tali", "--values", str(GUARD_CHART / "values-dev.yaml")],
+        ["helm", "template", "tali-guard", str(GUARD_CHART), "--namespace", "tali", "--values", str(GUARD_CHART / "values-dev-uat.yaml")],
         check=True, capture_output=True, text=True,
     ).stdout
     assert "litellm" not in output.lower()

@@ -1,4 +1,4 @@
-# Internal defaults. Normal deployments configure only controlTls.enabled and the administrator.
+# Internal credential defaults. Public TLS/admin defaults live in values.yaml.
 bootstrap:
   enabled: true
 customCa:
@@ -9,10 +9,7 @@ metrics:
   tokenKey: metrics-token
 bootstrapAdmin:
   existingSecret: ''
-  email: ''
   password: ''
-  passwordHash: ''
-  name: Administrator
   emailKey: email
   passwordKey: password
   passwordHashKey: password-hash
@@ -31,7 +28,6 @@ artifactSigning:
   privateKeyKey: private-key.pem
   publicKeyKey: public-key.pem
 controlTls:
-  enabled: true
   existingSecret: ''
   autoGenerate: true
   caKey: ca.crt

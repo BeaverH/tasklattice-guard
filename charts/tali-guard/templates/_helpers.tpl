@@ -2,20 +2,28 @@
 {{- define "tali-guard.defaults" -}}
 {{- $values := mergeOverwrite (.Files.Get "files/runtime-defaults.yaml" | fromYaml) .Values -}}
 {{- $_ := set . "Values" $values -}}
-{{- if not .Values.controller.trustedOrigins -}}
-{{- $origins := list -}}
-{{- range (include "tali-guard.publicUrls" . | fromJsonArray) -}}
-{{- $url := urlParse . -}}
-{{- $origins = append $origins (printf "%s://%s" $url.scheme $url.host) -}}
-{{- end -}}
-{{- $_ := set .Values.controller "trustedOrigins" (uniq $origins) -}}
-{{- end -}}
 {{- include "tali-guard.securityDefaults" . -}}
 {{- end }}
 
-{{/* Retain string compatibility; the first URL is the canonical auth base URL. */}}
+{{/* Match browser Origin serialization: lowercase host and omit default ports. */}}
+{{- define "tali-guard.sharedPublicUrl" -}}
+{{- if .Values.publicUrl -}}
+{{- $url := urlParse .Values.publicUrl -}}
+{{- $host := lower $url.host -}}
+{{- if eq $url.scheme "https" -}}
+{{- $host = regexReplaceAll ":443$" $host "" -}}
+{{- else -}}
+{{- $host = regexReplaceAll ":80$" $host "" -}}
+{{- end -}}
+{{- printf "%s://%s" $url.scheme $host -}}
+{{- end -}}
+{{- end }}
+
+{{/* Shared URL takes precedence over legacy Controller-only URLs. */}}
 {{- define "tali-guard.publicUrls" -}}
-{{- if kindIs "string" .Values.controller.publicUrl -}}
+{{- if .Values.publicUrl -}}
+{{- toJson (list (include "tali-guard.sharedPublicUrl" .)) -}}
+{{- else if kindIs "string" .Values.controller.publicUrl -}}
 {{- toJson (list .Values.controller.publicUrl) -}}
 {{- else -}}
 {{- toJson .Values.controller.publicUrl -}}
@@ -24,6 +32,25 @@
 
 {{- define "tali-guard.primaryPublicUrl" -}}
 {{- first (include "tali-guard.publicUrls" . | fromJsonArray) -}}
+{{- end }}
+
+{{/* Always trust the shared UI origin; preserve legacy override semantics
+     when publicUrl is empty. Compute without caching derived values in .Values. */}}
+{{- define "tali-guard.trustedOrigins" -}}
+{{- $origins := list -}}
+{{- if or .Values.publicUrl (not .Values.controller.trustedOrigins) -}}
+{{- range (include "tali-guard.publicUrls" . | fromJsonArray) -}}
+{{- $url := urlParse . -}}
+{{- $origins = append $origins (printf "%s://%s" $url.scheme $url.host) -}}
+{{- end -}}
+{{- end -}}
+{{- $origins = concat $origins (default (list) .Values.controller.trustedOrigins) -}}
+{{- toJson (uniq $origins) -}}
+{{- end }}
+
+{{/* Public advertising only. Internal calls never use this URL. */}}
+{{- define "tali-guard.runtimePublicUrl" -}}
+{{- .Values.runner.publicUrl | default (include "tali-guard.sharedPublicUrl" .) -}}
 {{- end }}
 
 {{- define "tali-guard.ingressHosts" -}}
@@ -279,7 +306,8 @@ data:
   CONTROLLER_GRPC_TRANSPORT: {{ ternary "mtls" "plaintext" .Values.security.controlTls.enabled | quote }}
   CONTROLLER_PUBLIC_URL: {{ include "tali-guard.primaryPublicUrl" . | quote }}
   CONTROLLER_RUNTIME_SERVICE_URL: {{ include "tali-guard.defaultRuntimeServiceUrl" . | quote }}
-  BETTER_AUTH_TRUSTED_ORIGINS: {{ join "," .Values.controller.trustedOrigins | quote }}
+  CONTROLLER_RUNTIME_PUBLIC_URL: {{ include "tali-guard.runtimePublicUrl" . | quote }}
+  BETTER_AUTH_TRUSTED_ORIGINS: {{ include "tali-guard.trustedOrigins" . | fromJsonArray | join "," | quote }}
   BETTER_AUTH_MIN_PASSWORD_LENGTH: {{ .Values.controller.auth.minPasswordLength | quote }}
   CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS: {{ .Values.controller.auth.allowLocalDefaultCredentials | quote }}
 {{- end }}

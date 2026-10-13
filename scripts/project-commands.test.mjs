@@ -42,7 +42,13 @@ for (const action of ['helm-deploy', 'helm-deploy-debug']) {
     assert.ok(calls[3].args.includes('--wait'));
     assert.equal(calls[3].args[calls[3].args.indexOf('--timeout') + 1], '5m');
     assert.ok(calls[3].args.includes('rolloutRevision=regression'));
-    assert.equal(calls[3].args.includes('charts/tali-guard/values-debug.yaml'), action.endsWith('debug'));
+    assert.deepEqual(calls[3].args.filter((arg, index, args) => args[index - 1] === '--values'), ['charts/tali-guard/values-dev-uat.yaml', '/tmp/values with spaces.yaml']);
+    assert.equal(calls[3].args.includes('observability.performanceDebug.enabled=true'), action.endsWith('debug'));
+    if (action.endsWith('debug')) {
+      assert.ok(calls[3].args.includes('observability.tracing.otlpEndpoint=http://tempo.monitoring.svc.cluster.local:4318'));
+      assert.ok(calls[3].args.includes('observability.profiling.serverAddress=http://pyroscope.monitoring.svc.cluster.local:4040'));
+      assert.ok(calls[3].args.includes('observability.serviceMonitor.labels.release=monitoring'));
+    }
     assert.equal(calls.some(call => call.args.includes('create') && call.args.includes('secret')), false);
   });
 }
@@ -146,6 +152,42 @@ test('render does not build images or call the cluster', t => {
   assert.equal(f.run('helm-template').status, 0);
   assert.equal(f.calls().length, 1);
   assert.deepEqual(f.calls()[0].args.slice(0, 3), ['template', 'tali-guard', 'charts/tali-guard']);
+  assert.ok(f.calls()[0].args.includes('charts/tali-guard/values-dev-uat.yaml'));
+});
+test('development values and debug backend overrides reach Helm before explicit user flags', t => {
+  const f = fixture(t);
+  const result = f.run('helm-deploy-debug', ['--set-string', 'observability.tracing.otlpEndpoint=http://explicit:4318'], {
+    HELM_DEV_VALUES: '/tmp/custom uat.yaml',
+    HELM_OTLP_ENDPOINT: 'http://collector:4318',
+    HELM_PYROSCOPE_ADDRESS: 'http://profiler:4040',
+    HELM_MONITORING_RELEASE: 'uat-monitoring',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const args = f.calls()[3].args;
+  assert.deepEqual(args.filter((arg, index) => args[index - 1] === '--values'), ['/tmp/custom uat.yaml']);
+  assert.ok(args.includes('observability.tracing.otlpEndpoint=http://collector:4318'));
+  assert.ok(args.includes('observability.profiling.serverAddress=http://profiler:4040'));
+  assert.ok(args.includes('observability.serviceMonitor.labels.release=uat-monitoring'));
+  assert.ok(args.includes('observability.prometheusRule.labels.release=uat-monitoring'));
+  assert.deepEqual(args.slice(-2), ['--set-string', 'observability.tracing.otlpEndpoint=http://explicit:4318']);
+});
+test('lint covers default, UAT and debug settings without an additional Guard values file', t => {
+  const f = fixture(t);
+  const result = f.run('helm-lint');
+  assert.equal(result.status, 0, result.stderr);
+  const calls = f.calls();
+  assert.ok(calls.every(call => call.command === 'helm' && call.args[0] === 'lint'));
+  const guardCalls = calls.filter(call => call.args[1] === 'charts/tali-guard');
+  assert.equal(guardCalls.length, 4);
+  assert.ok(guardCalls[3].args.includes('observability.performanceDebug.enabled=true'));
+  assert.deepEqual(guardCalls.flatMap(call => call.args.filter((arg, i) => call.args[i - 1] === '--values')), Array(3).fill('charts/tali-guard/values-dev-uat.yaml'));
+});
+test('promotion regression requires explicit deployments before invoking any command', t => {
+  const f = fixture(t);
+  const result = f.run('promotion-test', [], { GUARD_PROMOTION_UAT_URL: '' });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Set GUARD_PROMOTION_UAT_URL/);
+  assert.throws(() => f.calls(), { code: 'ENOENT' });
 });
 test('developer env loading preserves explicit shell overrides', () => {
   const root = mkdtempSync(join(tmpdir(), 'guard-env-load-'));

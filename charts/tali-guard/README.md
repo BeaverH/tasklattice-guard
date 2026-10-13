@@ -27,49 +27,176 @@ Guard application components.
 | Development Redis | `redis:7.4-alpine` | Included locally to support scaling beyond one Runner |
 | Redis | `runner.callContextRedisUrl` | Only when any Runner pool has more than one replica |
 
-Endpoint setup instructions always target the stable Runtime Service through
-its canonical in-cluster DNS name:
-`http://<service>.<namespace>.svc.cluster.local:<service-port>`. Helm derives
-the service, namespace, and port from the release. The endpoint contains no
-Runner Pod or instance identity, never points at `controller.publicUrl`, and
-does not require a manually maintained hostname.
+Set top-level `publicUrl` once to configure the shared UI/Endpoint address and
+Better Auth trusted origin. `runner.publicUrl` is only needed for a different
+data-plane domain or deployment prefix and takes precedence for Endpoint setup.
+If both are empty, Endpoint setup uses the stable Runtime Service DNS name:
+`http://<service>.<namespace>.svc.cluster.local:8091`. Helm derives the service
+and namespace from the release. The endpoint contains no Runner Pod identity.
+The Controller's internal calls (including Playground) always use Service DNS,
+independently of the advertised URL. Legacy `controller.publicUrl` still configures
+UI/auth when the shared `publicUrl` is empty.
 
 LiteLLM stores that Endpoint base URL and appends its Basic Guardrail API
 suffix (`/beta/litellm_basic_guardrail_api`) for runtime callbacks. Runner
 implements that contract directly; Controller remains outside the request path.
 
+Scan uses the same Endpoint base URL and appends `/backend/v1/scans`; its Bearer
+credential must belong to the Endpoint UUID in the path. The chart's optional
+Ingress routes `/runtime/v1/endpoints` to Runtime for both protocols. An external
+VirtualService should route `/runtime/v1/endpoints/` to the Runtime Service on
+8091 before its Controller catch-all rule. The old root `/backend/v1/scans` route
+is no longer served.
+
+### Share the UI domain and port with runtime requests
+
+Use this minimal environment override with the chart defaults (namespace `uat`):
+
+```yaml
+fullnameOverride: tali-guard-uat
+publicUrl: https://guard-uat.example.com:8443
+runner:
+  callContextRedisUrl: redis://redis.uat.svc.cluster.local:6379/0
+database:
+  existingSecret: tali-guard-uat-database
+security:
+  bootstrapAdmin:
+    existingSecret: tali-guard-uat-bootstrap-admin
+observability:
+  serviceMonitor: { enabled: false }
+  prometheusRule: { enabled: false }
+  grafanaDashboard: { enabled: false }
+```
+
+`publicUrl` is the browser-facing HTTP(S) origin: scheme, hostname and optional
+port, without credentials, path, query or fragment. Host casing, default ports
+(HTTP 80 / HTTPS 443) and an optional trailing slash are normalized to match the
+browser's Origin. It sets the UI/auth base URL, the advertised runtime base URL and the
+trusted browser origin together; no duplicate `controller.publicUrl`,
+`runner.publicUrl` or `controller.trustedOrigins` is needed. It overrides the
+local Controller URLs in `values-dev-uat.yaml`. Remove a previously configured
+`runner.publicUrl` when adopting the shared address (that field remains an
+explicit data-plane override). The Controller appends the Endpoint UUID and
+protocol path:
+
+- Scan: `https://guard-uat.example.com:8443/runtime/v1/endpoints/<uuid>/backend/v1/scans`
+- LiteLLM: `https://guard-uat.example.com:8443/runtime/v1/endpoints/<uuid>/beta/litellm_basic_guardrail_api`
+
+Use the standalone [VirtualService example](examples/virtualservice-shared-host.yaml)
+with the snippet above. It uses the chart's defaults directly and
+assumes namespace `uat`, existing PostgreSQL and Redis, and two existing Secrets
+in that namespace:
+
+| Example Secret | Required keys |
+| --- | --- |
+| `tali-guard-uat-database` | `database-url`: PostgreSQL connection URL |
+| `tali-guard-uat-bootstrap-admin` | `email`, `name`, and either `password` or `password-hash` |
+
+Replace the Secret names and Redis URL with your environment's values. The
+example inherits ClusterIP Services, disabled Ingress, two Runner replicas,
+internal mTLS and automatic internal credentials. Monitoring integrations are
+disabled so it does not require Prometheus Operator/Grafana; omit its
+`observability` block if your UAT uses those integrations. Images and resource
+settings inherit chart defaults; retain environment-specific overrides as needed.
+
+Replace the host, namespace, Gateway reference and destination Service names with your UAT
+values. Keep existing release/Service naming when upgrading. Merge the data-plane
+rule **before the catch-all** in the VirtualService already serving the UI; do
+not create a competing catch-all for the same host. The chart does not install
+this example automatically.
+
+For the example naming, the rendered Controller configuration is:
+
+```text
+CONTROLLER_PUBLIC_URL=https://guard-uat.example.com:8443
+BETTER_AUTH_TRUSTED_ORIGINS=https://guard-uat.example.com:8443
+CONTROLLER_RUNTIME_PUBLIC_URL=https://guard-uat.example.com:8443
+CONTROLLER_RUNTIME_SERVICE_URL=http://tali-guard-uat-runtime.uat.svc.cluster.local:8091
+```
+
+Runner callbacks and gRPC also continue to use the Controller Service on ports
+8080 and 9090. No internal URL override is needed.
+
+The existing Gateway and ingress load balancer must expose the chosen external
+port (`8443` here); `VirtualService.hosts` contains only the hostname. TLS must
+terminate at the Gateway or an upstream proxy so HTTP paths are available for
+routing. The example sends the complete path unchanged to Runtime port `8091`
+and all remaining UI/API paths to Controller port `8080`. It disables runtime
+proxy retries and the route timeout to support LiteLLM WebSocket streams;
+Runner/client deadlines and any gateway idle timeout still apply. See the
+[Istio VirtualService reference](https://istio.io/latest/docs/reference/config/networking/virtual-service/).
+
+For a separate runtime deployment prefix, override `runner.publicUrl`
+(such as `https://runtime.example.com/guard`), also
+match that prefix at the gateway and remove **only** `/guard` before forwarding;
+preserve `/runtime/v1/endpoints/<uuid>/...`. The example above needs no rewrite.
+
+Without Helm, configure `CONTROLLER_RUNTIME_PUBLIC_URL` on the Controller for
+the advertised address and retain `CONTROLLER_RUNTIME_SERVICE_URL` for internal
+calls. An empty public URL keeps the previous Service-address behavior. Restart
+the Controller after environment changes; Helm config changes trigger its
+rollout automatically. Existing Endpoint IDs and credentials do not change;
+reloading their details returns the newly configured address.
+
 Production image repositories/tags, dependency contracts, and low-overhead
 metrics defaults live in [`values.yaml`](values.yaml).
-[`values-debug.yaml`](values-debug.yaml) is the full Trace/Profile overlay. The
-self-contained OrbStack/local profile lives in [`values-dev.yaml`](values-dev.yaml).
+The only development/UAT profile is [`values-dev-uat.yaml`](values-dev-uat.yaml).
+It preserves the local `tali-guard` release in namespace `tali` on ports
+38081/38082; it does not create a separate migration target.
 
 ## Everyday values and advanced overrides
 
-`values.yaml` contains the normal deployment settings. Internal defaults load
-without another `--values` file. Use `values-dev.yaml` for local public Services
-and moving-image rollout revisions. `values-advanced.yaml` documents optional
-SLO, sampling, password policy, and Pod security overrides; copy only the fields
-needed by your environment. Existing advanced overrides remain supported.
+`values.yaml` is the complete deployment reference, including commented examples
+for external URLs, Secrets, local Services, monitoring/debugging, SLOs and Pod
+security. Internal defaults load automatically. Use `values-dev-uat.yaml` as the
+only development override. There are no separate advanced, debug or migration
+profiles; copy just the settings your environment needs from `values.yaml`.
 
-`controller.publicUrl` accepts a non-empty string array (or a legacy single
-string). The first entry is Better Auth's canonical base URL. All entries supply
-trusted origins (scheme, host and port); duplicates and URL paths are removed
-from the origin list. Ingress creates a rule for each distinct hostname:
+The chart owns deployment, service exposure, infrastructure dependencies and
+platform observability. Adapter behavior uses application defaults. The old
+`runner.scan.maxBodyBytes` and `runner.scan.timeoutSeconds` values are ignored
+and should be removed from environment overrides; the chart no longer injects
+Scan environment variables. Runner currently defaults to a 1 MiB request body
+and a 25-second Scan timeout. UI controls for those limits are separate work.
+
+The development values list only overrides. Images, ports, dependency defaults
+and security defaults are inherited; the debug CLI adds telemetry settings to
+the same development values, without another values file.
+
+For ordinary shared-domain deployments, use just:
 
 ```yaml
-controller:
-  publicUrl:
-    - https://guard.company.com
-    - https://guard-test.company.com
+publicUrl: https://guard.company.com:8443
 ```
 
-For local development, the profile includes both `http://localhost:38081` and
-`http://localhost:8092` for the UI dev server. Explicit
-`controller.trustedOrigins` replaces the derived list; explicit `ingress.host`
-replaces the derived Ingress hostnames. Existing release values can retain these
-overrides; remove stale overrides when changing public URLs. Additional trusted
-origins do not change the canonical auth URL or share sessions across domains.
-Ingress TLS certificates still need to cover the configured hostnames.
+Better Auth's trusted origin and Ingress host are derived automatically. Its
+origin check includes scheme and port; the gateway's internal Service destination
+is not a browser origin. `publicUrl` is always included even when extra browser
+origins are supplied through `controller.trustedOrigins`. That field does not
+change the canonical auth URL or share sessions across domains.
+
+For a separate data-plane domain, add only the override:
+
+```yaml
+publicUrl: https://guard.company.com
+runner:
+  publicUrl: https://runtime.company.com
+```
+
+Legacy UI-only/multi-URL configurations remain supported when top-level
+`publicUrl` is empty. `controller.publicUrl` accepts a non-empty string array or
+a single string; the first entry is Better Auth's canonical base URL. All entries
+derive trusted origins (scheme, host, port) and distinct Ingress hosts. Without
+a shared URL, an explicit `controller.trustedOrigins` continues to replace the
+derived list for compatibility. The local development profile uses this mode
+for `http://localhost:38081` and the UI dev server `http://localhost:8092`, while
+Endpoint setup defaults to internal Service DNS.
+
+Explicit `ingress.host` still replaces derived Ingress hostnames. Remove stale
+host/origin overrides when changing environments. Ingress TLS certificates must
+cover the configured hostnames. Changing `publicUrl` updates the Controller
+configuration and triggers its rollout; the gateway must already route the new
+hostname and data-plane paths.
 
 Controller and Runner image tags default to `Chart.appVersion`;
 explicit `controller.image.tag` / `runner.image.tag` still take precedence.
@@ -85,8 +212,8 @@ credential initialization Job uses its own dedicated ServiceAccount.
 ## OrbStack/local installation
 
 The development profile contains explicitly marked local-only credentials,
-enables single-node PostgreSQL plus Redis infrastructure, and uses plaintext
-gRPC with Runner Token authentication. A Helm bootstrap Job generates signing
+enables single-node PostgreSQL plus Redis infrastructure, and inherits mTLS
+with Runner Token authentication. A Helm bootstrap Job generates signing
 keys and internal tokens directly in Kubernetes; rendering contains no private keys.
 Its baseline login is username `admin` and password `password`. Controller maps
 the username to the internal Better Auth email `admin@tasklattice.local`.
@@ -110,9 +237,12 @@ enabled, use the Debug overlay entry point:
 npm run helm:deploy:dev:debug
 ```
 
-This is equivalent to applying `values-dev.yaml` followed by
-`values-debug.yaml`; it preserves the separation between local infrastructure
-and temporary observability overhead.
+Both commands use `values-dev-uat.yaml`. The debug command additionally enables
+`observability.performanceDebug` and supplies Tempo/Pyroscope URLs and monitoring
+selector labels through Helm flags. Override its local defaults using
+`HELM_OTLP_ENDPOINT`, `HELM_PYROSCOPE_ADDRESS`, and `HELM_MONITORING_RELEASE`;
+use `--set` for the debug switch and `--set-string` for backend/label overrides
+after `--` to replace these CLI defaults. `HELM_DEBUG_VALUES` is retired.
 
 The install target does not read model configuration or credentials from the
 repository `.env` and does not create Provider Secrets. Register models,
@@ -123,7 +253,7 @@ The deployment helper can also be used after `npm run images:build:dev`:
 
 ```bash
 bash scripts/helm-upgrade.sh tali-guard ./charts/tali-guard orbstack tali \
-  --values ./charts/tali-guard/values-dev.yaml \
+  --values ./charts/tali-guard/values-dev-uat.yaml \
   --wait --timeout 5m
 ```
 
@@ -213,8 +343,8 @@ Create `guard-control-tls` with these keys:
 - `runner.crt` and `runner.key` for the Runner client certificate
 
 The Controller certificate must be valid for the Controller Service DNS name.
-Both certificates must chain to `ca.crt`. Production intentionally requires an
-externally managed Secret instead of auto-generating a private CA.
+Both certificates must chain to `ca.crt`. Providing this external Secret replaces
+the chart's automatic CA/certificate initialization for this installation.
 
 If the Controller and Runners connect to HTTPS model Providers whose server
 certificates are issued by a private CA, create a Secret containing the PEM CA
@@ -283,8 +413,9 @@ Identical versions are skipped; conflicting immutable content is rejected.
 Old `controller.promotion.export` and `controller.promotion.trust` values are
 ignored and no longer mounted into the Controller.
 
-`values-dev-uat.yaml` and `values-dev-prod.yaml` provide an optional local pair
-(`npm run helm:deploy:promotion`) without extra package configuration.
+Development uses only `values-dev-uat.yaml`; there is no separate migration
+target profile or pair-deployment command. Import/export works between any
+ordinary installations.
 For automated initial provisioning only, `controller.promotion.baselinePackage`
 can still mount a Default package at startup; ordinary file import/export does
 not use this setting.
@@ -292,7 +423,7 @@ not use this setting.
 ## Scaling contract
 
 Controller remains one replica in this chart version. GuardRails 0 defaults to
-one StatefulSet replica in `values-dev.yaml` and two in production `values.yaml`,
+one StatefulSet replica in `values-dev-uat.yaml` and two in production `values.yaml`,
 with a minimum of one replica and `minAvailable: 1`; the production Pods are
 `<release>-tali-guard-runner-0` and `-1`. Scale the data plane with
 `runner.default.replicaCount` and `runner.pools`. Production must set
@@ -303,9 +434,9 @@ generation across Pods. The development profile provides its own Redis.
 Every Runner pool gets a stable logical Runtime Service; individual Pod names
 are never part of the upstream contract. Kubernetes performs ordinary balancing
 with no session affinity. Input/output consistency comes from `call_id` and the
-required shared Redis context when a pool has multiple replicas. Controller
-Ingress exposes only the management UI/API, and protected runtime traffic never
-traverses Controller.
+required shared Redis context when a pool has multiple replicas. The optional
+Ingress routes `/runtime/v1/endpoints` directly to Runtime and other paths to
+Controller UI/API; protected runtime traffic never traverses Controller.
 
 Each pool also gets a private headless governing Service for StatefulSet network
 identity. Upstream endpoints continue to use only the load-balanced Runtime
@@ -321,14 +452,18 @@ Prometheus Operator and Grafana dashboard sidecar are therefore part of the
 production platform contract; set their selector labels under
 `serviceMonitor.labels` and `prometheusRule.labels` when required.
 
-For an on-demand, full Runner performance-debug deployment, add the debug
-profile after the private environment profile:
+For an on-demand, full Runner performance-debug deployment, override the
+telemetry settings on your environment values:
 
 ```bash
 helm upgrade --install tali-guard ./charts/tali-guard \
   --namespace guard-system \
   --values ./values-company-production.yaml \
-  --values ./charts/tali-guard/values-debug.yaml \
+  --set observability.performanceDebug.enabled=true \
+  --set-string observability.tracing.otlpEndpoint=http://tempo.monitoring.svc.cluster.local:4318 \
+  --set-string observability.profiling.serverAddress=http://pyroscope.monitoring.svc.cluster.local:4040 \
+  --set-string observability.serviceMonitor.labels.release=monitoring \
+  --set-string observability.prometheusRule.labels.release=monitoring \
   --wait --timeout 15m
 ```
 
@@ -339,10 +474,10 @@ every request can be followed from a latency exemplar to Tempo and Pyroscope.
 Helm rejects the deployment if either backend address is missing.
 
 The preset intentionally does not change per-GuardRail runtime logging levels
-or enable content capture. In production it defaults to `false`. Removing the
-debug overlay returns to production behavior: metrics, SLO rules, alerts, and
-dashboards stay enabled, while full Trace/Profile collection stops. The debug
-profile targets Tempo and Pyroscope in the `monitoring` namespace and uses
+or enable content capture. In production it defaults to `false`. Setting the
+preset back to `false` returns to production behavior: metrics, SLO rules, alerts, and
+dashboards stay enabled, while full Trace/Profile collection stops. The example
+targets Tempo and Pyroscope in the `monitoring` namespace and uses
 `release: monitoring`; override those values for a differently named stack.
 
 `observability.slo` configures per-GuardRail availability, latency, complete
@@ -454,9 +589,9 @@ Hook RBAC can remain after uninstall. ArgoCD maps Helm initialization hooks to
 use a full sync, since selective sync does not execute hooks.
 
 To use plaintext gRPC, set only `security.controlTls.enabled: false`; Runner Token
-authentication and artifact signatures stay enabled. The local `values-dev.yaml`
-already selects that mode and includes a bootstrap password hash and dependencies.
-Set it to `true` to enable automatic mTLS without any other certificate settings.
+authentication and artifact signatures stay enabled. The local `values-dev-uat.yaml`
+inherits the default mTLS mode and includes a bootstrap password hash and dependencies.
+Automatic mTLS needs no other certificate settings.
 
 The initialization Job, PostgreSQL readiness init container, and Helm test Pod
 share `controller.image`, its pull policy, and `imagePullSecrets`. The Helm test

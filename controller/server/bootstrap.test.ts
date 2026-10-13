@@ -19,7 +19,7 @@ function fixture(existing = false) {
 
 describe("bootstrap credential import", () => {
   it("the development Values hash accepts the configured initial password", async () => {
-    const values = await readFile(new URL("../../charts/tali-guard/values-dev.yaml", import.meta.url), "utf8");
+    const values = await readFile(new URL("../../charts/tali-guard/values-dev-uat.yaml", import.meta.url), "utf8");
     const hash = values.match(/passwordHash: "([a-f0-9:]+)"/)?.[1];
     expect(hash).toBeTruthy();
     expect(await verifyPassword({ hash: hash!, password: "password" })).toBe(true);

@@ -4,13 +4,13 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 CHART = ROOT / "charts" / "tali-guard"
-DEV_VALUES = CHART / "values-dev.yaml"
+DEV_VALUES = CHART / "values-dev-uat.yaml"
 DEFAULT_VALUES = CHART / "values.yaml"
-DEBUG_VALUES = CHART / "values-debug.yaml"
 REQUIRED = (
     "--set", "database.url=postgresql://guard:guard@postgres:5432/guard",
     "--set", "security.artifactSigning.existingSecret=artifact-signing",
@@ -97,18 +97,10 @@ def test_normal_security_configuration_needs_no_generated_credential_details():
                     assert all(key["key"] != "ca.key" for key in volume["secret"]["items"])
 
 
-def test_debug_values_explicitly_enable_every_performance_debug_component():
-    debug = load_values(DEBUG_VALUES)["observability"]
-
-    assert debug["performanceDebug"]["enabled"] is True
-    assert debug["tracing"]["enabled"] is True
-    assert debug["tracing"]["sampleRatio"] == 1.0
-    assert debug["tracing"]["otlpEndpoint"]
-    assert debug["profiling"]["enabled"] is True
-    assert debug["profiling"]["serverAddress"]
-    assert debug["serviceMonitor"]["enabled"] is True
-    assert debug["prometheusRule"]["enabled"] is True
-    assert debug["grafanaDashboard"]["enabled"] is True
+@pytest.mark.parametrize("setting", ["controlTls.enabled", "bootstrapAdmin.name"])
+def test_required_public_security_defaults_cannot_be_deleted(setting):
+    error = render_error("--set", f"security.{setting}=null")
+    assert setting.split(".")[-1] in error
 
 
 def test_minimum_install_has_controller_and_two_stable_guardrails_zero_runners():
@@ -155,6 +147,7 @@ def test_controller_and_runner_have_distinct_images_ports_and_responsibilities()
     assert controller_env["CONTROLLER_RUNTIME_SERVICE_URL"]["value"] == (
         "http://contract-tali-guard-runtime.default.svc.cluster.local:8091"
     )
+    assert controller_env["CONTROLLER_RUNTIME_PUBLIC_URL"]["value"] == ""
     assert controller_env["BETTER_AUTH_MIN_PASSWORD_LENGTH"]["value"] == "12"
     assert controller_env["CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS"]["value"] == "false"
     assert "GUARD_CONTROLLER_TARGET" in runner_env
@@ -243,9 +236,15 @@ def test_runner_trace_and_profile_backends_are_explicit_and_independently_enable
     assert environment["GUARD_PYROSCOPE_SAMPLE_RATE"] == "200"
 
 
-def test_performance_debug_is_one_switch_for_full_runner_observability():
-    documents = render("--values", str(DEBUG_VALUES))
-    runner = next(item for item in documents if item.get("kind") == "StatefulSet")
+@pytest.mark.parametrize("render_profile", [render, render_dev], ids=["production", "development"])
+def test_performance_debug_is_one_switch_for_full_runner_observability(render_profile):
+    documents = render_profile(
+        "--set", "observability.performanceDebug.enabled=true",
+        "--set", "observability.tracing.otlpEndpoint=http://tempo.monitoring.svc.cluster.local:4318",
+        "--set", "observability.profiling.serverAddress=http://pyroscope.monitoring.svc.cluster.local:4040",
+    )
+    runner = next(item for item in documents if item.get("kind") == "StatefulSet"
+                  and item["metadata"]["labels"]["app.kubernetes.io/component"] == "runner")
     environment = {
         item["name"]: item["value"]
         for item in runner["spec"]["template"]["spec"]["containers"][0]["env"]
@@ -375,6 +374,121 @@ def test_guardrails_zero_cannot_drop_below_one_replica():
     assert "GuardRails 0" in result.stderr or "minimum: got 0, want 1" in result.stderr
 
 
+def test_runtime_public_url_changes_advertising_and_controller_rollout_only():
+    baseline = render("--namespace", "uat")
+    documents = render("--namespace", "uat", "--set", "runner.publicUrl=https://guard-uat.example.com:8443/base/")
+    config = controller_config(documents)["data"]
+    assert config["CONTROLLER_RUNTIME_PUBLIC_URL"] == "https://guard-uat.example.com:8443/base/"
+    assert config["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://contract-tali-guard-runtime.uat.svc.cluster.local:8091"
+    assert config["CONTROLLER_PUBLIC_URL"] == controller_config(baseline)["data"]["CONTROLLER_PUBLIC_URL"]
+    before = next(doc for doc in baseline if doc["kind"] == "Deployment")
+    after = next(doc for doc in documents if doc["kind"] == "Deployment")
+    assert before["spec"]["template"]["metadata"]["annotations"]["checksum/controller-config"] != after["spec"]["template"]["metadata"]["annotations"]["checksum/controller-config"]
+    env = resolved_environment(documents, after["spec"]["template"]["spec"]["containers"][0])
+    assert env["CONTROLLER_RUNTIME_PUBLIC_URL"]["value"] == config["CONTROLLER_RUNTIME_PUBLIC_URL"]
+    assert [doc for doc in baseline if doc["kind"] in {"Service", "StatefulSet"}] == [doc for doc in documents if doc["kind"] in {"Service", "StatefulSet"}]
+
+
+def test_runtime_public_url_rejects_invalid_base_addresses():
+    for value in ("guard.test", "https://", "ftp://guard.test", "https://user:password@guard.test", "https://guard.test?key=secret", "https://guard.test/#fragment"):
+        assert "publicUrl" in render_error("--set-string", f"runner.publicUrl={value}")
+
+
+@pytest.mark.parametrize(("public_url", "origin"), [
+    ("https://guard-uat.example.com:8443", "https://guard-uat.example.com:8443"),
+    ("https://guard-uat.example.com:8443/", "https://guard-uat.example.com:8443"),
+    ("https://Guard-UAT.example.com:443/", "https://guard-uat.example.com"),
+    ("http://Guard-UAT.example.com:80/", "http://guard-uat.example.com"),
+])
+def test_shared_public_url_updates_ui_auth_and_runtime_without_changing_internal_services(public_url, origin):
+    baseline = render("--namespace", "uat")
+    documents = render("--namespace", "uat", "--set-string", f"publicUrl={public_url}")
+    config = controller_config(documents)["data"]
+    assert config["CONTROLLER_PUBLIC_URL"] == origin
+    assert config["CONTROLLER_RUNTIME_PUBLIC_URL"] == config["CONTROLLER_PUBLIC_URL"]
+    assert config["BETTER_AUTH_TRUSTED_ORIGINS"] == config["CONTROLLER_PUBLIC_URL"]
+    assert config["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://contract-tali-guard-runtime.uat.svc.cluster.local:8091"
+    assert [doc for doc in documents if doc["kind"] in {"Service", "StatefulSet"}] == [
+        doc for doc in baseline if doc["kind"] in {"Service", "StatefulSet"}
+    ]
+    before = next(doc for doc in baseline if doc["kind"] == "Deployment")
+    after = next(doc for doc in documents if doc["kind"] == "Deployment")
+    assert before["spec"]["template"]["metadata"]["annotations"]["checksum/controller-config"] != after["spec"]["template"]["metadata"]["annotations"]["checksum/controller-config"]
+
+
+def test_shared_public_url_overrides_local_ui_addresses_and_derives_ingress_host():
+    documents = render_dev("--set-string", "publicUrl=https://guard-uat.example.com:8443", "--set", "ingress.enabled=true")
+    config = controller_config(documents)["data"]
+    assert config["CONTROLLER_PUBLIC_URL"] == config["CONTROLLER_RUNTIME_PUBLIC_URL"] == "https://guard-uat.example.com:8443"
+    assert config["BETTER_AUTH_TRUSTED_ORIGINS"] == "https://guard-uat.example.com:8443"
+    assert config["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://tali-guard-runtime.tali.svc.cluster.local:8091"
+    ingress = next(doc for doc in documents if doc["kind"] == "Ingress")
+    assert [rule["host"] for rule in ingress["spec"]["rules"]] == ["guard-uat.example.com"]
+
+
+def test_shared_public_url_is_trusted_with_extra_origins_and_separate_runtime_domain():
+    documents = render(
+        "--set-string", "publicUrl=https://guard-uat.example.com:8443",
+        "--set-string", "runner.publicUrl=https://runtime.example.com:9443/base",
+        "--set-json", 'controller.trustedOrigins=["https://old-ui.example.com","https://guard-uat.example.com:8443"]',
+    )
+    config = controller_config(documents)["data"]
+    assert config["CONTROLLER_PUBLIC_URL"] == "https://guard-uat.example.com:8443"
+    assert config["CONTROLLER_RUNTIME_PUBLIC_URL"] == "https://runtime.example.com:9443/base"
+    assert config["BETTER_AUTH_TRUSTED_ORIGINS"] == "https://guard-uat.example.com:8443,https://old-ui.example.com"
+
+
+@pytest.mark.parametrize("public_url", ["guard.test", "ftp://guard.test", "https://", "https://user:password@guard.test", "https://guard.test/app", "https://guard.test?query=1", "https://guard.test/#fragment", "https://guard.test other"])
+def test_shared_public_url_rejects_non_origin_values(public_url):
+    assert "publicUrl" in render_error("--set-string", f"publicUrl={public_url}")
+
+
+def test_shared_host_virtualservice_example_matches_rendered_services(tmp_path):
+    # Validate the documented override directly; no separate example values file.
+    section = (CHART / "README.md").read_text().split("### Share the UI domain and port with runtime requests", 1)[1]
+    values = tmp_path / "values-shared-host.yaml"
+    values.write_text(section.split("```yaml\n", 1)[1].split("```", 1)[0])
+    output = subprocess.run(
+        ["helm", "template", "tali-guard-uat", str(CHART), "--namespace", "uat",
+         "--values", str(values)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    documents = [item for item in yaml.safe_load_all(output) if item]
+    config = controller_config(documents)["data"]
+    assert config["CONTROLLER_RUNTIME_PUBLIC_URL"] == config["CONTROLLER_PUBLIC_URL"] == "https://guard-uat.example.com:8443"
+    assert config["BETTER_AUTH_TRUSTED_ORIGINS"] == "https://guard-uat.example.com:8443"
+    assert config["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://tali-guard-uat-runtime.uat.svc.cluster.local:8091"
+    assert not any(doc["kind"] in {"Ingress", "ServiceMonitor", "PrometheusRule"} for doc in documents)
+    controller_deployment = next(doc for doc in documents if doc["kind"] == "Deployment")
+    controller_env = resolved_environment(documents, controller_deployment["spec"]["template"]["spec"]["containers"][0])
+    assert controller_env["CONTROLLER_DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
+        "name": "tali-guard-uat-database", "key": "database-url",
+    }
+    assert controller_env["CONTROLLER_BOOTSTRAP_ADMIN_EMAIL"]["valueFrom"]["secretKeyRef"] == {
+        "name": "tali-guard-uat-bootstrap-admin", "key": "email",
+    }
+    runner = next(doc for doc in documents if doc["kind"] == "StatefulSet")
+    assert runner["spec"]["replicas"] == 2
+    runner_env = {entry["name"]: entry.get("value") for entry in runner["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert runner_env["GUARD_URL"] == "http://tali-guard-uat-controller:8080"
+    assert runner_env["GUARD_CONTROLLER_TARGET"] == "tali-guard-uat-controller:9090"
+    example = load_values(CHART / "examples" / "virtualservice-shared-host.yaml")
+    assert example["spec"]["hosts"] == ["guard-uat.example.com"]
+    runtime, controller = example["spec"]["http"]
+    assert runtime["match"] == [{"uri": {"prefix": "/runtime/v1/endpoints/"}}]
+    assert runtime["timeout"] == "0s"
+    assert runtime["retries"] == {"attempts": 0}
+    assert "rewrite" not in runtime
+    assert "match" not in controller
+    services = {f'{doc["metadata"]["name"]}.uat.svc.cluster.local': doc for doc in documents if doc["kind"] == "Service"}
+    for route, component in ((runtime, "runner"), (controller, "controller")):
+        destination = route["route"][0]["destination"]
+        service = services[destination["host"]]
+        assert service["spec"]["type"] == "ClusterIP"
+        assert service["spec"]["selector"]["app.kubernetes.io/component"] == component
+        assert destination["port"]["number"] in {port["port"] for port in service["spec"]["ports"]}
+
+
 def test_removed_replica_and_port_settings_cannot_change_internal_wiring():
     documents = render_dev(
         "--set", "controller.replicaCount=2",
@@ -431,26 +545,26 @@ def test_public_url_array_keeps_explicit_origin_and_ingress_overrides():
     assert [r["host"] for r in next(d for d in documents if d["kind"] == "Ingress")["spec"]["rules"]] == ["custom.test"]
 
 
-def test_scan_ingress_reaches_runtime_and_applies_request_limits():
+def test_endpoint_ingress_routes_ui_and_runtime():
     documents = render("--set-json", 'controller.publicUrl=["https://primary.test","https://secondary.test"]',
-                       "--set", "ingress.enabled=true", "--set", "runner.scan.maxBodyBytes=65536",
-                       "--set", "runner.scan.timeoutSeconds=15")
+                       "--set", "ingress.enabled=true")
     ingress = next(item for item in documents if item["kind"] == "Ingress")
     for rule in ingress["spec"]["rules"]:
-        path = next(path for path in rule["http"]["paths"] if path["path"] == "/backend/v1/scans")
-        assert path["pathType"] == "Exact"
+        path = next(path for path in rule["http"]["paths"] if path["path"] == "/runtime/v1/endpoints")
+        assert path["pathType"] == "Prefix"
+        assert not any(path["path"] == "/backend/v1/scans" for path in rule["http"]["paths"])
         assert path["backend"]["service"] == {"name": "contract-tali-guard-runtime", "port": {"name": "runtime"}}
+        ui = next(path for path in rule["http"]["paths"] if path["path"] == "/")
+        assert ui["backend"]["service"] == {"name": "contract-tali-guard-controller", "port": {"name": "http"}}
+
+
+def test_adapter_limits_use_application_defaults_even_with_legacy_chart_values():
+    documents = render()
+    assert documents == render("--set", "runner.scan.maxBodyBytes=65536", "--set", "runner.scan.timeoutSeconds=15")
     runtime = next(item for item in documents if item["kind"] == "StatefulSet" and item["metadata"]["name"].endswith("-runner"))
-    env = {item["name"]: item.get("value") for item in runtime["spec"]["template"]["spec"]["containers"][0]["env"]}
-    assert env["GUARD_SCAN_MAX_BODY_BYTES"] == "65536"
-    assert env["GUARD_SCAN_TIMEOUT_SECONDS"] == "15"
-
-
-def test_scan_body_limit_renders_as_an_integer_at_its_default():
-    # Helm reads YAML numbers as float64; from 1e6 up, quote alone renders "1.048576e+06", which the Runner cannot parse.
-    runtime = next(item for item in render() if item["kind"] == "StatefulSet" and item["metadata"]["name"].endswith("-runner"))
-    env = {item["name"]: item.get("value") for item in runtime["spec"]["template"]["spec"]["containers"][0]["env"]}
-    assert env["GUARD_SCAN_MAX_BODY_BYTES"] == "1048576"
+    env = {item["name"] for item in runtime["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert "GUARD_SCAN_MAX_BODY_BYTES" not in env
+    assert "GUARD_SCAN_TIMEOUT_SECONDS" not in env
 
 
 def test_public_url_array_rejects_empty_and_invalid_entries():
@@ -559,8 +673,7 @@ def test_development_values_are_self_contained_and_keep_two_app_components():
         signing_volume = next(volume for volume in pod["volumes"] if volume["name"] == "artifact-signing")
         assert signing_volume["secret"]["secretName"] == "tali-guard-artifact-signing"
     assert "tali-guard-control-tls" not in secrets
-    expected_transport = "mtls" if load_values(DEV_VALUES)["security"]["controlTls"]["enabled"] else "plaintext"
-    assert controller_env["CONTROLLER_GRPC_TRANSPORT"]["value"] == expected_transport
+    assert controller_env["CONTROLLER_GRPC_TRANSPORT"]["value"] == "mtls"
     assert any(item.get("kind") == "Job" and item["metadata"]["name"] == "tali-guard-bootstrap" for item in documents)
 
 
@@ -1178,15 +1291,14 @@ def test_legacy_inline_trust_sources_are_ignored():
     render("--set-json", 'controller.promotion.trust.sources=[{"id":"bank-uat"}]')
 
 
-def test_local_promotion_pair_needs_no_package_configuration():
-    uat = render_dev("--values", str(CHART / "values-dev-uat.yaml"))
-    prod = render_dev("--values", str(CHART / "values-dev-prod.yaml"))
-    env = lambda documents: {entry["name"]: entry.get("value") for entry in _controller(documents)["containers"][0]["env"]}
-    assert not any(name.startswith("CONTROLLER_PACKAGE_") for name in {**env(uat), **env(prod)})
-    # No feature switch tells the two apart.
-    assert not any(name.startswith("CONTROLLER_AUTHORING") for name in {**env(uat), **env(prod)})
-    ports = lambda documents: sorted(doc["spec"]["ports"][0]["port"] for doc in documents if doc["kind"] == "Service" and doc["spec"].get("type") == "LoadBalancer")
-    assert ports(uat) == [38181, 38182] and ports(prod) == [38281, 38282]
+def test_development_uat_keeps_local_service_names_and_needs_no_package_configuration():
+    documents = render_dev()
+    environment = {entry["name"] for entry in _controller(documents)["containers"][0]["env"]}
+    assert not any(name.startswith(("CONTROLLER_PACKAGE_", "CONTROLLER_AUTHORING")) for name in environment)
+    services = {doc["metadata"]["name"]: doc for doc in documents if doc["kind"] == "Service"}
+    assert services["tali-guard-controller-public"]["spec"]["ports"][0]["port"] == 38081
+    assert services["tali-guard-runtime-public"]["spec"]["ports"][0]["port"] == 38082
+    assert controller_config(documents)["data"]["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://tali-guard-runtime.tali.svc.cluster.local:8091"
 
 
 def test_legacy_package_export_keys_and_source_identity_are_ignored():

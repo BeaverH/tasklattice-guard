@@ -232,7 +232,7 @@ normalize_local_env() {
   write_env_value "CONTROLLER_BOOTSTRAP_ADMIN_EMAIL" "admin@tasklattice.local"
   # Reuse the reviewed local bootstrap hash; avoid maintaining a second password.
   local bootstrap_hash
-  bootstrap_hash="$(node -e 'const fs = require("node:fs"); const match = fs.readFileSync(process.argv[1], "utf8").match(/passwordHash: "([a-f0-9:]+)"/); if (!match) process.exit(1); process.stdout.write(match[1]);' "${ROOT_DIR}/charts/tali-guard/values-dev.yaml")"
+  bootstrap_hash="$(node -e 'const fs = require("node:fs"); const match = fs.readFileSync(process.argv[1], "utf8").match(/passwordHash: "([a-f0-9:]+)"/); if (!match) process.exit(1); process.stdout.write(match[1]);' "${ROOT_DIR}/charts/tali-guard/values-dev-uat.yaml")"
   remove_env_value "CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD"
   write_env_value "CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH" "${bootstrap_hash}"
   write_env_value "CONTROLLER_BOOTSTRAP_ADMIN_NAME" "Local Administrator"
