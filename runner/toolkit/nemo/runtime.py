@@ -864,6 +864,7 @@ class NeMoActionBridge:
             "blocked": blocked,
             "modified": modified,
             "findings": [asdict(item) for item in result.findings],
+            "trace": [asdict(item) for item in result.trace],
             "failure_mode": (
                 "fail_closed" if self._fails_closed(binding) else "fail_open"
             ),
@@ -1358,12 +1359,20 @@ def _colang1_runtime_result(
     if not isinstance(model_calls_raw, list):
         raise RuntimeError(f"NeMo Action {binding.id!r} returned invalid model-call evidence.")
     model_calls = tuple(_model_call_usage_from_payload(binding, item) for item in model_calls_raw)
+    trace_raw = payload.get("trace", [])
+    if not isinstance(trace_raw, list) or any(not isinstance(item, dict) for item in trace_raw):
+        raise RuntimeError(f"NeMo Action {binding.id!r} returned invalid evaluator trace evidence.")
+    try:
+        evaluator_trace = tuple(RuntimeTraceStep(**item) for item in trace_raw)
+    except TypeError as error:
+        raise RuntimeError(f"NeMo Action {binding.id!r} returned invalid evaluator trace evidence.") from error
     return _RuntimeResult(
         binding=binding,
         result=ActionResult(
             verdict=verdict,  # type: ignore[arg-type]
             content=content,
             findings=findings,
+            trace=evaluator_trace,
             reason=(
                 str(payload["reason"])
                 if payload.get("reason") is not None

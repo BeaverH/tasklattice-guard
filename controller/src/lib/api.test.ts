@@ -16,6 +16,14 @@ describe("API error responses", () => {
     await expect(requestController("/api/test")).rejects.toMatchObject({ message: "AI provider error", status: 502, code: "intent_analysis_failed", detail });
   });
 
+  it("shows Controller validation fields instead of the generic request validation message", async () => {
+    const detail = { formErrors: [], fieldErrors: { kind: ["Unsupported Provider kind"], baseUrl: ["Invalid URL"] } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: { message: "Request validation failed.", code: "invalid_request", detail } }, { status: 400 })));
+    await expect(requestController("/api/test")).rejects.toMatchObject({
+      message: "kind: Unsupported Provider kind; baseUrl: Invalid URL", code: "invalid_request", detail,
+    });
+  });
+
   it("shows a non-JSON proxy error rather than losing its response body", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("upstream connection closed", { status: 502 })));
     await expect(requestController("/api/test")).rejects.toThrow("upstream connection closed");

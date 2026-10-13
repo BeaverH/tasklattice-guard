@@ -115,6 +115,22 @@ describe("Relay-style Provider registration", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("registers a pinned Jev version directly through System One without fetching the catalog", async () => {
+    const { service, fetcher } = setup();
+    fetcher.mockImplementation(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return Response.json({ model: "jev-1.13.0", answers: Object.fromEntries(Object.keys(request.questions).map((id) => [id, { type: "noul", noul: 0.99 }])) });
+    });
+    const result = await service.registerProviderModels({
+      connection: { ...connection, kind: "typesafe", baseUrl: "https://api.typesafe.ai/v1" },
+      models: [{ ...model("jev-1.13.0"), profile: "tali.typesafe-jev-topic.v1" }],
+    }, "admin");
+    expect(result.models[0]).toMatchObject({ model: "jev-1.13.0", connectionStatus: "validated", status: "pending" });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.typesafe.ai/v1/systemone");
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toMatchObject({ model: "jev-1.13.0", questions: expect.any(Object) });
+  });
+
   it("does not report a Provider as healthy when its public catalog works but an actual Model call rejects the credential", async () => {
     const { service, fetcher } = setup();
     fetcher.mockImplementation(async (url) => String(url).endsWith("/models")

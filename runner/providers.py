@@ -13,6 +13,7 @@ from runner.toolkit.nemo.actions.topic import TopicJudgeActionProvider
 from runner.toolkit.nemo.actions.grounding import GroundingActionProvider
 from runner.toolkit.nemo.actions.automated_reasoning import HTTPAutomatedReasoningProvider, ReasoningActionProvider
 from runner.toolkit.nemo.evaluators.pii import PiiEvaluator
+from runner.toolkit.nemo.evaluators.jev_topic import JEV_TOPIC_PROFILE, JevTopicEvaluator
 from runner.toolkit.evaluation.contracts import (
     CONTRACT_PII_EXACT,
     MODEL_SAFETY_CONTRACT_BY_CAPABILITY,
@@ -95,6 +96,13 @@ def dynamic_runtime_action_providers(
 ) -> tuple[ActionProvider, ...]:
     """Build a complete provider registry from one Controller-owned revision."""
 
+    source_profiles = {item.id: item.profile_ref for item in configuration.runtimes}
+    for binding in configuration.bindings:
+        if JEV_TOPIC_PROFILE in {binding.profile_ref, source_profiles.get(binding.model_ref)}:
+            if (binding.profile_ref != JEV_TOPIC_PROFILE or source_profiles.get(binding.model_ref) != JEV_TOPIC_PROFILE
+                or binding.binding_id != "topic_control.input" or binding.capability_ref != "topic_control"
+                or _rail_name(binding.rail_type) != "input" or set(binding.contract_refs) != set(JevTopicEvaluator.contracts)):
+                raise ValueError("Jev supports only the input Topic Control semantic contract with a matching runtime profile.")
     runtimes = {
         item.id: ModelRuntimeConfig(
             id=item.id,
@@ -154,17 +162,27 @@ def dynamic_runtime_action_providers(
     topic = bindings.get("topic_control.input")
     if topic is not None:
         runtime = _assigned_runtime(topic.model_ref, runtimes)
-        providers.append(TopicJudgeActionProvider(
-            base_url=runtime.base_url,
-            model=runtime.model,
-            api_key_env_var=None,
-            api_key=runtime.api_key,
-            provider_id=runtime.id,
-            skip_tls_verify=runtime.skip_tls_verify,
-            timeout_seconds=runtime.timeout_seconds,
-            request_options={"max_tokens": runtime.max_tokens},
-            transport=transport,
-        ))
+        source = next(item for item in configuration.runtimes if item.id == topic.model_ref)
+        if topic.profile_ref != source.profile_ref:
+            raise ValueError("Topic binding profile must match its runtime profile.")
+        if topic.profile_ref == JEV_TOPIC_PROFILE:
+            providers.append(TopicJudgeActionProvider(evaluator=JevTopicEvaluator(
+                base_url=runtime.base_url, model=runtime.model, api_key=runtime.api_key or "",
+                provider_id=runtime.id, timeout_seconds=runtime.timeout_seconds,
+                skip_tls_verify=runtime.skip_tls_verify, transport=transport,
+            )))
+        else:
+            providers.append(TopicJudgeActionProvider(
+                base_url=runtime.base_url,
+                model=runtime.model,
+                api_key_env_var=None,
+                api_key=runtime.api_key,
+                provider_id=runtime.id,
+                skip_tls_verify=runtime.skip_tls_verify,
+                timeout_seconds=runtime.timeout_seconds,
+                request_options={"max_tokens": runtime.max_tokens},
+                transport=transport,
+            ))
 
     grounding = bindings.get("contextual_grounding.output")
     if grounding is not None:

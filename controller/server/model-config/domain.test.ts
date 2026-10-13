@@ -14,6 +14,19 @@ import {
 } from "./domain.js";
 
 describe("Guardrail Catalog capability binding profiles", () => {
+  it("restricts Jev to native TypeSafe input Topic Control and preserves existing choices", () => {
+    const profile = "tali.typesafe-jev-topic.v1";
+    expect(profileTransports[profile]).toBe("typesafe_systemone");
+    expect(capabilityBindingContracts("topic_control.input", profile)).toEqual(["tali.guard.topic-control.semantic.v1"]);
+    expect(assignmentTargetAcceptsModel("topic_control.input", profile, "typesafe")).toBe(true);
+    for (const target of ["control_plane", "content_safety.input", "jailbreak.input", "pii_semantic.output"] as const) {
+      expect(assignmentTargetAcceptsModel(target, profile, "typesafe")).toBe(false);
+    }
+    expect(providerAcceptsProfile("typesafe", "generic-chat")).toBe(false);
+    expect(providerAcceptsProfile("openai", profile)).toBe(false);
+    expect(assignmentTargetAcceptsModel("topic_control.input", "tali.nemoguard-topic-control.v1", "custom-openai-compatible")).toBe(true);
+    expect(assignmentTargetAcceptsModel("topic_control.input", "tali.taxonomy-judge.v1", "custom-openai-compatible")).toBe(true);
+  });
   it("assigns Nemotron Content Safety only to the content-safety detector", () => {
     const profile = "tali.nemotron-content-safety.v1";
     expect(assignmentTargetProfiles("content_safety.input")).toContain(profile);

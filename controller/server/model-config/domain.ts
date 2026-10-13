@@ -12,6 +12,7 @@ import {
 export const modelProviderKinds = [
   "openai",
   "qwen",
+  "typesafe",
   "deepseek",
   "vllm",
   "ollama",
@@ -25,6 +26,7 @@ export const modelProfiles = [
   "tali.nemotron-content-safety.v1",
   "tali.nemotron-safety-guard-v3.v1",
   "tali.nemoguard-topic-control.v1",
+  "tali.typesafe-jev-topic.v1",
   "tali.openai-compatible-jailbreak.v1",
   "tali.nemoguard-jailbreak-detect.v1",
   "tali.taxonomy-judge.v1",
@@ -35,7 +37,7 @@ export const modelProfiles = [
 export type ModelProviderKind = (typeof modelProviderKinds)[number];
 export type ModelProfile = (typeof modelProfiles)[number];
 export type { CapabilityBindingId };
-export type ModelTransport = "openai_chat" | "nemoguard_jailbreak_detect";
+export type ModelTransport = "openai_chat" | "nemoguard_jailbreak_detect" | "typesafe_systemone";
 export type ModelResourceStatus = "pending" | "validated" | "failed";
 export type ModelRevisionState = "draft" | "validated" | "activating" | "active" | "superseded" | "failed";
 
@@ -125,6 +127,7 @@ export const profileContracts: Record<ModelProfile, readonly string[]> = {
     "tali.guard.topic-control.semantic.v1",
     "tali.guard.company-policy.v1",
   ],
+  "tali.typesafe-jev-topic.v1": ["tali.guard.topic-control.semantic.v1"],
   "tali.openai-compatible-jailbreak.v1": ["tali.guard.jailbreak.v1"],
   "tali.nemoguard-jailbreak-detect.v1": ["tali.guard.jailbreak.v1"],
   "tali.taxonomy-judge.v1": [
@@ -143,6 +146,7 @@ export const profileTransports: Record<ModelProfile, ModelTransport> = {
   "tali.nemotron-content-safety.v1": "openai_chat",
   "tali.nemotron-safety-guard-v3.v1": "openai_chat",
   "tali.nemoguard-topic-control.v1": "openai_chat",
+  "tali.typesafe-jev-topic.v1": "typesafe_systemone",
   "tali.openai-compatible-jailbreak.v1": "openai_chat",
   "tali.nemoguard-jailbreak-detect.v1": "nemoguard_jailbreak_detect",
   "tali.taxonomy-judge.v1": "openai_chat",
@@ -198,11 +202,15 @@ export function assignmentTargetAcceptsModel(
   profile: ModelProfile,
   providerKind: ModelProviderKind,
 ): boolean {
-  return assignmentTargetProfiles(target).includes(profile)
+  return providerAcceptsProfile(providerKind, profile)
+    && assignmentTargetProfiles(target).includes(profile)
     && (target === "control_plane" || isDataPlaneProviderKindAllowed(providerKind));
 }
 
 export function providerAcceptsProfile(providerKind: ModelProviderKind, profile: ModelProfile): boolean {
+  if (providerKind === "typesafe" || profile === "tali.typesafe-jev-topic.v1") {
+    return providerKind === "typesafe" && profile === "tali.typesafe-jev-topic.v1";
+  }
   return isDataPlaneProviderKindAllowed(providerKind) || profile === "generic-chat";
 }
 

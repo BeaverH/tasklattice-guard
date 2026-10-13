@@ -4030,7 +4030,8 @@
               "tali.nemotron-safety-guard-v3.v1",
               "tali.openai-compatible-jailbreak.v1",
               "tali.qwen3guard.v1",
-              "tali.taxonomy-judge.v1"
+              "tali.taxonomy-judge.v1",
+              "tali.typesafe-jev-topic.v1"
             ],
             "type": "string"
           },
@@ -4047,6 +4048,7 @@
               "ollama",
               "openai",
               "qwen",
+              "typesafe",
               "vllm"
             ],
             "type": "string"
@@ -4154,6 +4156,7 @@
               "ollama",
               "openai",
               "qwen",
+              "typesafe",
               "vllm"
             ],
             "type": "string"
@@ -11185,6 +11188,7 @@
             "enum": [
               "openai",
               "qwen",
+              "typesafe",
               "deepseek",
               "vllm",
               "ollama",
@@ -14858,6 +14862,7 @@
             "enum": [
               "openai",
               "qwen",
+              "typesafe",
               "deepseek",
               "vllm",
               "ollama",
@@ -14932,6 +14937,7 @@
                 "enum": [
                   "openai",
                   "qwen",
+                  "typesafe",
                   "deepseek",
                   "vllm",
                   "ollama",
@@ -14984,6 +14990,7 @@
                     "tali.nemotron-content-safety.v1",
                     "tali.nemotron-safety-guard-v3.v1",
                     "tali.nemoguard-topic-control.v1",
+                    "tali.typesafe-jev-topic.v1",
                     "tali.openai-compatible-jailbreak.v1",
                     "tali.nemoguard-jailbreak-detect.v1",
                     "tali.taxonomy-judge.v1",
@@ -15113,7 +15120,8 @@
               "tali.nemotron-safety-guard-v3.v1",
               "tali.openai-compatible-jailbreak.v1",
               "tali.qwen3guard.v1",
-              "tali.taxonomy-judge.v1"
+              "tali.taxonomy-judge.v1",
+              "tali.typesafe-jev-topic.v1"
             ],
             "type": "string"
           },
@@ -15127,6 +15135,7 @@
               "ollama",
               "openai",
               "qwen",
+              "typesafe",
               "vllm"
             ],
             "type": "string"
@@ -15235,6 +15244,7 @@
             "enum": [
               "openai",
               "qwen",
+              "typesafe",
               "deepseek",
               "vllm",
               "ollama",
@@ -15286,6 +15296,7 @@
               "tali.nemotron-content-safety.v1",
               "tali.nemotron-safety-guard-v3.v1",
               "tali.nemoguard-topic-control.v1",
+              "tali.typesafe-jev-topic.v1",
               "tali.openai-compatible-jailbreak.v1",
               "tali.nemoguard-jailbreak-detect.v1",
               "tali.taxonomy-judge.v1",
@@ -20138,6 +20149,7 @@
               "tali.nemotron-content-safety.v1",
               "tali.nemotron-safety-guard-v3.v1",
               "tali.nemoguard-topic-control.v1",
+              "tali.typesafe-jev-topic.v1",
               "tali.openai-compatible-jailbreak.v1",
               "tali.nemoguard-jailbreak-detect.v1",
               "tali.taxonomy-judge.v1",

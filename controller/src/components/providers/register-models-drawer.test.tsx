@@ -19,9 +19,9 @@ const ready: ModelDefinition = { id: "model-1", name: "Chat", model: "chat", pro
 let client: QueryClient;
 const onChanged = vi.fn(async () => {});
 const onOpenChange = vi.fn();
-function mount(intent: "add-provider" | "register-models" = "register-models", models: ModelDefinition[] = []) {
+function mount(intent: "add-provider" | "register-models" = "register-models", models: ModelDefinition[] = [], providers = [provider]) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><RegisterModelsDrawer open intent={intent} providers={[provider]} registeredModels={models} onChanged={onChanged} onOpenChange={onOpenChange} /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><RegisterModelsDrawer open intent={intent} providers={providers} registeredModels={models} onChanged={onChanged} onOpenChange={onOpenChange} /></QueryClientProvider>);
 }
 async function chooseProvider(name: string) {
   fireEvent.click(screen.getByRole("combobox", { name: "Select Provider" }));
@@ -116,6 +116,77 @@ describe("Relay registration workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Register 1 model" }));
     await screen.findByText("Registration complete");
     expect(registerProviderModels).toHaveBeenCalledWith({ connection: { name: "DeepSeek", kind: "deepseek", baseUrl: "https://api.deepseek.com/v1", apiKey: "test-key" }, models: [expect.objectContaining({ model: "chat", profile: "generic-chat" })] });
+  });
+
+  it("registers a pinned Jev version without requiring discovery", async () => {
+    mount("add-provider");
+    await chooseProvider("TypeSafe AI");
+    expect((screen.getByLabelText("Base URL") as HTMLInputElement).value).toBe("https://api.typesafe.ai/v1");
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "test-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose models" }));
+    expect(screen.getByRole("heading", { name: "Model versions" })).toBeTruthy();
+    expect(discoverProviderDraft).not.toHaveBeenCalled();
+    expect(registerProviderModels).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Register 1 model" }));
+    await screen.findByText("Registration complete");
+    expect(registerProviderModels).toHaveBeenCalledWith({
+      connection: { name: "TypeSafe AI", kind: "typesafe", baseUrl: "https://api.typesafe.ai/v1", apiKey: "test-key" },
+      models: [expect.objectContaining({ model: "jev-1.13.0", profile: "tali.typesafe-jev-topic.v1" })],
+    });
+  });
+
+  it("preserves pinned and manual Jev versions when refreshing an alias-only catalog", async () => {
+    mount("add-provider");
+    await chooseProvider("TypeSafe AI");
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "test-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose models" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Manual model ID" }), { target: { value: "jev-custom" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Fetch catalog (optional)" }));
+    await screen.findByRole("button", { name: "Chat chat" });
+    const selected = screen.getByRole("region", { name: "Selected models" });
+    expect(within(selected).getByText("jev-1.13.0")).toBeTruthy();
+    expect(within(selected).getByText("jev-custom")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Chat chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Register 3 models" }));
+    await screen.findByText("Registration complete");
+    expect(vi.mocked(registerProviderModels).mock.calls[0]?.[0].models).toEqual([
+      expect.objectContaining({ model: "jev-1.13.0", profile: "tali.typesafe-jev-topic.v1" }),
+      expect.objectContaining({ model: "jev-custom", profile: "tali.typesafe-jev-topic.v1" }),
+      expect.objectContaining({ model: "chat", profile: "tali.typesafe-jev-topic.v1" }),
+    ]);
+  });
+
+  it("allows registration after optional TypeSafe discovery fails and preserves choices on Back", async () => {
+    vi.mocked(discoverProviderDraft).mockRejectedValueOnce(new Error("Catalog unavailable"));
+    mount("add-provider");
+    await chooseProvider("TypeSafe AI");
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "test-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose models" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deselect jev-1.13.0" }));
+    fireEvent.click(screen.getByRole("button", { name: "Jev latest jev-latest" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fetch catalog (optional)" }));
+    await screen.findByText("Catalog unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose models" }));
+    fireEvent.click(screen.getByRole("button", { name: "Register 1 model" }));
+    await screen.findByText("Registration complete");
+    expect(registerProviderModels).toHaveBeenCalledWith(expect.objectContaining({
+      models: [expect.objectContaining({ model: "jev-latest", profile: "tali.typesafe-jev-topic.v1" })],
+    }));
+  });
+
+  it("does not preselect an already registered Jev version on a saved Provider", async () => {
+    const typesafe: ModelProvider = { ...provider, kind: "typesafe", name: "Saved TypeSafe" };
+    mount("register-models", [{ ...ready, model: "jev-1.13.0" }], [typesafe]);
+    fireEvent.click(screen.getByRole("button", { name: "Choose models" }));
+    expect((screen.getByRole("button", { name: "Jev 1.13.0 jev-1.13.0 Registered" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Register 0 models" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Jev latest jev-latest" }));
+    fireEvent.click(screen.getByRole("button", { name: "Register 1 model" }));
+    await screen.findByText("Registration complete");
+    expect(discoverModelProvider).not.toHaveBeenCalled();
+    expect(createModelDefinition).toHaveBeenCalledWith(expect.objectContaining({ model: "jev-latest", profile: "tali.typesafe-jev-topic.v1" }));
   });
 
   it("retains a registered model whose call failed and retries it without registering twice", async () => {

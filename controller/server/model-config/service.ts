@@ -44,6 +44,7 @@ import {
   type ModelAssignments,
   type ModelAssignmentTarget,
   type ModelProfile,
+  type ModelProviderKind,
   type ModelValidationCheck,
   type ModelValidationReport,
   type PolicyCoverage,
@@ -149,7 +150,7 @@ export class ModelConfigurationService {
   async createProvider(raw: unknown, actorId: string) {
     const input = providerInputSchema.parse(raw);
     const id = randomUUID();
-    const validation = await this.probeProviderFromCatalog(input.baseUrl, input.apiKey, input.skipTlsVerify);
+    const validation = await this.probeProviderFromCatalog(input.baseUrl, input.apiKey, input.skipTlsVerify, input.kind);
     const [created] = await this.db.insert(modelProviders).values({
       id,
       name: input.name,
@@ -178,11 +179,11 @@ export class ModelConfigurationService {
     const [current] = await this.db.select().from(modelProviders).where(eq(modelProviders.id, id));
     if (!current) throw new NotFoundError("Model Provider", id);
     const targetKind = input.kind ?? current.kind;
-    if (targetKind === "deepseek") {
+    if (targetKind !== current.kind) {
       const incompatible = (await this.db.select().from(modelDefinitions).where(eq(modelDefinitions.providerId, id)))
         .find((model) => !providerAcceptsProfile(targetKind, model.profile));
       if (incompatible) {
-        throw new ValidationError(`Remove or reconfigure ${incompatible.name} before reserving this Provider for the Control Plane.`);
+        throw new ValidationError(`Remove or reconfigure ${incompatible.name} before changing this Provider protocol.`);
       }
     }
     const apiKey = input.apiKey === undefined
@@ -193,7 +194,7 @@ export class ModelConfigurationService {
     const target = await this.providerValidationModel(id);
     const validation = target
       ? await this.probeProviderCredential(baseUrl, apiKey, skipTlsVerify, target)
-      : await this.probeProviderFromCatalog(baseUrl, apiKey, skipTlsVerify);
+      : await this.probeProviderFromCatalog(baseUrl, apiKey, skipTlsVerify, targetKind);
     const updated = await this.db.transaction(async (tx) => {
       const [saved] = await tx.update(modelProviders).set({
         ...(input.name === undefined ? {} : { name: input.name }),
@@ -248,7 +249,7 @@ export class ModelConfigurationService {
     const target = await this.providerValidationModel(id);
     const validation = target
       ? await this.probeProviderCredential(current.baseUrl, apiKey, current.skipTlsVerify, target)
-      : await this.probeProviderFromCatalog(current.baseUrl, apiKey, current.skipTlsVerify);
+      : await this.probeProviderFromCatalog(current.baseUrl, apiKey, current.skipTlsVerify, current.kind);
     const [updated] = await this.db.update(modelProviders).set({
       status: validation.passed ? "validated" : "failed",
       validationMessage: validation.message,
@@ -270,7 +271,7 @@ export class ModelConfigurationService {
     const provider = await this.provider(id);
     const apiKey = decryptModelCredential(provider.credentialCiphertext, this.rootSecret);
     try {
-      const models = await this.providerCatalog(provider.baseUrl, apiKey, provider.skipTlsVerify);
+      const models = await this.providerCatalog(provider.baseUrl, apiKey, provider.skipTlsVerify, provider.kind);
       return {
         providerId: provider.id,
         providerName: provider.name,
@@ -286,7 +287,7 @@ export class ModelConfigurationService {
   async discoverProviderDraft(raw: unknown) {
     const input = providerInputSchema.parse(raw);
     try {
-      return { providerName: input.name, models: await this.providerCatalog(input.baseUrl, input.apiKey, input.skipTlsVerify) };
+      return { providerName: input.name, models: await this.providerCatalog(input.baseUrl, input.apiKey, input.skipTlsVerify, input.kind) };
     } catch (error) {
       throw new ValidationError(probeError("Provider model discovery failed", error));
     }
@@ -296,7 +297,7 @@ export class ModelConfigurationService {
     const input = providerRegistrationSchema.parse(raw);
     const invalid = input.models.find((model) => !providerAcceptsProfile(input.connection.kind, model.profile));
     if (invalid) {
-      throw new ValidationError(`${input.connection.name} is reserved for Control Plane models; ${invalid.name} must use the generic-chat profile.`);
+      throw new ValidationError(`${input.connection.name} does not support the ${invalid.profile} protocol for ${invalid.name}.`);
     }
     const id = randomUUID();
     const connection = {
@@ -352,7 +353,7 @@ export class ModelConfigurationService {
     const [provider] = await this.db.select().from(modelProviders).where(eq(modelProviders.id, input.providerId));
     if (!provider) throw new NotFoundError("Model Provider", input.providerId);
     if (!providerAcceptsProfile(provider.kind, input.profile)) {
-      throw new ValidationError(`${provider.name} is reserved for Control Plane models and cannot register a Data Plane protocol profile.`);
+      throw new ValidationError(`${provider.name} does not support the ${input.profile} protocol.`);
     }
     const id = randomUUID();
     const connection = connectionEvidence(await this.probeModel(provider, input, "connection"));
@@ -408,7 +409,7 @@ export class ModelConfigurationService {
     const current = await this.model(id);
     const provider = await this.provider(current.providerId);
     if (!providerAcceptsProfile(provider.kind, input.profile)) {
-      throw new ValidationError(`${provider.name} is reserved for Control Plane models and cannot register a Data Plane protocol profile.`);
+      throw new ValidationError(`${provider.name} does not support the ${input.profile} protocol.`);
     }
     const updated = await this.db.transaction(async (tx) => {
       // A model's protocol is part of every revision referencing it. Do not
@@ -1006,19 +1007,20 @@ export class ModelConfigurationService {
     ].sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  private async probeProviderFromCatalog(baseUrl: string, apiKey: string, skipTlsVerify = false) {
+  private async probeProviderFromCatalog(baseUrl: string, apiKey: string, skipTlsVerify = false, kind?: ModelProviderKind) {
     const started = performance.now();
     try {
-      const models = await this.providerCatalog(baseUrl, apiKey, skipTlsVerify);
+      const models = await this.providerCatalog(baseUrl, apiKey, skipTlsVerify, kind);
       const candidate = models[0];
       if (!candidate) return probe(false, "Provider credential could not be verified because no callable Model was found.", started);
       return this.probeProviderCredential(baseUrl, apiKey, skipTlsVerify, {
         model: candidate.id,
-        profile: isDedicatedJailbreakDetectEndpoint(baseUrl) ? jailbreakDetectProfile : "generic-chat",
+        profile: kind === "typesafe" ? "tali.typesafe-jev-topic.v1" : isDedicatedJailbreakDetectEndpoint(baseUrl) ? jailbreakDetectProfile : "generic-chat",
         timeoutSeconds: 20,
         maxTokens: 64,
       });
     } catch (error) {
+      if (kind === "typesafe") return probe(false, probeError("TypeSafe credential verification failed", error), started);
       // A proof endpoint is not an OpenAI model catalog. Its authenticated
       // readiness response proves connectivity only; Rail tests prove behavior.
       const formal = await this.probeFormalConnection(baseUrl, apiKey, skipTlsVerify);
@@ -1051,8 +1053,8 @@ export class ModelConfigurationService {
     return providerCredentialEvidence(model, result);
   }
 
-  private async providerCatalog(baseUrl: string, apiKey: string, skipTlsVerify = false) {
-    if (isDedicatedJailbreakDetectEndpoint(baseUrl)) {
+  private async providerCatalog(baseUrl: string, apiKey: string, skipTlsVerify = false, kind?: ModelProviderKind) {
+    if (kind !== "typesafe" && isDedicatedJailbreakDetectEndpoint(baseUrl)) {
       await this.callJailbreakDetect(baseUrl, apiKey, skipTlsVerify, 15_000, jailbreakDetectSafeInput);
       return [{ id: jailbreakDetectModel, name: "NVIDIA NemoGuard JailbreakDetect" }];
     }
@@ -1061,7 +1063,12 @@ export class ModelConfigurationService {
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error(`returned HTTP ${response.status}`);
-    const payload = modelCatalogEnvelope.parse(await response.json());
+    const body = await response.json();
+    if (kind === "typesafe") {
+      const payload = z.object({ models: z.array(z.object({ name: z.string().trim().min(1) })) }).parse(body);
+      return [...new Set(payload.models.map((model) => model.name))].sort().map((id) => ({ id, name: id }));
+    }
+    const payload = modelCatalogEnvelope.parse(body);
     // NVIDIA's chat catalog does not list every security endpoint. This is a
     // registration candidate, not connectivity or capability evidence.
     return [...new Set([...payload.data.map((model) => model.id), ...(isNvidiaModelCatalog(baseUrl) ? [jailbreakDetectModel] : [])])]
@@ -1074,6 +1081,25 @@ export class ModelConfigurationService {
     const started = performance.now();
     const fetcher = providerFetch(provider.skipTlsVerify, this.fetcher);
     const credential = credentialOverride ?? decryptModelCredential(provider.credentialCiphertext, this.rootSecret);
+    if (profileTransports[model.profile] === "typesafe_systemone") {
+      try {
+        const response = await fetcher(`${normalizeBaseUrl(provider.baseUrl)}/systemone`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+          body: JSON.stringify({ model: model.model, state: "Hello", questions: {
+            greeting: { type: "noul", instructions: "Does the text contain a greeting?" },
+          } }),
+          signal: AbortSignal.timeout(model.timeoutSeconds * 1_000),
+        });
+        if (!response.ok) throw new Error(`returned HTTP ${response.status}`);
+        z.object({ model: z.string().trim().min(1), answers: z.object({
+          greeting: z.object({ type: z.literal("noul"), noul: z.number().min(0).max(1) }),
+        }).strict() }).parse(await response.json());
+        return probe(true, `${model.model} returned a valid Noul response. Validate Topic Control behavior in Guardrail Catalog.`, started);
+      } catch (error) {
+        return probe(false, probeError("TypeSafe model call failed", error), started);
+      }
+    }
     if (profileTransports[model.profile] === "nemoguard_jailbreak_detect") {
       try {
         const safe = await this.callJailbreakDetect(provider.baseUrl, credential, provider.skipTlsVerify, model.timeoutSeconds * 1_000, jailbreakDetectSafeInput);
@@ -1324,6 +1350,7 @@ export function probeRequest(model: Pick<ModelRow, "model" | "profile" | "maxTok
 }
 
 function probeMessages(profile: ModelProfile, jailbreakInput: string): Array<{ role: "system" | "user"; content: string }> {
+  if (profile === "tali.typesafe-jev-topic.v1") throw new Error("Jev uses the System One API.");
   if (profile === jailbreakDetectProfile) throw new Error("JailbreakDetect uses the classification API, not Chat Completions.");
   if (profile === "tali.nemotron-safety-guard-v3.v1") {
     return [{ role: "user", content: [
@@ -1380,6 +1407,7 @@ function probeMessages(profile: ModelProfile, jailbreakInput: string): Array<{ r
 }
 
 export function validateProbeContent(profile: ModelProfile, content: string): void {
+  if (profile === "tali.typesafe-jev-topic.v1") throw new Error("Jev requires typed Noul answers.");
   if (!content) throw new Error("Model returned empty content.");
   if (profile === "tali.qwen3guard.v1" && !/Safety\s*:\s*(Safe|Unsafe|Controversial)/i.test(content)) {
     throw new Error("Qwen3Guard response did not contain a Safety label.");
