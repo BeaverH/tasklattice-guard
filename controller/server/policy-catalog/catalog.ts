@@ -91,7 +91,7 @@ const testCaseSchema = z.object({
   required: z.boolean().default(true),
   parameter_names: z.array(z.string()).default([]),
 });
-const policyAssetSchema = z.object({
+export const policyAssetSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string(),
@@ -113,6 +113,8 @@ type PolicyParameter = z.output<typeof parameterSchema>;
 
 export type PolicyTag = z.output<typeof tagSchema> & { id: string };
 export type PolicyDto = {
+  definition?: import("../../shared/policy-definition.js").PolicyDefinition;
+  maintenance?: { revision: number; maintainer: string };
   published_versions?: PolicyDto[];
   compliance?: PolicyCompliance;
   implementation: "rules";

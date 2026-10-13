@@ -16,6 +16,8 @@ import { PolicyCatalog } from "../policy-catalog/catalog.js";
 import { programmablePolicyDraftSchema } from "../policy-studio/model.js";
 import { ControlPlaneService } from "./control-plane.js";
 import { routingEventSchema } from "./traffic-routing.js";
+import { emptyPolicyDefinition } from "../../shared/policy-definition.js";
+import type { ValidationCaseResult } from "../domain/models.js";
 
 const url = process.env.GUARD_TEST_POSTGRES_URL;
 const catalogDir = resolve("../runner/toolkit/policy_library/assets");
@@ -67,7 +69,7 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
   }
 
   /** Test, then publish exactly the tested candidate, as a Runner would. */
-  async function testAndPublish(id: string, revision: number) {
+  async function testAndPublish(id: string, revision: number, record = true) {
     const run = await uat.requestValidation({ guardrailId: id, actorId: "admin", compilerAvailable: true });
     const { rows: [request] } = await uatDb.pool.query("SELECT payload FROM controller_outbox WHERE id = $1", [run.id]);
     const candidate: ArtifactContent = {
@@ -78,7 +80,7 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     await uat.completeValidation({ runId: run.id, status: "passed", metrics: emptyValidationMetrics(run.metrics.total), results: [], candidateArtifact: candidate,
       runtime: { runnerId: "uat-runner-0", runnerVersion: "1.0.0", nemoVersion: "0.24.0", modelRevisionId: "", compilerModelTypes: [] } });
     const version = await uat.requestGuardrailPublish({ guardrailId: id, actorId: "admin", expectedDraftRevision: revision });
-    published.push(version.version);
+    if (record) published.push(version.version);
     return version;
   }
 
@@ -191,15 +193,17 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     // Import neither distributes nor routes anything, and creates no test or compile work.
     expect((await prodDb.pool.query("SELECT kind FROM controller_outbox WHERE aggregate_id = $1", [guardrailId])).rows).toEqual([]);
     expect((await prodDb.pool.query("SELECT count(*)::int AS n FROM guardrail_validation_run WHERE guardrail_id = $1", [guardrailId])).rows[0].n).toBe(0);
-    // The Studio Policy joined this Library, owned by its source and read only.
+    // Provenance stays recorded; administrators can maintain an imported draft.
     expect((await prodDb.pool.query("SELECT id, origin, source_id FROM policy_record")).rows).toEqual([{ id: STUDIO, origin: "imported", source_id: "tasklattice-guard" }]);
     const checksums = async (db: typeof uatDb) => (await db.pool.query("SELECT checksum FROM policy_version WHERE policy_id = $1", [STUDIO])).rows;
     expect(await checksums(prodDb)).toEqual(await checksums(uatDb));
     expect((await prodDb.pool.query("SELECT count(*)::int AS n FROM policy_imported_version")).rows[0].n).toBe(0);
     expect((await prod.listPolicies()).find(policy => policy.id === STUDIO)).toMatchObject({ version: "1", origin: "imported", source_id: "tasklattice-guard" });
-    await expect(prod.updatePolicy({ id: STUDIO, name: "Renamed", actorId: "admin" })).rejects.toMatchObject({ code: "policy_imported_read_only" });
-    await expect(prod.publishPolicy({ id: STUDIO, actorId: "admin" })).rejects.toMatchObject({ code: "policy_imported_read_only" });
-    await expect(prod.deletePolicy({ id: STUDIO, actorId: "admin" })).rejects.toMatchObject({ code: "policy_imported_read_only" });
+    await prod.updatePolicy({ id: STUDIO, name: "Renamed", actorId: "admin" });
+    expect((await prodDb.pool.query("SELECT name FROM policy_record WHERE id=$1", [STUDIO])).rows).toEqual([{ name: "Renamed" }]);
+    expect(await checksums(prodDb)).toEqual(await checksums(uatDb));
+    await expect(prod.publishPolicy({ id: STUDIO, actorId: "admin" })).rejects.toMatchObject({ code: "policy_validation_required" });
+    await expect(prod.deletePolicy({ id: STUDIO, actorId: "admin" })).rejects.toMatchObject({ code: "policy_in_use" });
     // Each version keeps the Policy nodes it was built from.
     expect((await prodDb.pool.query("SELECT jsonb_array_length(policies) AS n FROM guardrail_version WHERE guardrail_id = $1 ORDER BY version", [guardrailId])).rows.map(row => row.n))
       .toEqual((await uatDb.pool.query("SELECT jsonb_array_length(policies) AS n FROM guardrail_version WHERE guardrail_id = $1 ORDER BY version", [guardrailId])).rows.map(row => row.n));
@@ -777,4 +781,36 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     } finally { await database.drop(); }
   });
 
+  it("round-trips a complete declarative Policy leaf and allows maintenance after import", async () => {
+    const definition = emptyPolicyDefinition(); definition.metadata.name = "Portable Policy";
+    definition.rules = ["first", "second"].map(id => ({ id, name: id, description: "", stages: ["input"], detector: { ref: "text/keyword", version: "1.0.0", parameters: { detector_options: { terms: [id] } } }, on_match: { action: "block" }, risk_level: "medium", metadata: { taxonomy_ids: ["TALI-BUSINESS-POLICY"] } }));
+    definition.tests = definition.rules.map(rule => ({ id: rule.id, name: rule.name, description: "", phase: "input", content: rule.id, expected_decision: "block", covered_rule_ids: [rule.id], kind: "rule_acceptance", scope: "rule", required: true, group: "Tests", parameter_names: [] }));
+    const id = definition.metadata.id;
+    await uat.policyResources.save({ definition, maintainer: "Admin", expectedRevision: 0, create: true, actorId: "admin" });
+    const report = await uat.policyResources.validate(id, "admin", true);
+    const jobs = (await uatDb.pool.query("SELECT id, tests FROM policy_resource_validation WHERE parent_id=$1", [report.id])).rows;
+    for (const job of jobs) {
+      const test = job.tests[0];
+      await uat.policyResources.complete({ runId: job.id, status: "passed", results: [{ caseId: test.id, name: test.name, actualDecision: "block", passed: true, sourcePolicyId: id, outputContent: "", findings: [{ policy_id: id, rule_id: test.id, verdict: "matched" }] } as ValidationCaseResult] });
+    }
+    const policy = await uat.policyResources.publish(id, 1, "admin");
+    const guardrail = await uat.createGuardrail({ name: "Portable Guardrail", actorId: "admin", runtimeProfile: "auto", draftConfig: { policyBindings: [{ policyId: id, policyVersion: policy.version, enabledRuleIds: ["second"], enabledRails: ["input"] }] } });
+    const release = await testAndPublish(guardrail.id, 1, false);
+    const exported = await uat.packages.exportPackage(guardrail.id, [release.version]);
+    const parsed = parsePackage(exported.bytes);
+    expect(parsed.policies).toHaveLength(1);
+    const node = parsed.policies[0]!;
+    expect(node.definition).not.toHaveProperty("source");
+    expect(node.definition.definition).toEqual(policy.definition);
+    expect(node.definition.rules).toHaveLength(2); expect(node.definition.test_cases).toHaveLength(2);
+    const preview = await prod.packages.inspectUpload(exported.bytes, "admin");
+    expect(preview.blockers).toEqual([]);
+    await prod.packages.importPackage(preview.packageId, { actorId: "admin" });
+    const imported = await prod.policyResources.get(id);
+    expect(imported.definition).toEqual(policy.definition);
+    await prod.policyResources.save({ definition: { ...imported.definition, metadata: { ...imported.definition.metadata, name: "Maintained here" } }, maintainer: "Destination admin", expectedRevision: 0, actorId: "admin" });
+    expect((await prod.policyResources.get(id)).definition.metadata.name).toBe("Maintained here");
+    const again = parsePackage((await prod.packages.exportPackage(guardrail.id, [release.version])).bytes);
+    expect(again.policies[0]).toEqual(node);
+  });
 });

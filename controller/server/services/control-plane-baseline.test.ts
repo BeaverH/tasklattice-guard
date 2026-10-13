@@ -69,7 +69,7 @@ function harness(reads: unknown[][], config: Partial<ControllerConfig> = {}, upd
     select: vi.fn((fields?: Record<string, unknown>) => {
       let tableName = "";
       const query = builder(() => {
-        if (tableName === "policy_imported_version") return [];
+        if (["policy_imported_version", "policy_resource", "policy_resource_version"].includes(tableName)) return [];
         if (fields && Object.keys(fields).length === 1 && "count" in fields) return [{ count: versionCount }];
         const next = reads.shift();
         if (!next) throw new Error("Unexpected database read in baseline reconciliation.");

@@ -690,7 +690,7 @@ function recommendedTopicPolicy(policies: Policy[]) {
 }
 
 function isBindablePolicy(policy: Policy | undefined): policy is Policy {
-  return Boolean(policy && (policy.source === "built_in" || policy.version !== "0"));
+  return Boolean(policy && (policy.version !== "0"));
 }
 
 function getPolicyBindingsBlocker(bindings: GuardrailPolicyBinding[], policies: Policy[], allowedTopics: string, mode: TopicControlMode = "strict") {

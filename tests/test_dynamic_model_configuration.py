@@ -651,3 +651,27 @@ def _topic_request() -> ActionRequest:
             on_unsafe="block",
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_topic_judge_uses_configured_completion_budget_instead_of_truncating_at_16_tokens():
+    configuration = _split_guard_configuration()
+    topic = next(item for item in configuration.runtimes if item.id == 'nvidia-topic')
+    topic.max_tokens = 2048
+    calls = []
+
+    def complete(request):
+        payload = json.loads(request.content)
+        calls.append(payload)
+        # Reasoning models can exhaust a short budget before producing any
+        # answer. That incomplete response must never become a safe verdict.
+        content = 'off-topic' if payload['max_tokens'] == 2048 else None
+        return httpx.Response(200, json={'choices': [{'message': {'content': content}}]})
+
+    providers = action_providers(*dynamic_runtime_action_providers(
+        configuration, {'provider-nvidia': 'synthetic-key'}, transport=httpx.MockTransport(complete),
+    ))
+    result = await providers[(ACTION_TOPIC_JUDGE, '1.0.0')].execute(_topic_request())
+    assert result.verdict == 'matched'
+    assert calls[0]['max_tokens'] == 2048
+    assert calls[0]['messages'][-1]['content'] == _topic_request().content

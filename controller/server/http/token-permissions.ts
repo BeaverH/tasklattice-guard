@@ -2,6 +2,13 @@ import type { TokenModule } from "../../shared/access-tokens.js";
 
 // Explicit allowlist: new API routes are unavailable to tokens until classified.
 export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, TokenModule, "read" | "write"]> = [
+  ["GET", "/api/v1/policy-catalog/detectors", "policies", "read"],
+  ["GET", "/api/v1/policies/:id/definition", "policies", "read"],
+  ["PUT", "/api/v1/policies/:id/definition", "policies", "write"],
+  ["POST", "/api/v1/policies/:id/definition/test-runs", "policies", "write"],
+  ["GET", "/api/v1/policies/:id/definition/test-runs/latest", "policies", "read"],
+  ["GET", "/api/v1/policies/:id/definition/test-runs/:runId", "policies", "read"],
+  ["POST", "/api/v1/policies/:id/definition/publish", "policies", "write"],
   ["POST", "/api/v1/model-configuration/draft/assignments/:target/candidate-validations", "models", "write"],
   ["GET", "/api/v1/model-configuration/draft/assignments/:target/candidate-validations/:validationId", "models", "read"],
   ["GET", "/api/v1/policies/:id/test-runs/:runId", "policies", "read"],

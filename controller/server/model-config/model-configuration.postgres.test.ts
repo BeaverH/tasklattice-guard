@@ -69,6 +69,19 @@ describe.skipIf(!url)("Current model configuration PostgreSQL semantics", () => 
     await pool.query("INSERT INTO model_configuration_revision (id,revision,state,assignments,validation_report) VALUES ($1,1,'active',$2,$3)", [activeId, assignments, report]);
     return { draftId, activeId, proposed, selection: await review() };
   }
+  it('requires formal policy examples and passes them to the scoped Runner validation', async () => {
+    await seed();
+    await pool.query("UPDATE model_definition SET profile='tali.automated-reasoning.v1' WHERE id=$1", [modelId]);
+    const validator = vi.fn(async () => ({ passed: true, message: 'Synthetic contract proof', latencyMs: 1 }));
+    service.setRailValidator(validator);
+    await expect(service.previewAssignment('automated_reasoning.output', modelId, 'admin')).rejects.toThrow();
+    expect(validator).not.toHaveBeenCalled();
+    const formalValidation = { policyId: 'warranty', policyVersion: '3', confidenceThreshold: 0.8, query: 'Warranty?', validResponse: 'One year.', invalidResponse: 'Ten years.' };
+    const receipt = await service.previewAssignment('automated_reasoning.output', modelId, 'admin', formalValidation);
+    expect(validator).toHaveBeenCalledWith(expect.objectContaining({ formalValidation, bindingId: 'automated_reasoning.output' }));
+    const draft = await service.updateAssignment('automated_reasoning.output', modelId, 'admin', receipt.validationId);
+    expect(draft.assignments.bindings['automated_reasoning.output']).toBe(modelId);
+  });
   it('overwrites current configuration without history and retains deferred edits', async () => {
     const { draftId, activeId, proposed, selection } = await seedPartial();
     const result = await service.applyConfiguration('synthetic-admin', selection);

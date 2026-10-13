@@ -14,6 +14,7 @@ import { readGuardrailProfiles } from "./guardrail-profiles.js";
 import { expandProtectionPreset } from "../policy-catalog/presets.js";
 import { TrafficRoutingService } from "./traffic-routing.js";
 import { GuardrailPackageService } from "./guardrail-packages.js";
+import { PolicyResourceService } from "./policy-resources.js";
 import type { ArtifactAdmission } from "../domain/environment-check.js";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "../../shared/canonical-json.js";
@@ -112,6 +113,10 @@ type RunnerRegistration = {
 };
 
 export class ControlPlaneService {
+  private resources: PolicyResourceService | null = null;
+  get policyResources(): PolicyResourceService {
+    return this.resources ??= new PolicyResourceService(this.db, this.config.policyCatalogDir, () => this.policyCatalog().list());
+  }
   readonly trafficRouting: TrafficRoutingService;
   readonly packages: GuardrailPackageService;
   private catalog: PolicyCatalog | null = null;
@@ -335,13 +340,16 @@ export class ControlPlaneService {
       .where(id ? eq(policyImportedVersions.policyId, id) : undefined);
     const imported = new Map<string, PolicyDto[]>();
     for (const row of rows) {
-      const view = { ...builtInPolicyView(row.definition), origin: "imported", source_id: row.sourceId } as unknown as PolicyDto;
+      const compiled = row.definition.definition
+        ? this.policyResources.compiler.compile(this.policyResources.compiler.fromSnapshot(row.definition))
+        : builtInPolicyView(row.definition);
+      const view = { ...compiled, origin: "imported", source_id: row.sourceId } as unknown as PolicyDto;
       imported.set(row.policyId, [...imported.get(row.policyId) ?? [], view]);
     }
     const newestFirst = (items: PolicyDto[]) => [...items].sort((left, right) => right.version.localeCompare(left.version, undefined, { numeric: true }));
     const catalog = id ? [this.policyCatalog().get(id)].filter((item): item is PolicyDto => Boolean(item)) : this.policyCatalog().list();
     const shipped = new Set(catalog.map((policy) => policy.id));
-    return [
+    return this.policyResources.views([
       ...catalog.map((policy) => imported.has(policy.id)
         ? { ...policy, published_versions: [...policy.published_versions ?? [], ...newestFirst(imported.get(policy.id)!)] }
         : policy),
@@ -349,7 +357,7 @@ export class ControlPlaneService {
         const [head, ...rest] = newestFirst(versions);
         return { ...head!, published_versions: rest };
       }),
-    ];
+    ], db, id);
   }
 
   async getPolicy(id: string) {
@@ -402,8 +410,6 @@ export class ControlPlaneService {
     const [updated] = await this.db.transaction(async (tx) => {
       const [current] = await tx.select().from(policyRecords).where(eq(policyRecords.id, input.id)).for("update");
       if (!current) throw new NotFoundError("Policy", input.id);
-      if (current.source !== "custom") throw new ValidationError("Built-in Policies are system managed.");
-      assertLocalPolicy(current);
       const draft = input.draft ? programmablePolicyDraftSchema.parse(input.draft) : current.draft;
       this.validatePolicyDraft(input.id, draft, false);
       const rows = await tx.update(policyRecords).set({
@@ -431,7 +437,6 @@ export class ControlPlaneService {
       if (this.policyCatalog().get(input.id)) throw new ValidationError("Built-in Policies are system managed and cannot be deleted.");
       const [record] = await tx.select().from(policyRecords).where(eq(policyRecords.id, input.id)).for("update");
       if (!record) throw new NotFoundError("Policy", input.id);
-      assertLocalPolicy(record);
       // A Guardrail version is built from this Policy: its Policy versions must stay viewable.
       const versionUses = await tx.select({ name: guardrails.name, version: guardrailVersions.version }).from(guardrailVersions)
         .innerJoin(guardrails, eq(guardrails.id, guardrailVersions.guardrailId))
@@ -485,7 +490,6 @@ export class ControlPlaneService {
     return this.db.transaction(async (tx) => {
       const [record] = await tx.select().from(policyRecords).where(eq(policyRecords.id, input.id)).for("update");
       if (!record) throw new NotFoundError("Policy", input.id);
-      assertLocalPolicy(record);
       this.validatePolicyDraft(input.id, record.draft, true);
       if (!record.draft.test_cases.length) throw new ValidationError("Add at least one Test Case before creating a Validation Run.");
       const runId = `policy-testing-report-${randomUUID()}`;
@@ -541,7 +545,6 @@ export class ControlPlaneService {
     return this.db.transaction(async (tx) => {
       const [record] = await tx.select().from(policyRecords).where(eq(policyRecords.id, input.id)).for("update");
       if (!record) throw new NotFoundError("Policy", input.id);
-      assertLocalPolicy(record);
       // The locked Policy serializes both publication and draft edits. Retries
       // identify the validated draft, not whichever draft happens to be latest.
       const sourceDraftRevision = input.expectedDraftRevision ?? record.draftRevision;
@@ -1376,6 +1379,7 @@ export class ControlPlaneService {
   }
 
   async markValidationRunning(runId: string): Promise<void> {
+    if (runId.startsWith("policy-job-") && await this.policyResources.running(runId)) return;
     const policyUpdate = await this.db.update(policyValidationRuns).set({ status: "running" })
       .where(and(eq(policyValidationRuns.id, runId), eq(policyValidationRuns.status, "queued"))).returning({ id: policyValidationRuns.id });
     if (policyUpdate.length) return;
@@ -1403,6 +1407,7 @@ export class ControlPlaneService {
     candidateArtifact?: ArtifactContent | undefined;
     runtime?: ValidationRuntimeFingerprint | undefined;
   }): Promise<void> {
+    if (input.runId.startsWith("policy-job-") && await this.policyResources.complete(input)) return;
     const [policyRun] = await this.db.select().from(policyValidationRuns).where(eq(policyValidationRuns.id, input.runId));
     if (policyRun) {
       await this.db.transaction(async (tx) => {
@@ -1573,6 +1578,7 @@ export class ControlPlaneService {
   }
 
   async rejectValidation(input: { runId: string; reason: string }): Promise<void> {
+    if (input.runId.startsWith("policy-job-") && await this.policyResources.complete({ ...input, status: "failed", results: [] })) return;
     const [policyRun] = await this.db.select().from(policyValidationRuns).where(eq(policyValidationRuns.id, input.runId));
     if (policyRun) {
       await this.completeValidation({
@@ -2977,11 +2983,7 @@ function programmablePolicySurface(
 }
 
 /** A Policy imported with a Guardrail belongs to its source; change it there and release a new version. */
-function assertLocalPolicy(record: typeof policyRecords.$inferSelect): void {
-  if (record.origin === "imported") {
-    throw new ConflictError(`Policy ${record.name} was imported from ${record.sourceId}; it is read only here. Change it in its source environment.`, "policy_imported_read_only", { sourceId: record.sourceId });
-  }
-}
+
 
 function policySnapshot(
   record: typeof policyRecords.$inferSelect,

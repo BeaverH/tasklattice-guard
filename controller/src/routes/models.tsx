@@ -1,3 +1,5 @@
+import { FormalValidationSheet } from "@/components/formal-validation-sheet";
+import type { FormalValidation } from "../../shared/formal-validation";
 import { Checkbox as CarbonCheckbox } from "@/components/ui/checkbox";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -133,6 +135,8 @@ export function GuardrailCatalogPage() {
   }
   const [previewReport, setPreviewReport] = useState<NonNullable<ModelConfigurationView["draft"]>["validationReport"]>(null);
   const validationReceipts = useRef<Record<string, string | undefined>>({});
+  const [formalValidationOpen, setFormalValidationOpen] = useState(false);
+  const formalValidation = useRef<FormalValidation | undefined>(undefined);
   const [pendingAction, setPendingAction] = useState<"activate" | null>(null);
   const [activationReview, setActivationReview] = useState<ModelConfigurationView | null>(null);
   const [selectedBindings, setSelectedBindings] = useState<CapabilityBindingId[]>([]);
@@ -159,9 +163,10 @@ export function GuardrailCatalogPage() {
   const validateAssignmentMutation = useMutation({
     mutationFn: async (target: ModelAssignmentTarget) => {
       const modelId = target === "control_plane" ? assignments?.controlPlane : assignments?.bindings[target];
-      return { revision: await validateModelAssignment(target, modelId ?? undefined), modelId };
+      return { revision: await (target === "automated_reasoning.output" ? validateModelAssignment(target, modelId ?? undefined, formalValidation.current) : validateModelAssignment(target, modelId ?? undefined)), modelId };
     },
     onSuccess: async ({ revision, modelId }, target) => {
+      if (target === "automated_reasoning.output") setFormalValidationOpen(false);
       if (revision.validationId && modelId) validationReceipts.current[`${target}:${modelId}`] = revision.validationId;
       const passed = Boolean(modelId && revision.validationReport?.checks.some((check) => check.id === `probe:${target}:${modelId}` && check.status === "passed"));
       toast[passed ? "success" : "error"](t(passed ? "modelSettings.assignmentValidationPassed" : "modelSettings.assignmentValidationFailed"));
@@ -243,6 +248,7 @@ export function GuardrailCatalogPage() {
       ) : null}
       {saveAssignmentMutation.error ? <div className="mt-6"><ErrorNotice error={saveAssignmentMutation.error} /></div> : null}
 
+      {formalValidationOpen ? <FormalValidationSheet pending={validateAssignmentMutation.isPending} onClose={() => setFormalValidationOpen(false)} onValidate={value => { formalValidation.current = value; validateAssignmentMutation.mutate("automated_reasoning.output"); }} /> : null}
       <GuardrailCatalogSection
         action={(
           <div className="flex flex-wrap gap-2">
@@ -265,7 +271,7 @@ export function GuardrailCatalogPage() {
         validatingTarget={validateAssignmentMutation.isPending ? validateAssignmentMutation.variables ?? null : null}
         onChange={(bindingId, modelId) => setAssignmentEdits((previous) => ({ ...previous, [bindingId]: modelId }))}
         onSave={(target, modelId) => saveAssignmentMutation.mutate({ target, modelId })}
-        onValidate={(target) => validateAssignmentMutation.mutate(target)}
+        onValidate={(target) => { if (target === "automated_reasoning.output") setFormalValidationOpen(true); else validateAssignmentMutation.mutate(target); }}
       />
       <ControlPlaneSection
         models={query.data.models}
@@ -319,9 +325,7 @@ function RunnerConfigurationComparison({ view, selectedBindings, onSelectionChan
   const draft = view.draft;
   if (!draft) return null;
   const changes = modelBindingChanges(draft.assignments, view.active?.assignments, draft.validationReport?.checks ?? []);
-  const bindings = capabilityBindingDefinitions.filter((binding) =>
-    !["contextual_grounding", "automated_reasoning"].includes(binding.capabilityRef)
-    || draft.assignments.bindings[binding.id] || view.active?.assignments.bindings[binding.id]);
+  const bindings = capabilityBindingDefinitions;
   const modelLabel = (id: string | null | undefined, change?: "added" | "removed") => {
     if (!id) return <span className="text-muted-foreground">{t("modelSettings.notAssigned")}</span>;
     const model = view.models.find((item) => item.id === id);
@@ -425,11 +429,7 @@ function GuardrailCatalogSection({ action, assignments, savedAssignments, models
 }) {
   const { t } = useTranslation();
   const [rail, setRail] = useState<ImplementedGuardrailRailType>("input");
-  // Generic Model samples cannot prove context-dependent Policy behavior.
-  // Preserve existing assignments so operators can inspect or remove them.
-  const catalogBindings = capabilityBindingDefinitions.filter((binding) =>
-    !["contextual_grounding", "automated_reasoning"].includes(binding.capabilityRef)
-    || assignments.bindings[binding.id] || savedAssignments.bindings[binding.id]);
+  const catalogBindings = capabilityBindingDefinitions;
   const rows = catalogBindings.filter((binding) => binding.railType === rail).map((binding) => {
     const modelId = assignments.bindings[binding.id];
     const selectedModel = models.find((model) => model.id === modelId);

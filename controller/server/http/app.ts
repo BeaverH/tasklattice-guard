@@ -1,3 +1,4 @@
+import { formalValidationSchema } from "../../shared/formal-validation.js";
 import { testingReportsQuery } from "../services/testing-reports.js";
 import { runtimeLogOutcomes } from "../../shared/runtime-outcome.js";
 import { readSoftwareVersion } from "../services/software-version.js";
@@ -21,6 +22,8 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import { policyDefinitionSchema } from "../../shared/policy-definition.js";
+import { publicPolicy } from "../policy-catalog/public-policy.js";
 
 import type { ControllerAuth } from "../auth.js";
 import type { ControllerConfig } from "../config.js";
@@ -433,8 +436,8 @@ export function createHttpApp(input: {
   app.post("/api/v1/model-configuration/draft/assignments/:target/candidate-validations", authenticated, administrator, async context => {
     if (!input.models) throw new ControllerError("Model configuration is unavailable.", 503, "model_configuration_unavailable");
     const target = modelAssignmentTargetSchema.parse(context.req.param("target"));
-    const body = z.object({ modelId: z.string().uuid() }).parse(await context.req.json());
-    return context.json(await input.models.previewAssignment(target, body.modelId, context.get("actor").id), 201);
+    const body = z.object({ modelId: z.string().uuid(), formalValidation: formalValidationSchema.optional() }).parse(await context.req.json());
+    return context.json(await input.models.previewAssignment(target, body.modelId, context.get("actor").id, body.formalValidation), 201);
   });
   app.get("/api/v1/model-configuration/draft/assignments/:target/candidate-validations/:validationId", authenticated, async context => {
     if (!input.models) throw new ControllerError("Model configuration is unavailable.", 503, "model_configuration_unavailable");
@@ -458,8 +461,26 @@ export function createHttpApp(input: {
     return context.json({ ...view, distribution }, distribution.distributionStatus === "ready" ? 200 : 202);
   });
 
+  app.get("/api/v1/policy-catalog/detectors", authenticated, context => context.json({ items: input.service.policyResources.compiler.detectors }));
+  app.get("/api/v1/policies/:id/definition", authenticated, async context => context.json(await input.service.policyResources.get(context.req.param("id"))));
+  app.put("/api/v1/policies/:id/definition", authenticated, administrator, async context => {
+    const body = z.object({ definition: policyDefinitionSchema, maintainer: z.string().trim().min(1).max(200), expectedRevision: z.number().int().nonnegative(), create: z.boolean().optional() }).parse(await context.req.json());
+    if (body.definition.metadata.id !== context.req.param("id")) throw new ValidationError("Policy identity must match its URL.");
+    return context.json(await input.service.policyResources.save({ ...body, ...(body.create === undefined ? {} : { create: body.create }), actorId: context.get("actor").id }));
+  });
+  app.post("/api/v1/policies/:id/definition/test-runs", authenticated, administrator, async context => context.json(await input.service.policyResources.validate(context.req.param("id"), context.get("actor").id, input.runnerControl.hasDefaultCompiler()), 202));
+  app.get("/api/v1/policies/:id/definition/test-runs/latest", authenticated, async context => context.json(await input.service.policyResources.report(context.req.param("id"))));
+  app.get("/api/v1/policies/:id/definition/test-runs/:runId", authenticated, async context => {
+    const report = await input.service.policyResources.report(context.req.param("id"), context.req.param("runId"));
+    if (!report) throw new NotFoundError("Policy test run", context.req.param("runId"));
+    return context.json(report);
+  });
+  app.post("/api/v1/policies/:id/definition/publish", authenticated, administrator, async context => {
+    const body = z.object({ expectedRevision: z.number().int().positive() }).parse(await context.req.json());
+    return context.json(publicPolicy(await input.service.policyResources.publish(context.req.param("id"), body.expectedRevision, context.get("actor").id)), 201);
+  });
   app.get("/api/v1/policies", authenticated, async (context) => {
-    const items = await input.service.listPolicies();
+    const items = publicPolicy(await input.service.listPolicies());
     return context.json({ items, count: items.length });
   });
   app.get("/api/v1/guardrail-profiles", authenticated, async (context) => {
@@ -472,7 +493,7 @@ export function createHttpApp(input: {
     // This is a preview, not a save/activation or evidence that runtime checks passed.
     return context.json({ directories: protectionDirectories, items, count: items.length });
   });
-  app.get("/api/v1/policies/:id", authenticated, async (context) => context.json(await input.service.getPolicy(context.req.param("id"))));
+  app.get("/api/v1/policies/:id", authenticated, async (context) => context.json(publicPolicy(await input.service.getPolicy(context.req.param("id")))));
   app.post("/api/v1/policies", authenticated, administrator, async (context) => {
     const body = createProgrammablePolicySchema.parse(await context.req.json());
     return context.json(await input.service.createPolicy({ ...body, actorId: context.get("actor").id }), 201);

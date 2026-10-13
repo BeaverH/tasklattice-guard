@@ -20,6 +20,7 @@ import {
   policyImportedVersions,
   policyRecords,
   policyVersions,
+  policyResourceVersions,
   testCases,
 } from "../db/schema.js";
 import { artifactContent, artifactContentDigest, ARTIFACT_CONTENT_DIGEST_VERSION, signArtifactDigest, type ArtifactContent } from "../domain/artifact-content.js";
@@ -289,6 +290,8 @@ export class GuardrailPackageService {
   private async policyStates(db: Transaction | ControllerDatabase, leaves: PackagePolicy[]): Promise<Map<PackagePolicy, PolicyState>> {
     const catalog = new Map(this.catalog().flatMap(policy => [policy, ...(policy.published_versions ?? [])]).map(policy => [`${policy.id}@${policy.version}`, policy]));
     const ids = [...new Set(leaves.map(node => node.id))];
+    const maintained = ids.length ? await db.select().from(policyResourceVersions).where(inArray(policyResourceVersions.policyId, ids)) : [];
+    for (const item of maintained) catalog.set(`${item.policyId}@${item.version}`, item.view);
     const imported = ids.length ? await db.select().from(policyImportedVersions).where(inArray(policyImportedVersions.policyId, ids)) : [];
     const versions = ids.length ? await db.select({ policyId: policyVersions.policyId, version: policyVersions.version, checksum: policyVersions.checksum }).from(policyVersions).where(inArray(policyVersions.policyId, ids)) : [];
     const changed = (node: PackagePolicy): PolicyState => ({ state: "conflict", code: "policy_version_conflict",

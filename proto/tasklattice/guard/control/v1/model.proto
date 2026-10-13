@@ -49,6 +49,17 @@ message CapabilityValidationRequest {
   string binding_id = 2;
   DataPlaneModelConfiguration configuration = 3;
   string credential_lease_id = 4;
+  FormalValidationContext formal_validation = 5;
+}
+
+// Synthetic examples tied to an existing, versioned external proof policy.
+message FormalValidationContext {
+  string policy_id = 1;
+  string policy_version = 2;
+  double confidence_threshold = 3;
+  string query = 4;
+  string valid_response = 5;
+  string invalid_response = 6;
 }
 
 // Behavioural evidence from the same NeMo compiler and runtime used for traffic.

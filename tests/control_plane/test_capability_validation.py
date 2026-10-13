@@ -106,3 +106,73 @@ async def test_recorded_input_502_is_not_counted_as_successful_detection():
     assert result.cases[0].passed is True
     assert result.cases[1].actual_decision == 'block'
     assert result.cases[1].passed is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response_kind", ["scored", "always-grounded", "malformed"])
+async def test_grounding_binding_uses_source_context_and_configured_budget(response_kind, monkeypatch):
+    from runner.capability_validation import NeMoConfigCompiler
+    compile_plan = NeMoConfigCompiler.compile
+    deadlines = []
+    def capture_plan(self, plan):
+        deadlines.extend(module.timeout_ms for module in plan.modules)
+        return compile_plan(self, plan)
+    monkeypatch.setattr(NeMoConfigCompiler, "compile", capture_plan)
+    calls = []
+    def respond(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        context = json.loads(body["messages"][1]["content"])
+        assert context["queries"][0]["text"] == "How long is the warranty?"
+        assert context["grounding_sources"][0]["text"] == "The product warranty lasts one year."
+        assert body["max_tokens"] == 4096
+        unsafe = "ten years" in context["response"]["text"] and response_kind == "scored"
+        payload = {"grounding_score": 0.0 if unsafe else 1.0, "relevance_score": 1.0, "claims": [], "reason": "Source comparison"}
+        return httpx.Response(200, json={"choices": [{"message": {"content": "invalid" if response_kind == "malformed" else json.dumps(payload)}}]})
+    request = candidate("output", "contextual_grounding", "tali.grounding-judge.v1", "tali.guard.contextual-grounding.v1")
+    request.configuration.runtimes[0].max_tokens = 4096
+    request.configuration.runtimes[0].timeout_seconds = 60
+    result = await validate_capability(request, {"provider-1": "synthetic-secret"}, transport=httpx.MockTransport(respond))
+    assert len(calls) == 2
+    # A generous provider timeout cannot make capability validation more permissive
+    # than the published Guardrail's 30 second remote-Detector deadline.
+    assert deadlines and all(deadline == 30_000 for deadline in deadlines)
+    assert result.passed is (response_kind == "scored"), result.message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("behavior", ["correct", "always-valid", "inconclusive", "low-confidence", "malformed", "unavailable"])
+async def test_formal_binding_requires_actual_valid_and_invalid_proof_findings(behavior):
+    request = candidate("output", "automated_reasoning", "tali.automated-reasoning.v1", "tali.guard.automated-reasoning.v1")
+    context = request.formal_validation
+    context.policy_id = "warranty"
+    context.policy_version = "3"
+    context.confidence_threshold = 0.8
+    context.query = "How long is the warranty?"
+    context.valid_response = "The warranty lasts one year."
+    context.invalid_response = "The warranty lasts ten years."
+    calls = []
+    def respond(http_request):
+        body = json.loads(http_request.content); calls.append(body)
+        assert body["policy"] == {"id": "warranty", "version": "3"}
+        assert body["query_content"] == context.query
+        assert body["confidence_threshold"] == 0.8
+        if behavior == "unavailable": return httpx.Response(503)
+        if behavior == "malformed": return httpx.Response(200, json={"ok": True})
+        result = "translation_ambiguous" if behavior == "inconclusive" else "invalid" if behavior == "correct" and "ten years" in body["guard_content"] else "valid"
+        return httpx.Response(200, json={"findings": [{"id": "proof", "result": result, "confidence": 0.1 if behavior == "low-confidence" else 1.0}]})
+    result = await validate_capability(request, {"provider-1": "synthetic-secret"}, transport=httpx.MockTransport(respond))
+    assert len(calls) == 2
+    assert result.passed is (behavior == "correct"), result.message
+    if behavior == "correct":
+        assert json.loads(result.cases[0].output_content)["formal_policy"]["policy_version"] == "3"
+
+
+@pytest.mark.asyncio
+async def test_formal_binding_without_policy_context_never_probes_a_fabricated_policy():
+    request = candidate("output", "automated_reasoning", "tali.automated-reasoning.v1", "tali.guard.automated-reasoning.v1")
+    def respond(_):
+        pytest.fail("No external request may be made without policy context")
+    result = await validate_capability(request, {"provider-1": "synthetic-secret"}, transport=httpx.MockTransport(respond))
+    assert not result.passed
+    assert "existing formal policy" in result.message

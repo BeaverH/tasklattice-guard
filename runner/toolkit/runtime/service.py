@@ -351,7 +351,8 @@ class GuardrailRuntimeService:
                     reason = decision.reason or "The active Guardrail transformed model content."
 
         ordered_results = tuple(content_results[block.id] for block in incoming_blocks)
-        output = tuple(output_by_id.get(block.id, block.text) for block in incoming_blocks)
+        # Context evidence is never part of the caller's transformed text array.
+        output = tuple(output_by_id.get(block.id, block.text) for block in incoming_blocks if block.guard_content)
 
         return ProtectionDecision(
             decision=final_decision,
