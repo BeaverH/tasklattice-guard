@@ -6,7 +6,7 @@ order: 2
 ---
 This chapter defines the contract of the **Scan Endpoint** (`f5-scan`). It serves existing F5 Scan scripts, Python requests and dataset evaluation.
 
-- Compatibility covers text scans through `POST /backend/v1/scans`.
+- Compatibility covers text scans through `POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans`.
 - It does not cover F5 project management, history, Scanner configuration APIs or `/scans/raw`.
 - The LiteLLM action, Call ID and WebSocket rules do not apply to Scan.
 
@@ -14,18 +14,18 @@ This chapter defines the contract of the **Scan Endpoint** (`f5-scan`). It serve
 ## Address, authentication and routing
 
 ```http
-POST /backend/v1/scans HTTP/1.1
+POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans HTTP/1.1
 Authorization: Bearer <Endpoint credential>
 Content-Type: application/json
 ```
 
-- `CALYPSOAI_URL` is the origin of the Runner Service, for example `https://guard-runtime.example.com`. It does not include `/runtime/v1/endpoints/{id}`.
+- `CALYPSOAI_URL` is the Endpoint base URL including its UUID, for example `https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>`. Replace the placeholder with the actual ID from the integration page.
 - `CALYPSOAI_TOKEN` is the complete credential that you saved when you created the Scan Endpoint.
 
-All Scan Endpoints share this path. The Bearer credential identifies the Endpoint. The published Router of that Endpoint selects a Guardrail Version.
+The UUID in the path identifies the Endpoint. The Bearer credential must belong to that Endpoint; a mismatch returns `401`. Its published Router selects a Guardrail Version. The root path `/backend/v1/scans` is no longer available. Clients must append `/backend/v1/scans` to the Endpoint base URL. URL-joining libraries must preserve the Endpoint path instead of resetting it to the host root.
 
 ```bash
-export CALYPSOAI_URL='https://guard-runtime.example.com'
+export CALYPSOAI_URL='https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>'
 export CALYPSOAI_TOKEN='<Scan Endpoint credential>'
 curl -sS --fail-with-body -X POST "${CALYPSOAI_URL%/}/backend/v1/scans" \
   -H "Authorization: Bearer $CALYPSOAI_TOKEN" \

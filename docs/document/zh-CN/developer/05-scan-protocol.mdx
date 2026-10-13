@@ -6,7 +6,7 @@ order: 2
 ---
 本章定义 **Scan Endpoint**（`f5-scan`）在本系统中的实际契约，面向现有的 F5 Scan 脚本、Python requests 和数据集评测。
 
-- 兼容范围是通过 `POST /backend/v1/scans` 的文本扫描。
+- 兼容范围是通过 `POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans` 的文本扫描。
 - 不包括 F5 的项目管理、历史查询、Scanner 配置 API 和 `/scans/raw`。
 - LiteLLM 的 `action`、Call ID 和 WebSocket 规则不适用于 Scan。
 
@@ -14,18 +14,18 @@ order: 2
 ## 地址、认证与路由
 
 ```http
-POST /backend/v1/scans HTTP/1.1
+POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans HTTP/1.1
 Authorization: Bearer <Endpoint 凭据>
 Content-Type: application/json
 ```
 
-- `CALYPSOAI_URL` 是 Runner Service 的运行时根地址，例如 `https://guard-runtime.example.com`。不要附带 `/runtime/v1/endpoints/{id}`。
+- `CALYPSOAI_URL` 是包含 Endpoint UUID 的基础地址，例如 `https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>`。将占位符替换为接入页提供的真实 ID。
 - `CALYPSOAI_TOKEN` 是创建 Scan Endpoint 时保存的完整凭据。
 
-所有 Scan Endpoint 共用这个路径。Bearer 凭据识别 Endpoint，该 Endpoint 已发布的 Router 再选择 Guardrail Version。
+路径中的 UUID 唯一指定 Endpoint；Bearer 凭据必须属于该 Endpoint，否则返回 `401`。该 Endpoint 已发布的 Router 再选择 Guardrail Version。根路径 `/backend/v1/scans` 不再提供接入。客户端应在 Endpoint 基础地址后拼接 `/backend/v1/scans`；使用 URL 拼接库时须保留 Endpoint 路径，不能重置到域名根路径。
 
 ```bash
-export CALYPSOAI_URL='https://guard-runtime.example.com'
+export CALYPSOAI_URL='https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>'
 export CALYPSOAI_TOKEN='<Scan Endpoint 凭据>'
 curl -sS --fail-with-body -X POST "${CALYPSOAI_URL%/}/backend/v1/scans" \
   -H "Authorization: Bearer $CALYPSOAI_TOKEN" \

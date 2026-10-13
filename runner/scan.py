@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from .routing import RoutingError
 from .toolkit.runtime.contracts import GuardContentBlock, ProtectionDecision, ProtectionRequest, RequestContext
 
-SCAN_PATH = "/backend/v1/scans"
+SCAN_PATH = "/runtime/v1/endpoints/{endpoint_id}/backend/v1/scans"
 SCAN_ADAPTER = "f5-scan"
 IGNORED_FIELDS = ("project", "externalMetadata", "requestPromptId", "configOverrides", "disabled", "forceEnabled")
 
@@ -131,16 +131,16 @@ def register_scan(api, *, max_body_bytes: int, timeout_seconds: float) -> None:
         dependencies=[Depends(HTTPBearer(auto_error=False, scheme_name="ScanBearer"))],
         openapi_extra={"requestBody": {"required": True, "content": {"application/json": {"schema": ScanRequest.model_json_schema()}}},
                        "responses": {"422": {"description": "Invalid Scan request"}}})
-    async def scan(request: Request):
+    async def scan(endpoint_id: str, request: Request):
         scan_id = str(uuid4())
         response_headers = {"X-Request-ID": scan_id, "X-TaskLattice-Scan-Compatibility": "v1"}
         try:
             authorization = request.headers.getlist("authorization")
             parts = authorization[0].split() if len(authorization) == 1 else []
             token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else None
-            endpoint_id = api._store.endpoint_for_credential(token)
-            api._metrics.observe_authentication("scan", endpoint_id is not None)
-            if endpoint_id is None:
+            authenticated = api._store.authenticate_endpoint(endpoint_id, token)
+            api._metrics.observe_authentication("scan", authenticated)
+            if not authenticated:
                 response_headers["WWW-Authenticate"] = "Bearer"
                 raise ScanFailure(401, "invalid_credential", "Endpoint credential is invalid.")
             if api._store.endpoint_adapter(endpoint_id) != SCAN_ADAPTER:

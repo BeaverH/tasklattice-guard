@@ -23,7 +23,9 @@ order: 0
 
 1. 确认目标 Guardrail Version 和 Router 已发布，配置已下发到 Runner，执行依赖就绪。
 2. 在 [Endpoints](/integration/endpoints) 为接入方创建独立 Endpoint，选择类型并绑定 Router。
-3. 保存只显示一次的完整凭据，从详情页复制 **Runner Service 运行时地址**。管理界面的地址不是数据面地址。
+3. 保存只显示一次的完整凭据，从详情页复制 **Endpoint 运行时地址**，保留 `/runtime/v1/endpoints/<endpoint_id>` 路径。
+
+管理员可用 Helm `runner.publicUrl`（Controller 环境变量 `CONTROLLER_RUNTIME_PUBLIC_URL`）配置包含端口的外部 HTTP(S) 基础地址。UI 生成的 Scan 和 LiteLLM 地址都会使用该配置；留空时使用 Runtime Service DNS。网关把 `/runtime/v1/endpoints/` 转发到 Runtime、其他路径转发到 Controller 后，UI 和数据面可以共用域名与端口。Playground 等内部调用仍使用 `CONTROLLER_RUNTIME_SERVICE_URL`。接入时需复制完整 Endpoint 路径，不能只填 UI 的域名和端口。
 
 这里使用 Endpoint 凭据，不能使用 Controller 的个人 Access Token。Endpoint 的身份来自凭据。请求体中的用户声明或 Header 不会自动成为可信身份。Router 只匹配对应 Adapter 提供的字段。身份 Header 应由可信代理验证，见 [Endpoint 与 Routing](/document/operator/operator-routing)。
 
@@ -48,7 +50,7 @@ order: 0
 <a id="endpoint-scan" />
 ## 连接 Scan（F5 兼容）
 
-把 F5 测试脚本的 `CALYPSOAI_URL` 改为 Runner Service 根地址，`CALYPSOAI_TOKEN` 改为 Scan Endpoint 的完整凭据。脚本仍向 `/backend/v1/scans` 发送请求。Bearer 凭据识别 Endpoint，它的 Router 选择 Guardrail。
+把 F5 测试脚本的 `CALYPSOAI_URL` 改为包含 UUID 的 Endpoint 基础地址 `https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>`，`CALYPSOAI_TOKEN` 改为该 Scan Endpoint 的完整凭据。脚本在基础地址后拼接 `/backend/v1/scans`，保留 UUID 路径。路径指定 Endpoint，Bearer 校验凭据归属，它的 Router 选择 Guardrail。旧根路径不再提供接入；如果脚本会丢弃基础地址中的路径，需调整 URL 拼接逻辑。
 
 管理员可在创建或查看 Scan Endpoint 时配置“默认 flagOnly”（初始为 `true`）。请求省略 `flagOnly` 时使用此值；请求显式值优先。选择 `false` 可区分阻断和替换结果，修改在 Runner 同步后生效。
 

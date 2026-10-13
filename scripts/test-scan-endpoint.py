@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from urllib.error import HTTPError
@@ -40,8 +41,10 @@ def main() -> int:
     if not args.url or not token:
         parser.error("Set CALYPSOAI_URL and CALYPSOAI_TOKEN before running.")
     parsed = urlsplit(args.url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path not in {"", "/"} or parsed.query or parsed.fragment or parsed.username:
-        parser.error("CALYPSOAI_URL must be the runtime root URL, without a path or credentials.")
+    if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+            or not re.search(r"/runtime/v1/endpoints/[^/]+/?$", parsed.path)
+            or parsed.query or parsed.fragment or parsed.username):
+        parser.error("CALYPSOAI_URL must be the Endpoint base URL ending in /runtime/v1/endpoints/<endpoint_id>, without a query, fragment or credentials.")
     if args.max_body_bytes < 1024:
         parser.error("--max-body-bytes must be at least 1024.")
     endpoint = args.url.rstrip("/") + "/backend/v1/scans"

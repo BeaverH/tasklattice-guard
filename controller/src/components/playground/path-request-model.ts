@@ -51,7 +51,7 @@ export function importRequest(source: string): RequestDraft {
 }
 export function endpointRequest(id: string, protocol: EndpointProtocol): RequestDraft {
   if (protocol === "scan") return {
-    method: "POST", url: "/backend/v1/scans",
+    method: "POST", url: `/runtime/v1/endpoints/${encodeURIComponent(id)}/backend/v1/scans`,
     headers: [newHeader("Content-Type", "application/json")],
     body: JSON.stringify({ input: "Hello, can you help me?", scanDirection: "request", flagOnly: true, verbose: true }, null, 2),
   };

@@ -88,6 +88,29 @@ describe("Controller config", () => {
     });
   });
 
+  it.each([undefined, "", "   "])("leaves the public Runtime URL optional: %j", (value) => {
+    expect(loadConfig({ ...requiredEnvironment, CONTROLLER_RUNTIME_PUBLIC_URL: value }).runtimePublicUrl).toBeNull();
+  });
+
+  it("normalizes the public Runtime base URL without changing internal calls", () => {
+    expect(loadConfig({
+      ...requiredEnvironment,
+      CONTROLLER_RUNTIME_PUBLIC_URL: " https://guard.example.test:8443/guard/// ",
+      CONTROLLER_RUNTIME_SERVICE_URL: "http://guard-runtime.uat.svc.cluster.local:8091/",
+    })).toMatchObject({
+      runtimePublicUrl: "https://guard.example.test:8443/guard",
+      runtimeServiceUrl: "http://guard-runtime.uat.svc.cluster.local:8091",
+    });
+  });
+
+  it.each([
+    "guard.example.test", "https://", "ftp://guard.example.test", "https://user:password@guard.example.test",
+    "https://guard.example.test?token=secret", "https://guard.example.test/#endpoint",
+  ])("rejects an invalid public Runtime base URL: %s", (value) => {
+    expect(() => loadConfig({ ...requiredEnvironment, CONTROLLER_RUNTIME_PUBLIC_URL: value }))
+      .toThrow(/CONTROLLER_RUNTIME_PUBLIC_URL/);
+  });
+
   it("exposes the selected control-plane and data-plane models without credentials", () => {
     expect(loadConfig(requiredEnvironment).modelConnections).toEqual({
       controlPlane: {

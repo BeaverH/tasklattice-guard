@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { RunnerPlaygroundClient } from "./service";
 import { pathTestSchema } from "../../shared/playground-path";
+import { loadConfig } from "../config";
 const base = {
   target: "router",
   targetId: "router-1",
@@ -10,17 +11,43 @@ const base = {
   request: "POST /chat HTTP/1.1\nX-Channel: partner\n\nhello",
 };
 describe("Runner path test transport", () => {
-  it("uses the Scan root path and Bearer credential only for an approved Scan target", async () => {
+  it.each(["f5-scan", "litellm-generic-guardrail"] as const)("keeps %s Playground traffic on Service DNS when an external address is advertised", async (adapter) => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      CONTROLLER_DATABASE_URL: "postgresql://controller:controller@localhost/controller",
+      CONTROLLER_RUNNER_TOKEN: "runner-token-that-is-at-least-32-characters",
+      CONTROLLER_ARTIFACT_SIGNING_KEY_PATH: "/tmp/controller-signing-key.pem",
+      BETTER_AUTH_SECRET: "better-auth-secret-that-is-at-least-32-characters",
+      CONTROLLER_RUNTIME_SERVICE_URL: "http://guard-runtime.uat.svc.cluster.local:8091",
+      CONTROLLER_RUNTIME_PUBLIC_URL: "https://guard.example.test:8443",
+    });
+    const fetcher = vi.fn().mockResolvedValue(Response.json({}));
+    const client = new RunnerPlaygroundClient({ baseUrl: config.runtimeServiceUrl, token: config.runnerToken, fetcher });
+    const path = `/runtime/v1/endpoints/endpoint-1/${adapter === "f5-scan" ? "backend/v1/scans" : "beta/litellm_basic_guardrail_api"}`;
+    await client.testPath(pathTestSchema.parse({ ...base, target: "endpoint", targetId: "endpoint-1", credential: "endpoint-key",
+      request: `POST ${config.runtimePublicUrl}${path} HTTP/1.1\n\n{"input":"hello","texts":["hello"]}`,
+    }), adapter);
+    expect(fetcher.mock.calls[0]![0]).toBe(`${config.runtimeServiceUrl}${path}`);
+  });
+  it("uses the selected Scan Endpoint's path and Bearer credential only for an approved Scan target", async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ result: { outcome: "cleared" }, redactedInput: "hello" }));
     const client = new RunnerPlaygroundClient({ baseUrl: "http://runner:8091", token: "internal", fetcher });
-    const input = pathTestSchema.parse({ ...base, target: "endpoint", credential: "scan-key",
-      request: 'POST /backend/v1/scans HTTP/1.1\nAuthorization: attacker\n\n{"input":"hello"}' });
+    const input = pathTestSchema.parse({ ...base, target: "endpoint", targetId: "endpoint-1", credential: "scan-key",
+      request: 'POST /runtime/v1/endpoints/endpoint-1/backend/v1/scans HTTP/1.1\nAuthorization: attacker\n\n{"input":"hello"}' });
     await expect(client.testPath(input)).rejects.toThrow();
     expect(fetcher).not.toHaveBeenCalled();
     const result = await client.testPath(input, "f5-scan");
-    expect(fetcher.mock.calls[0]![0]).toBe("http://runner:8091/backend/v1/scans");
+    expect(fetcher.mock.calls[0]![0]).toBe("http://runner:8091/runtime/v1/endpoints/endpoint-1/backend/v1/scans");
     expect(fetcher.mock.calls[0]![1].headers).toEqual({ authorization: "Bearer scan-key", "content-type": "application/json" });
     expect(result.body.result).toEqual({ outcome: "cleared" });
+  });
+  it.each(["/backend/v1/scans", "/runtime/v1/endpoints/other/backend/v1/scans"])("rejects Scan requests outside the selected Endpoint: %s", async (path) => {
+    const fetcher = vi.fn();
+    const client = new RunnerPlaygroundClient({ baseUrl: "http://runner:8091", token: "internal", fetcher });
+    const input = pathTestSchema.parse({ ...base, target: "endpoint", targetId: "endpoint-1", credential: "scan-key",
+      request: `POST ${path} HTTP/1.1\n\n{"input":"hello"}` });
+    await expect(client.testPath(input, "f5-scan")).rejects.toThrow("selected Endpoint");
+    expect(fetcher).not.toHaveBeenCalled();
   });
   it("runs published routing on Runner with a revision fence and no client credentials in selector inputs", async () => {
     const fetcher = vi

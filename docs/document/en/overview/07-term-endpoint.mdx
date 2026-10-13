@@ -25,7 +25,7 @@ An Endpoint selects a data-plane integration protocol. The system provides only 
 | Type | Intended client | How it submits checks |
 | --- | --- | --- |
 | **TaskLattice Guard for LiteLLM** (`litellm-generic-guardrail`) | LiteLLM gateways, or custom gateways and Agents implementing the LiteLLM Generic Guardrail contract | Send `x-api-key` to the Endpoint's `/beta/litellm_basic_guardrail_api`. Use `litellm_call_id` to correlate input and output. The Provider also supports protected WebSocket output. |
-| **Scan (F5 compatible)** (`f5-scan`) | Python, requests, curl, F5 Scan evaluation scripts, or applications needing independent text checks | Send a Bearer credential to `/backend/v1/scans`, submit text in `input`, and select request or response with `scanDirection`. Each scan is independent and does not generate a business-model answer. |
+| **Scan (F5 compatible)** (`f5-scan`) | Python, requests, curl, F5 Scan evaluation scripts, or applications needing independent text checks | Send the Endpoint's Bearer credential to `/runtime/v1/endpoints/{endpoint_id}/backend/v1/scans`, submit text in `input`, and select request or response with `scanDirection`. Each scan is independent and does not generate a business-model answer. |
 
 Choose LiteLLM for a LiteLLM gateway and Scan for standalone text checks or dataset evaluations. Clients must follow the selected request/response contract and enforce the returned outcome before delivering content. See [setup instructions](/document/developer/endpoint-setup), [LiteLLM request examples](/document/developer/gateway-connect), and [client responsibilities](/document/developer/endpoint-setup#endpoint-delivery).
 

@@ -1,10 +1,10 @@
 # Scan Endpoint 兼容接口技术设计
 
-日期：2026-10-08。实现更新：2026-10-09。状态：已实现本文件定义的 Scan 兼容契约，F5 实例对照联调尚未进行。
+日期：2026-10-08。实现更新：2026-10-13。状态：已实现本文件定义的 Scan 兼容契约，F5 实例对照联调尚未进行。
 
 ## 1. 目标与设计结论
 
-新增 `Scan（F5 兼容）` Endpoint，提供 `POST /backend/v1/scans`。已有 Python / requests / curl 测试脚本只需替换服务地址和凭据，即可提交文本、读取 `result.outcome`，使用同一批数据评测 TaskLattice Guard。
+新增 `Scan（F5 兼容）` Endpoint，提供 `POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans`。Python / requests / curl 测试脚本使用包含 Endpoint UUID 的基础地址和对应凭据，并保留 URL 中的 Endpoint 路径，即可提交文本、读取 `result.outcome`，使用同一批数据评测 TaskLattice Guard。
 
 执行链保持为 **Endpoint → 绑定的 Router → 路由命中的 Guardrail Version → 扫描结果**。调用方不需要选择 Scanner，也不需要配置 F5 Project。内部适配器标识约定为 `f5-scan`，协议标识为 `scan`。
 
@@ -23,7 +23,7 @@ F5 的 Schema 规定只有 `input` 必填；`scanDirection` 默认 `request`，`
 ## 2. 接入地址、认证与 Endpoint 定位
 
 ```http
-POST /backend/v1/scans HTTP/1.1
+POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans HTTP/1.1
 Authorization: Bearer <TASKLATTICE_ENDPOINT_API_KEY>
 Content-Type: application/json
 Accept: application/json
@@ -31,22 +31,20 @@ Accept: application/json
 
 服务直接返回一次完整的 JSON 响应。内容命中、脱敏、阻断都属于扫描成功，使用 HTTP `200`；协议、认证或执行失败使用非 `2xx`。
 
-路径中没有 Endpoint ID，因此 **Bearer 凭据既用于认证，也用于定位 Endpoint**：
+路径中的 UUID 唯一指定 Endpoint，**Bearer 凭据用于校验该 Endpoint 的访问权限**：
 
-1. Runner 对凭据计算摘要，在当前已同步的有效凭据中定位唯一 Endpoint。
-2. 校验凭据未撤销、Endpoint 可用，且适配器为 `f5-scan`。
+1. Runner 读取路径中的 `endpoint_id`，在当前已同步的配置中找到该 Endpoint。
+2. 校验 Bearer 凭据属于该 Endpoint、未撤销，且适配器为 `f5-scan`。凭据属于其他 Endpoint 时返回 `401`。
 3. 使用该 Endpoint 绑定的 Router 解析实际 Guardrail Version。
 4. 在选定执行快照上完成本次扫描，记录路由与版本证据。
 
-复用现有 Endpoint API Key，不要求令牌是 JWT，也不要求用户提供 F5 的真实令牌。`project` 无论是什么值，都不能改变以上步骤。第一版仅使用 `Authorization: Bearer`，不要求额外的 Endpoint 请求头或 `x-api-key`。
+复用现有 Endpoint API Key 和 `authenticate_endpoint`，不要求令牌是 JWT，也不要求用户提供 F5 的真实令牌。`project` 无论是什么值，都不能改变路径指定的 Endpoint。使用 `Authorization: Bearer`，不要求额外的 Endpoint 请求头或 `x-api-key`。不再维护凭据摘要反查 Endpoint 的索引，也不在每次扫描时访问 Controller 数据库或回退到默认 Guardrail。
 
-Runner 已补充“有效凭据摘要 → Endpoint”的索引，在配置应用时原子更新；撤销凭据或移除 Endpoint 时同步移除。一个有效摘要不能指向多个 Endpoint，出现歧义时拒绝认证并记录配置错误。不得在每次扫描时访问 Controller 数据库，也不得在未定位到 Endpoint 时退回默认 Guardrail。
+### 2.1 统一的 Endpoint 路径
 
-### 2.1 必须暴露根路径
+Scan 与 LiteLLM 共用 `/runtime/v1/endpoints/{endpoint_id}` 基础路径。`CALYPSOAI_URL` 必须包含此路径；客户端在其后拼接 `/backend/v1/scans`。如果客户端使用 URL 拼接库且会丢弃基础路径，需要调整拼接逻辑。兼容范围是 Scan 请求和响应格式，不要求复刻 F5 的域名根路径。
 
-[F5 DevCentral prompt-evaluator 的调用代码](https://github.com/f5devcentral/prompt-evaluator/blob/9f83919c59a6d8392998cd5903b7642425dda66f/prompt_evaluator.py#L43) 从域名根路径构造 `/backend/v1/scans`。仅提供 `/runtime/v1/endpoints/{id}/backend/v1/scans` 无法满足该脚本只改地址的目标。
-
-对外 Runtime 域名必须把精确路径 `/backend/v1/scans` 转发至 Runner。若与管理界面共用域名，Ingress 必须为这个路径配置独立规则，避免落入 Controller 的 `/` 页面路由。第一版不依赖重定向，也不提供无认证的兼容转发。
+对外 Ingress 或 VirtualService 将 `/runtime/v1/endpoints/` 前缀转发至 Runtime Service，可同时支持 Scan、LiteLLM 与输出流。与管理界面共用域名时，VirtualService 的数据面规则需排在 UI 兜底规则前。旧根路径 `/backend/v1/scans` 已移除，不提供重定向或凭据反查兼容入口。
 
 ## 3. Incoming JSON Request
 
@@ -359,7 +357,7 @@ HTTP 响应增加 `X-TaskLattice-Scan-Compatibility: v1` 和 `X-Request-ID: <sca
 
 | HTTP 状态 | 条件 |
 | --- | --- |
-| `401` | 缺失、无效、撤销、Endpoint 已停用并从 Runner 配置移除，或无法唯一定位 Endpoint 的 Bearer 凭据；返回 `WWW-Authenticate: Bearer` |
+| `401` | 缺失、无效、撤销、Endpoint 已停用并从 Runner 配置移除，或与路径中 Endpoint 不匹配的 Bearer 凭据；返回 `WWW-Authenticate: Bearer` |
 | `403` | 已认证的 Endpoint 类型不支持 Scan |
 | `413` | 请求体超过部署限制 |
 | `415` | 不支持的 Content-Type；接受 `application/json` 及其 charset 参数 |
@@ -407,15 +405,15 @@ HTTP 响应增加 `X-TaskLattice-Scan-Compatibility: v1` 和 `X-Request-ID: <sca
 
 | 层 | 当前入口 / 文件 | 实现内容 |
 | --- | --- | --- |
-| HTTP 接入 | [runner/scan.py](../runner/scan.py)、[runner/api.py](../runner/api.py) | 新增固定 Scan 路由、严格有效字段模型、忽略字段处理、Bearer 认证、响应与错误映射 |
-| 凭据与配置快照 | [runner/artifact_store.py](../runner/artifact_store.py) | 有效摘要反查 Endpoint；随配置同步更新索引 |
+| HTTP 接入 | [runner/scan.py](../runner/scan.py)、[runner/api.py](../runner/api.py) | 包含 Endpoint UUID 的 Scan 路由、严格有效字段模型、忽略字段处理、Bearer 认证、响应与错误映射 |
+| 凭据与配置快照 | [runner/artifact_store.py](../runner/artifact_store.py) | 按路径指定 Endpoint 校验凭据；撤销与移除随配置快照生效 |
 | Runtime 生命周期 | [runtime/service.py](../runner/toolkit/runtime/service.py) | 独立 Scan 调用入口，复用既有执行逻辑，完整发送 assignment/completion |
 | 执行证据 | [runtime/contracts.py](../runner/toolkit/runtime/contracts.py)、[nemo/runtime.py](../runner/toolkit/nemo/runtime.py) | 验证最终命中、未知、错误、覆盖和变换文本能可靠区分；需要时补充汇总能力 |
 | 路由能力 | [runner/routing.py](../runner/routing.py)、[traffic-routing.ts](../controller/shared/traffic-routing.ts) | 声明 `scan` 协议和 `scan.direction` 能力；复用 Endpoint 已绑定 Router |
 | Endpoint 管理 | [api-types.ts](../controller/src/lib/api-types.ts)、[endpoints-api.ts](../controller/src/lib/endpoints-api.ts)、[endpoints.tsx](../controller/src/routes/endpoints.tsx) | 注册 `f5-scan`，补齐桌面管理界面的类型和显示文案 |
-| 接入说明生成 | [control-plane.ts](../controller/server/services/control-plane.ts) 的 `endpointSetup` | 生成根路径 URL、Bearer 和 Scan 示例，不生成 LiteLLM 配置或流式回调地址 |
+| 接入说明生成 | [control-plane.ts](../controller/server/services/control-plane.ts) 的 `endpointSetup` | 生成包含 Endpoint UUID 的 URL、Bearer 和 Scan 示例，不生成 LiteLLM 配置或流式回调地址 |
 | Playground / Testing | [playground/service.ts](../controller/server/playground/service.ts) 及接入适配器 | 添加选定 Scan Endpoint 的调用能力与路径许可，确认所用凭据属于该 Endpoint |
-| 对外暴露 | [ingress.yaml](../charts/tali-guard/templates/ingress.yaml) 或部署的 Runtime 入口 | 将 `/backend/v1/scans` 转发 Runner，确认并发副本共享同一已同步凭据/配置语义 |
+| 对外暴露 | [ingress.yaml](../charts/tali-guard/templates/ingress.yaml) 或部署的 Runtime 入口 | 将 `/runtime/v1/endpoints/` 前缀转发 Runner，确认并发副本共享同一已同步凭据/配置语义 |
 
 表中列出了本次实现涉及的接入位置。适配器字符串沿用现有配置分发结构；路由能力、Playground 路径许可和凭据归属校验、中英文接入说明与桌面界面已同步更新。Scan 类型使用 F5 标识。
 
@@ -434,7 +432,7 @@ HTTP 响应增加 `X-TaskLattice-Scan-Compatibility: v1` 和 `X-Request-ID: <sca
 | 未知字段与有效字段 | 未知字段忽略；有效字段错误类型拒绝，不因 extra=ignore 放松核心校验 |
 | 文本边界 | Unicode、换行、空字符串、空替换、体积上限；不截断、不拼接、不回退敏感原文 |
 | 详细结果 | 时间和 Guardrail 身份可追溯；不编造 regex 命中、token 数量或已执行规则 |
-| 认证及同步 | 不同 Endpoint 凭据正确分流；撤销、禁用、类型不符、摘要冲突按约定失败 |
+| 认证及同步 | 路径指定 Endpoint；跨 Endpoint 凭据、撤销、禁用、类型不符按约定失败；旧根路径返回 404 |
 | 运行失败 | 无路由、无可用版本、超时、模型错误、未知判定和无有效覆盖都不返回 cleared |
 | 并发与生命周期 | 每次仅一份路由分配与完成记录；独立 input 不残留待完成会话；取消可释放资源 |
 | 配置更新与加权路由 | 单次调用固定快照；调用之间允许命中不同版本，证据归属准确 |
@@ -444,10 +442,10 @@ HTTP 响应增加 `X-TaskLattice-Scan-Compatibility: v1` 和 `X-Request-ID: <sca
 
 ### 8.2 使用已有 Python 数据集脚本验证
 
-可优先使用 [f5devcentral/prompt-evaluator](https://github.com/f5devcentral/prompt-evaluator)。本次检查的串行脚本版本为 `9f83919c59a6d8392998cd5903b7642425dda66f`：发送 `{"input": prompt}`，使用 Bearer，读取 `result.outcome`。测试环境中保留原脚本和数据集，只修改：
+可优先使用 [f5devcentral/prompt-evaluator](https://github.com/f5devcentral/prompt-evaluator)。本次检查的串行脚本版本为 `9f83919c59a6d8392998cd5903b7642425dda66f`：发送 `{"input": prompt}`，使用 Bearer，读取 `result.outcome`。保留数据集，设置以下变量，并确保脚本通过基础地址追加 `/backend/v1/scans`，不丢弃 UUID 路径：
 
 ```dotenv
-CALYPSOAI_URL=https://guard-runtime.example.com
+CALYPSOAI_URL=https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>
 CALYPSOAI_TOKEN=<TASKLATTICE_ENDPOINT_API_KEY>
 ```
 
@@ -459,11 +457,11 @@ CALYPSOAI_TOKEN=<TASKLATTICE_ENDPOINT_API_KEY>
 
 ## 9. 第一版边界与交付状态
 
-第一版提供同步文本扫描、四个有效请求字段、六个可忽略占位字段、四种总体结果、聚合执行详情、Bearer 凭据定位以及现有 Router 分发。以下能力不包含在此契约中：原始请求/SSE 扫描 `/scans/raw/{format}`、业务模型代理 `/prompts`、图片/音频、批量数组 Body、F5 Project/Scanner 管理、F5 历史查询和跨请求关联。
+第一版提供同步文本扫描、四个有效请求字段、六个可忽略占位字段、四种总体结果、聚合执行详情、Endpoint UUID 定位、Bearer 认证以及现有 Router 分发。以下能力不包含在此契约中：原始请求/SSE 扫描 `/scans/raw/{format}`、业务模型代理 `/prompts`、图片/音频、批量数组 Body、F5 Project/Scanner 管理、F5 历史查询和跨请求关联。
 
-已实现 Runner 认证、独立执行和结果适配，以及 Endpoint 管理、Playground、Helm 根路径入口和日志。管理端标注“Scan（F5 兼容）”，接入说明列出被忽略字段和聚合详情粒度。2026-10-12 已在本地 OrbStack 集群完成专用 Endpoint 的部署验收，记录见下文；真实 F5 实例对照仍未进行。
+已实现 Runner 认证、独立执行和结果适配，以及 Endpoint 管理、Playground、Helm 数据面入口和日志。管理端标注“Scan（F5 兼容）”，接入说明列出被忽略字段和聚合详情粒度。2026-10-12 已在本地 OrbStack 集群完成旧根路径版本的专用 Endpoint 部署验收，记录见下文；真实 F5 实例对照仍未进行。
 
-主要工作集中在固定路径的 Endpoint 身份解析、独立输出生命周期和判定证据映射。JSON 解析与字段占位本身较简单，也无须复制 F5 的项目和扫描器管理体系。
+主要工作集中在路径中的 Endpoint 身份校验、独立输出生命周期和判定证据映射。JSON 解析与字段占位本身较简单，也无须复制 F5 的项目和扫描器管理体系。
 
 ## 10. 实现验证记录（2026-10-09）
 
@@ -494,7 +492,7 @@ npm run build --prefix controller
 保存 Endpoint 凭据后运行：
 
 ```bash
-export CALYPSOAI_URL='http://localhost:38082'
+export CALYPSOAI_URL='http://localhost:38082/runtime/v1/endpoints/<endpoint_id>'
 export CALYPSOAI_TOKEN='<Scan Endpoint 凭据>'
 export SCAN_GUARDRAIL_ID='<上述 Guardrail ID>'
 .venv/bin/python scripts/test-scan-endpoint.py

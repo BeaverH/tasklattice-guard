@@ -2744,7 +2744,7 @@ export class ControlPlaneService {
       createdAt: endpoint.createdAt,
       updatedAt: endpoint.updatedAt,
       credentials: publicEndpointCredentials(endpoint.verification),
-      setup: endpointSetup(this.config.runtimeServiceUrl, endpoint.id, endpoint.adapter),
+      setup: endpointSetup(this.config.runtimePublicUrl ?? this.config.runtimeServiceUrl, endpoint.id, endpoint.adapter),
     };
   }
 
@@ -3188,18 +3188,18 @@ function ratio(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-export function endpointSetup(runtimeServiceUrl: string, endpointId: string, adapter: string) {
+export function endpointSetup(runtimeBaseUrl: string, endpointId: string, adapter: string) {
+  const apiBaseUrl = `${runtimeBaseUrl.replace(/\/+$/, "")}/runtime/v1/endpoints/${encodeURIComponent(endpointId)}`;
   if (adapter === "f5-scan") {
-    const baseUrl = new URL(runtimeServiceUrl).origin;
+    const callbackUrl = `${apiBaseUrl}/backend/v1/scans`;
     return {
-      api_base_url: baseUrl, callback_url: `${baseUrl}/backend/v1/scans`, stream_callback_url: null,
+      api_base_url: apiBaseUrl, callback_url: callbackUrl, stream_callback_url: null,
       auth_header: "Authorization: Bearer", credential_env_var: "CALYPSOAI_TOKEN", api_base_env_var: "CALYPSOAI_URL",
       recommended_modes: ["request", "response"], default_on: true, fail_on_error: true,
       unreachable_fallback: "fail_closed" as const,
-      yaml_template: scanRequestCommand(`${baseUrl}/backend/v1/scans`),
+      yaml_template: scanRequestCommand(callbackUrl),
     };
   }
-  const apiBaseUrl = `${runtimeServiceUrl}/runtime/v1/endpoints/${encodeURIComponent(endpointId)}`;
   if (adapter !== "litellm-generic-guardrail") throw new ValidationError("Unsupported Endpoint adapter.");
   const callbackUrl = `${apiBaseUrl}/beta/litellm_basic_guardrail_api`;
   const recommendedModes = ["pre_call", "post_call"];
