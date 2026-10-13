@@ -292,7 +292,7 @@ describe.skipIf(!url)("Traffic composition transactions in PostgreSQL", () => {
   });
   it("creates a draft with multiple exclusive source Endpoints atomically", async () => {
     const router = await service.trafficRouting.create("Sources", "", draft(), actor, ["http", "scan"]);
-    expect(router.endpointIds.sort()).toEqual(["scan", "http"]);
+    expect([...router.endpointIds].sort()).toEqual(["http", "scan"]);
     expect(router.activeSnapshot).toBeNull();
     await expect(service.trafficRouting.create("Conflict", "", draft(), actor, ["http"])).rejects.toMatchObject({ code: "endpoint_router_conflict" });
     expect(await count("traffic_router")).toBe(1);
@@ -312,7 +312,7 @@ describe.skipIf(!url)("Traffic composition transactions in PostgreSQL", () => {
   it("captures immutable endpoint and version names across edits and binding changes", async () => {
     const router = await service.trafficRouting.create("Context", "", draft(), actor, ["http"]);
     await apply(router.id);
-    const original = { endpoints: [{ id: "http", name: "HTTP", adapter: "LITELLM" }], guardrails: [{ id: "guard-a", name: "Original", version: "1" }] };
+    const original = { endpoints: [{ id: "http", name: "LiteLLM", adapter: "LITELLM" }], guardrails: [{ id: "guard-a", name: "Original", version: "1" }] };
     expect((await service.trafficRouting.revisions(router.id))[0]?.context).toEqual(original);
     await pool.query("UPDATE endpoint SET name='Renamed', adapter='LITELLM' WHERE id='http'; UPDATE guardrail SET name='Renamed guard' WHERE id='guard-a'");
     await service.trafficRouting.bind(router.id, ["scan"], actor);
@@ -345,7 +345,7 @@ describe.skipIf(!url)("Traffic composition transactions in PostgreSQL", () => {
     await apply(router.id);
     const revisions = await service.trafficRouting.revisions(router.id);
     expect(revisions[1]?.context).toBeNull();
-    expect(revisions[0]?.context?.endpoints).toEqual([{ id: "http", name: "HTTP", adapter: "LITELLM" }]);
+    expect(revisions[0]?.context?.endpoints).toEqual([{ id: "http", name: "LiteLLM", adapter: "LITELLM" }]);
   });
 
   async function addVersion(version: string, generation: number, status = "ready", artifact: string | null = "artifact-new") {

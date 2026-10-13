@@ -48,6 +48,30 @@ import type { PackageManifest, PackageSignature } from "../domain/guardrail-pack
 const createdAt = timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
+export const policyResources = pgTable("policy_resource", {
+  id: text("id").primaryKey(),
+  definition: jsonb("definition").$type<import("../../shared/policy-definition.js").PolicyDefinition>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  maintainer: text("maintainer").notNull(),
+  createdAt, updatedAt,
+});
+export const policyResourceVersions = pgTable("policy_resource_version", {
+  policyId: text("policy_id").notNull().references(() => policyResources.id),
+  version: text("version").notNull(),
+  revision: integer("revision").notNull(),
+  definition: jsonb("definition").$type<import("../../shared/policy-definition.js").PolicyDefinition>().notNull(),
+  view: jsonb("view").$type<import("../policy-catalog/catalog.js").PolicyDto>().notNull(),
+  digest: text("digest").notNull(), createdAt,
+}, t => [primaryKey({ columns: [t.policyId, t.version] }), uniqueIndex("policy_resource_published_revision_idx").on(t.policyId, t.revision)]);
+export const policyResourceValidations = pgTable("policy_resource_validation", {
+  id: text("id").primaryKey(), policyId: text("policy_id").notNull().references(() => policyResources.id),
+  parentId: text("parent_id"), revision: integer("revision").notNull(),
+  status: text("status").notNull(),
+  tests: jsonb("tests").$type<import("../../shared/policy-definition.js").DefinitionTest[]>().notNull(),
+  results: jsonb("results").$type<import("../../shared/policy-definition.js").ResourceValidation["results"]>().notNull().default([]),
+  failureReason: text("failure_reason"), createdAt,
+}, t => [index("policy_resource_validation_parent_idx").on(t.parentId), index("policy_resource_validation_policy_idx").on(t.policyId, t.createdAt)]);
+
 // Better Auth owns these four models. Application code must not create,
 // validate, hash, or rotate human credentials itself.
 export const user = pgTable("auth_user", {

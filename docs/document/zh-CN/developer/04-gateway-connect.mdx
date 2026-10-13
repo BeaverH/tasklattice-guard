@@ -100,6 +100,24 @@ curl -sS --fail-with-body -X POST "${TALI_GUARD_ENDPOINT%/}/beta/litellm_basic_g
 - API 模型允许省略 Call ID，但省略后，输入和输出不保证使用同一个版本。
 - 流式调用的 ID 还必须满足 [start 帧的限制](/document/developer/gateway-connect#gateway-stream-protocol)。
 
+<a id="gateway-grounding-context" />
+## Grounding 与形式证明上下文
+
+自研客户端进行完整输出检测时，可以在 `texts` 之外显式提供上下文：
+
+```json
+{
+  "input_type": "response",
+  "texts": ["The warranty lasts one year."],
+  "guardrail_context": {
+    "query": "How long is the warranty?",
+    "grounding_sources": ["The product warranty lasts one year."]
+  }
+}
+```
+
+Grounding 需要 query 和至少一个非空来源；形式验证需要 query，其版本化形式策略来自已发布的 Policy 定义。Runner 将这些字段视为非可信证据，不提升为系统指令，也不作为额外输出检测目标。来源不会混入转换后的 `texts`。使用 Call ID 时，先以同一 ID 检测输入；该次输入携带的上下文会保留给输出检测。query 最长 100,000 字符，来源最多 32 条、合计最多 500,000 字符。这一扩展适用于完整文本 HTTP 接口，客户端必须显式传入，不能假设 LiteLLM Provider 会自动转发检索上下文。
+
 <a id="gateway-request-fields" />
 ## 请求字段约束
 

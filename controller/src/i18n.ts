@@ -1,3 +1,4 @@
+import { declarativePolicyEn, declarativePolicyZh } from "./declarative-policy-i18n";
 import { immutableVersionsEn, immutableVersionsZh } from "./immutable-versions-i18n";
 import { guardrailPackageEn, guardrailPackageZh } from "./guardrail-package-i18n";
 import { uiCopyEn, uiCopyZh } from "./ui-copy-i18n";
@@ -16,6 +17,7 @@ export type SupportedLanguage = "en" | "zh-CN";
 const resources = {
   en: {
     translation: {
+      declarativePolicy: declarativePolicyEn,
       routing: routingEn,
       uiCopy: uiCopyEn,
       routerMonitoring: {
@@ -405,7 +407,7 @@ const resources = {
         legacyRailEvidence: "Revalidate assigned Rails: previous model probes did not test Rail execution.",
         streamWindow: "Stream: accumulated-context checks. Previously released text cannot be recalled.",
         streamFull: "Stream: complete response required before release.",
-        contextualValidationBoundary: "Grounding and automated reasoning require Policy-specific sources or formal rules. New bindings are not offered here until that validation workflow is available; existing bindings remain visible for removal.",
+        contextualValidationBoundary: "Grounding validation includes a query and reference source. Formal proof validation requires a versioned service policy and known valid/invalid examples. Each Policy must still pass its own acceptance tests.",
         inputRail: "Input Rail",
         outputRail: "Output Rail",
         noConfigurableDetectors: "No configurable model-backed detectors are available. Register a compatible Model first.",
@@ -3013,6 +3015,7 @@ const resources = {
   },
   "zh-CN": {
     translation: {
+      declarativePolicy: declarativePolicyZh,
       routing: routingZh,
       uiCopy: uiCopyZh,
       routerMonitoring: {
@@ -3401,7 +3404,7 @@ const resources = {
         legacyRailEvidence: "请重新验证已分配的 Rail：先前的模型探测未验证 Rail 执行。",
         streamWindow: "Stream：检查累计上下文；已交付的文本无法撤回。",
         streamFull: "Stream：必须检查完整响应后才交付。",
-        contextualValidationBoundary: "事实依据与自动推理需要 Policy 专属的来源资料或形式化规则。在对应验证流程就绪前，这里不提供新绑定；已有绑定保留展示，可解除绑定。",
+        contextualValidationBoundary: "事实依据验证包含问题与参考来源。形式验证需要指定服务策略版本及已知有效、无效的样例；每个 Policy 仍须通过自己的验收测试。",
         inputRail: "Input Rail",
         outputRail: "Output Rail",
         noConfigurableDetectors: "当前没有可配置的模型检测器，请先登记兼容的 Model。",

@@ -38,17 +38,18 @@ describe("Policy Library", () => {
     expect(screen.queryByText(/releasedPolicies|usageLabels|tagNamespaces.usage/)).toBeNull();
   });
 
-  it("marks a Policy imported with a Guardrail and keeps it read only", async () => {
+  it("keeps import provenance out of the card and offers maintenance to administrators", async () => {
     mount();
     const card = (await screen.findByText("Studio marker")).closest("article")!;
-    expect(within(card).getByText(`policyLibrary.importedFrom:${JSON.stringify({ source: "bank-uat" })}`)).toBeTruthy();
-    expect(within(card).queryByRole("button", { name: /policyLibrary.exportPolicyAria|policyLibrary.deletePolicyAria/ })).toBeNull();
+    expect(within(card).queryByText(/policyLibrary.importedFrom/)).toBeNull();
+    expect(within(card).getByRole("button", { name: /policyLibrary.exportPolicyAria/ })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: /policyLibrary.deletePolicyAria/ })).toBeTruthy();
     const localCard = screen.getByText("Local marker").closest("article")!;
     expect(within(localCard).getByRole("button", { name: /policyLibrary.deletePolicyAria/ })).toBeTruthy();
     fireEvent.click(within(card).getByRole("button", { name: /policyLibrary.inspectPolicy/ }));
     const sheet = await screen.findByRole("dialog");
-    expect(within(sheet).getByText(`policyLibrary.importedReadOnly:${JSON.stringify({ source: "bank-uat" })}`)).toBeTruthy();
-    expect(within(sheet).queryByRole("button", { name: "policyLibrary.editPolicy" })).toBeNull();
+    expect(within(sheet).queryByText(/policyLibrary.importedReadOnly/)).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "policyLibrary.editPolicy" })).toBeTruthy();
     expect(within(sheet).queryByRole("tab", { name: /releasedPolicies/ })).toBeNull();
   });
 });

@@ -44,6 +44,12 @@ class AutomatedReasoningProvider(Protocol):
     ) -> tuple[tuple[AutomatedReasoningFinding, ...], ActionUsage]: ...
 
 
+class ProofServiceError(RuntimeError):
+    def __init__(self, usage: ActionUsage):
+        super().__init__("Formal proof service request failed.")
+        self.usage = usage
+
+
 class HTTPAutomatedReasoningProvider:
     """Call a configured formal-reasoning endpoint using TaskLattice's provider contract."""
 
@@ -89,34 +95,37 @@ class HTTPAutomatedReasoningProvider:
         credential = self._credential()
         if not credential:
             raise RuntimeError("Automated Reasoning provider credential is not configured.")
-        with observe_model_call(
-            request,
-            provider="automated_reasoning",
-            model="formal_reasoning",
-            operation="policy_proof",
-        ) as call:
-            async with httpx.AsyncClient(
-                timeout=self._timeout_seconds,
-                transport=self._transport,
-                verify=not self._skip_tls_verify,
-            ) as client:
-                response = await client.post(
-                    self._endpoint_url,
-                    headers={"authorization": f"Bearer {credential}"},
-                    json={
-                        "policy": {
-                            "id": policy.policy_id,
-                            "version": policy.policy_version,
+        try:
+            with observe_model_call(
+                request,
+                provider="automated_reasoning",
+                model="formal_reasoning",
+                operation="policy_proof",
+            ) as call:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout_seconds,
+                    transport=self._transport,
+                    verify=not self._skip_tls_verify,
+                ) as client:
+                    response = await client.post(
+                        self._endpoint_url,
+                        headers={"authorization": f"Bearer {credential}"},
+                        json={
+                            "policy": {
+                                "id": policy.policy_id,
+                                "version": policy.policy_version,
+                            },
+                            "query_content": query_content,
+                            "guard_content": guard_content,
+                            "confidence_threshold": policy.confidence_threshold,
                         },
-                        "query_content": query_content,
-                        "guard_content": guard_content,
-                        "confidence_threshold": policy.confidence_threshold,
-                    },
-                )
-                response.raise_for_status()
-                payload = response.json()
-                findings = parse_reasoning_findings(payload)
-                call.complete(payload=payload)
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                    findings = parse_reasoning_findings(payload)
+                    call.complete(payload=payload)
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+            raise ProofServiceError(action_usage(call, len(query_content) + len(guard_content))) from error
         return findings, action_usage(call, len(query_content) + len(guard_content))
 
     def _credential(self) -> str:
@@ -193,6 +202,7 @@ class ReasoningActionProvider:
                 "error",
                 request.content,
                 reason=f"{self.name} evaluator failed: {type(error).__name__}.",
+                usage=error.usage if isinstance(error, ProofServiceError) else ActionUsage(),
             )
 
         if not findings:
@@ -212,6 +222,9 @@ class ReasoningActionProvider:
             (item.message for item in ordered if item.result == result and item.message),
             _result_message(result),
         )
+        if any(item.confidence < policy.confidence_threshold for item in ordered):
+            verdict = "unknown"
+            message = "Formal proof confidence is below the Policy threshold."
         risk_finding = RiskFinding(
             risk=request.capability,
             taxonomy_id=taxonomy_for_evaluator(request.capability),

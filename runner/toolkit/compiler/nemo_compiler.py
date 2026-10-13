@@ -410,6 +410,7 @@ class NeMoConfigCompiler:
             # The official topic flow shares one global prompt. Split Rules need
             # binding-scoped prompts so a deny check cannot reuse allow settings.
             and dict(step.parameters).get("rule_id") not in {"topic/allowlist", "topic/denylist"}
+            and dict(step.parameters).get("declarative_rule") != "true"
             and phase == "input"
             and TOPIC_CONTROL_MODEL_TYPE in self._model_types
         ):

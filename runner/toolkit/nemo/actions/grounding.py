@@ -49,7 +49,14 @@ class GroundingActionProvider:
         self._timeout_seconds = timeout_seconds
         self._transport = transport
         self._skip_tls_verify = skip_tls_verify
-        self._request_options = dict(request_options or {})
+        self._request_options = {}
+        # NVIDIA's hosted Lightning defaults to reasoning, which can exhaust the
+        # Guardrail's 30s deadline before emitting its JSON classification. This
+        # vendor option stays out of the portable Policy and other providers.
+        # https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b/build
+        if self._base_url == "https://integrate.api.nvidia.com/v1" and model == "nvidia/nemotron-3.5-lightning-30b-a3b":
+            self._request_options["chat_template_kwargs"] = {"enable_thinking": False}
+        self._request_options.update(request_options or {})
 
     async def execute(self, request: ActionRequest) -> ActionResult:
         view = action_view(request)

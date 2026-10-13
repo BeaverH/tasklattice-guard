@@ -100,6 +100,24 @@ For both phases of one model call, use the same Endpoint, the same nonempty `lit
 - The API model lets you omit the Call ID. Without it, the input and the output have no guarantee to use the same version.
 - Streaming IDs must also satisfy the [start-frame limits](/document/developer/gateway-connect#gateway-stream-protocol).
 
+<a id="gateway-grounding-context" />
+## Grounding and formal proof context
+
+For complete-output checks, custom clients can supply explicit context alongside `texts`:
+
+```json
+{
+  "input_type": "response",
+  "texts": ["The warranty lasts one year."],
+  "guardrail_context": {
+    "query": "How long is the warranty?",
+    "grounding_sources": ["The product warranty lasts one year."]
+  }
+}
+```
+
+Grounding requires a query and at least one non-empty source. Formal verification requires the query; its versioned formal policy comes from the published Policy definition. The Runner treats both fields as untrusted evidence, never as system instructions or additional output targets. Sources do not appear in transformed `texts`. If a Call ID is used, perform the input check first with the same ID; context supplied on that request is retained for its output check. The context accepts a query up to 100,000 characters and up to 32 sources totaling 500,000 characters. This extension applies to the complete-text HTTP API; clients must explicitly supply it rather than assuming a LiteLLM Provider automatically forwards retrieval context.
+
 <a id="gateway-request-fields" />
 ## Request field constraints
 

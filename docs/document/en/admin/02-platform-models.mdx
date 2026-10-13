@@ -15,6 +15,10 @@ The default Guardrail's local checks do not require a detection model. Configure
 3. In [Guardrail Catalog](/settings/guardrail-catalog), assign a Model to a capability such as `content_safety.input` or `jailbreak.input`. Input and Output bindings are independent and the protocol must fit the capability contract.
 4. Validate behavioral samples, save and activate the assignment, then confirm Runner application in [platform health](/settings/health). A Models test call alone does not prove that content-safety or jailbreak behavior passes validation.
 
+Remote Detector modules have a 30-second execution deadline. Capability probes use the same upper bound; a longer Model timeout does not extend a Guardrail's deadline. Timeouts fail closed and do not count as successful detection or permit publication.
+
+For Grounding with `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA's hosted API, the adapter disables optional thinking so the model can return its JSON classification within that budget. This option does not change the portable Policy definition or requests to other model services. Validate your own positive and negative cases before release.
+
 <a id="platform-model-boundary" />
 
 ## Control-plane and data-plane boundary

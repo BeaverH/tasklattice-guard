@@ -429,3 +429,21 @@ def test_model_policy_finding_uses_the_selected_catalog_rule_identity():
         "builtin-jailbreak",
         "model/jailbreak",
     )
+
+
+def test_declarative_model_rules_keep_identity_with_multiple_rules_and_arbitrary_policy_id():
+    plan = GuardrailPlanSnapshot(
+        guardrail_id="multi-model", guardrail_version="20261012-010000.001Z",
+        compiler_version="test", safety_level="balanced", output_delivery="full_buffered", steps=(),
+        policy_bindings=(GuardrailPolicyBindingSnapshot(
+            policy_id="organization-policy", policy_version="r2",
+            enabled_rule_ids=("rule-a", "rule-b"), enabled_rails=("input",),
+        ),),
+    )
+    binding = NeMoActionBinding(
+        id="jailbreak:organization-policy:rule-b:detector", capability="jailbreak",
+        contract_ref="tali.guard.jailbreak.v1", phases=("input",), on_unsafe="block",
+        policy_id="organization-policy", policy_version="r2",
+        parameters=(("declarative_rule", "true"), ("rule_id", "rule-b")),
+    )
+    assert _binding_policy_rule_identity(plan, binding, "input") == ("organization-policy", "rule-b")

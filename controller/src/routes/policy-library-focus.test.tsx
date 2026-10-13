@@ -30,7 +30,7 @@ describe("Policy Library actual Studio opener", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><PolicyLibraryPage /></QueryClientProvider>);
     await screen.findByRole("dialog", { name: "Imported Rules" });
-    expect(screen.queryByRole("button", { name: "policyLibrary.editPolicy" })).toBeNull();
+    expect(screen.getByRole("button", { name: "policyLibrary.editPolicy" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "policyLibrary.deleteAction" })).toBeNull();
     expect(screen.queryByRole("button", { name: "policyStudio.exportPolicy" })).toBeNull();
   });

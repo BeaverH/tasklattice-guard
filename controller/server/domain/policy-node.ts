@@ -29,7 +29,8 @@ export function policyNodeDigest(definition: Record<string, unknown>): string {
 /** The definition a plan freezes for a catalog Policy. A catalog change never alters it. */
 export function frozenBuiltInDefinition(policy: PolicyDto): Record<string, unknown> {
   return {
-    id: policy.id, name: policy.name, description: policy.description, source: policy.source, version: policy.version,
+    ...(policy.definition ? { definition: policy.definition } : {}),
+    id: policy.id, name: policy.name, description: policy.description, ...(policy.definition ? {} : { source: policy.source }), version: policy.version,
     tags: policy.tags.map(({ id: _id, ...tag }) => tag), parameters: policy.parameters,
     rules: policy.rules, test_cases: policy.test_cases, safety_level: policy.safety_level, output_delivery: policy.output_delivery,
   };
@@ -121,6 +122,7 @@ export function builtInPolicyView(definition: Record<string, unknown>) {
   const testCases = records(definition.test_cases);
   const rails = new Set(rules.flatMap(rule => strings(rule.rails)));
   return {
+    ...(definition.definition ? { definition: definition.definition } : {}),
     implementation: "rules" as const,
     id: text(definition.id), name: text(definition.name) || text(definition.id), description: text(definition.description),
     source: definition.source === "custom" ? "custom" as const : "built_in" as const, version: text(definition.version),

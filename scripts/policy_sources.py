@@ -68,6 +68,7 @@ def build() -> dict[Path, str]:
     compiled = {item["asset"]: [] for item in collections()}
     identities = set()
     current_ids = set()
+    definitions = {}
     for asset, path in package_paths():
         package = load_package(path)
         definition = package.definition
@@ -86,8 +87,26 @@ def build() -> dict[Path, str]:
                 raise ValueError("Each current Policy must have one directory named after its ID")
             current_ids.add(definition.metadata.id)
         compiled[asset].append(compile_policy(definition, detectors))
+        if not historical:
+            authoring = definition.model_dump()
+            authoring["metadata"].pop("source", None)
+            authoring["metadata"].pop("compliance", None)
+            if package.manifest.testing.parameters:
+                authoring["testing"] = {"parameters": package.manifest.testing.parameters}
+            for rule in authoring["rules"]:
+                rule.pop("runtime_adapter", None)
+                # Migrate the former Topic Control ID convention into explicit
+                # detector parameters. Saved/exported definitions then stand alone.
+                if definition.metadata.id == "builtin-topic-safety":
+                    params = rule["detector"]["parameters"]
+                    if rule["id"] == "topic/denylist":
+                        params.update(topic_mode="permissive", restricted_topics="{{denied_topics}}", allowed_topics="")
+                    elif rule["id"] == "topic/allowlist":
+                        params.update(topic_mode="{{topic_mode}}", allowed_topics="{{allowed_topics}}", restricted_topics="")
+            definitions[definition.metadata.id] = authoring
     output = {ASSETS / name: json.dumps(items, ensure_ascii=False, indent=2) + "\n" for name, items in compiled.items()}
     output[ASSETS / "detectors.generated.json"] = json.dumps(detectors, ensure_ascii=False, indent=2) + "\n"
+    output[ASSETS / "policy-definitions.generated.json"] = json.dumps(definitions, ensure_ascii=False, indent=2) + "\n"
     schemas = {"policy": PolicyManifest.model_json_schema(), "rule": RuleDefinition.model_json_schema(), "tests": TypeAdapter(list[TestDefinition]).json_schema()}
     # The package loader resolves declared resources before validating cases.
     for field in ("content", "expected_text"):

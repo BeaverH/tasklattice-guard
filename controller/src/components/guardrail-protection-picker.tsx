@@ -75,7 +75,7 @@ export function GuardrailProtectionPicker({ policies, bindings, onChange, issueF
   }, [expanded, section]);
 
   const available = policies.filter(policy => bindings.some(binding => binding.policy_id === policy.id)
-    || (policy.source === "built_in" || policy.version !== "0"));
+    || (policy.version !== "0"));
   const missing = bindings.filter(binding => !policies.some(policy => policy.id === binding.policy_id));
   const sectionItems = available.filter(policy => protectionSection(policy) === section);
   const groupItems = sectionItems;

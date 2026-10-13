@@ -60,3 +60,41 @@ async def test_nonempty_grounding_context_still_calls_the_judge():
     content = json.loads(calls[0]["messages"][1]["content"])
     assert content["queries"][0]["text"] == "What is the balance?"
     assert content["grounding_sources"][0]["text"] == "The account balance is 100."
+
+
+@pytest.mark.parametrize("base_url,model,thinking", [
+    ("https://integrate.api.nvidia.com/v1", "nvidia/nemotron-3.5-lightning-30b-a3b", False),
+    ("https://custom.test/v1", "nvidia/nemotron-3.5-lightning-30b-a3b", None),
+    ("https://integrate.api.nvidia.com/v1", "another-judge", None),
+])
+async def test_hosted_lightning_uses_json_classification_without_vendor_options_leaking(base_url, model, thinking):
+    calls = []
+    def respond(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
+            "grounding_score": 1, "relevance_score": 1, "claims": [], "reason": "Grounded"})}}]})
+    provider = GroundingActionProvider(base_url=base_url, model=model, api_key="test-only",
+        request_options={"max_tokens": 4096}, transport=httpx.MockTransport(respond))
+    result = await provider.execute(request_with_context("What is the balance?", "The account balance is 100."))
+    assert result.verdict == "not_matched"
+    assert calls[0]["max_tokens"] == 4096
+    assert calls[0].get("chat_template_kwargs") == ({"enable_thinking": thinking} if thinking is not None else None)
+
+
+async def test_cancelled_grounding_call_remains_in_request_usage():
+    import asyncio
+    from runner.toolkit.nemo.actions.model_call import activate_native_model_observation, deactivate_native_model_observation
+    async def slow_response(_):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json={})
+    provider = GroundingActionProvider(base_url='https://grounding.test/v1', model='judge', api_key='test-only', transport=httpx.MockTransport(slow_response))
+    scope, token = activate_native_model_observation(guardrail_id='grounding', endpoint_id='test', phase='output', request_started_at=time.perf_counter())
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.01):
+                await provider.execute(request_with_context('Warranty?', 'One year.'))
+        assert len(scope.calls) == 1
+        assert scope.calls[0].result == 'timeout'
+        assert scope.calls[0].error_type == 'action_deadline'
+    finally:
+        deactivate_native_model_observation(token)

@@ -6,6 +6,7 @@ import { normalizeGuardrailDraft, type GuardrailDraftConfig, type ValidationExpe
 import { PHRASE_PARAMETER, PHRASE_POLICY_ID, PHRASE_RULE_ID, parsePhraseEntries } from "../../shared/phrase-policy.js";
 import { isSplitTopicPolicy, TOPIC_ALLOW_RULE, TOPIC_DENY_RULE, topicLines, topicPolicyValues } from "../../shared/topic-policy.js";
 import type { ValidationCaseResult, ValidationMetrics } from "./models.js";
+import { definitionTestCases } from "../policy-studio/definition-tests.js";
 
 export type StoredTestCaseInput = {
   id: string;
@@ -44,6 +45,17 @@ export function generatedTestCases(
     if (!policy) return [];
     const enabledRails = new Set(binding.enabledRails.length ? binding.enabledRails : policy.rails);
     const enabledRules = new Set(binding.enabledRuleIds);
+    if (policy.definition) {
+      const parameters = { ...Object.fromEntries(policy.parameters.flatMap(p => p.default == null ? [] : [[p.name, p.default]])), ...binding.parameterValues };
+      return definitionTestCases(policy.definition, parameters).filter(test => enabledRails.has(test.phase)
+        && (!test.covered_rule_ids.length || test.covered_rule_ids.some(id => enabledRules.has(id) || policy.definition!.rules.some(r => r.expand && enabledRules.has(r.id) && id.startsWith(`${r.id}/`)))))
+        .map(test => ({ id: generatedCaseId(policy.id, test.id), guardrailId, name: test.name, policyId: policy.id, phase: test.phase, content: test.content,
+          expectedDecision: test.expected_decision, origin: "generated" as const, trustedInstruction: test.context?.trusted_instruction ?? "",
+          targetSource: test.phase === "output" ? "model_output" as const : "user_input" as const, query: test.context?.query ?? "", groundingSources: test.context?.grounding_sources ?? [],
+          expectedReasoningResult: test.context?.expected_reasoning_result ?? null, caseType: test.kind, required: test.required, expectedFailure: null, concurrencyGroup: test.group || null,
+          sourcePolicyId: policy.id, sourcePolicyVersion: policy.version, sourceCaseId: test.id, coveredRuleIds: test.covered_rule_ids,
+        }));
+    }
     return policy.test_cases.flatMap((item) => {
       if (item.phase !== "input" && item.phase !== "output") return [];
       if (!enabledRails.has(item.phase)) return [];

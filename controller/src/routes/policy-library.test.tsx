@@ -169,7 +169,7 @@ describe("Policy detail", () => {
     expect(screen.getByText("Sources and compliance documentation have not been provided for this Policy version.")).toBeTruthy();
   });
 
-  it("visually identifies a custom Policy and exposes its migration export from the card", () => {
+  it("shows uniform Policy cards and exposes explicitly permitted actions", () => {
     const onExport = vi.fn();
     const onDelete = vi.fn();
     const customPolicy: Policy = {
@@ -182,20 +182,20 @@ describe("Policy detail", () => {
 
     render(<PolicyCard policy={customPolicy} onOpen={vi.fn()} onExport={onExport} onDelete={onDelete} />);
 
-    expect(screen.getByText("Custom Policy")).toBeTruthy();
+    expect(screen.queryByText("Custom Policy")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Export Customer identifiers migration package" }));
     expect(onExport).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Delete Customer identifiers" }));
     expect(onDelete).toHaveBeenCalledOnce();
   });
 
-  it("does not expose deletion for a built-in Policy", () => {
+  it("shows no deletion without an authorized handler and no origin badge", () => {
     render(<PolicyCard policy={policy} onOpen={vi.fn()} />);
 
     expect(screen.queryByRole("button", { name: "Delete Competitor Discussion Policy" })).toBeNull();
     const heading = screen.getByRole("heading", { name: "Competitor Discussion Policy" });
-    expect(heading.parentElement?.textContent).toContain("Built-in");
-    expect(heading.closest("article")?.querySelectorAll(".lucide-shield-check")).toHaveLength(1);
+    expect(heading.parentElement?.textContent).not.toContain("Built-in");
+    expect(heading.closest("article")?.querySelectorAll(".lucide-shield-check")).toHaveLength(0);
   });
 
   it("requires explicit confirmation before deleting a custom Policy", () => {
@@ -244,8 +244,8 @@ describe("Catalog filtering", () => {
 
   it("unions choices within a group and intersects groups, protection and search", () => {
     expect(filterCatalogPolicies(items, null, new Set(["jurisdiction:au", "jurisdiction:sg"]))).toEqual([australia, singapore]);
-    expect(filterCatalogPolicies(items, null, new Set(["jurisdiction:au", "jurisdiction:sg", "source:custom"]))).toEqual([singapore]);
-    expect(filterCatalogPolicies(items, null, new Set(["source:custom", "source:built_in"]))).toEqual(items);
+    expect(filterCatalogPolicies(items, null, new Set(["jurisdiction:au", "jurisdiction:sg", "framework:pdpa"]))).toEqual([singapore]);
+    expect(filterCatalogPolicies(items, null, new Set())).toEqual(items);
     expect(filterCatalogPolicies(items, "privacy", new Set())).toEqual([]);
     expect(filterCatalogPolicies(items, null, new Set(), "no matching text")).toEqual([]);
   });
@@ -258,10 +258,10 @@ describe("Catalog filtering", () => {
     expect(facets.has("collection")).toBe(false);
     expect(facets.has("domain")).toBe(false);
     expect(facets.get("framework")?.[0].value).toBe("owasp-llm-2025");
-    const scoped = tagFacets(items, null, new Set(["source:custom"]));
+    const scoped = tagFacets(items, null, new Set(["framework:pdpa"]));
     expect(scoped.get("jurisdiction")?.find((tag) => tag.value === "au")?.count).toBe(0);
     expect(scoped.get("jurisdiction")?.find((tag) => tag.value === "sg")?.count).toBe(1);
-    expect(tagFacets([australia]).get("source")?.find((tag) => tag.value === "custom")?.count).toBe(0);
+    expect(tagFacets([australia]).has("source")).toBe(false);
   });
 
   it("shows mainland China as a localized jurisdiction with its flag", () => {

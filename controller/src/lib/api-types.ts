@@ -617,12 +617,14 @@ export type PolicyParameter = {
 };
 
 export type Policy = {
+  definition?: import("../../shared/policy-definition").PolicyDefinition;
+  maintenance?: { revision: number; maintainer: string };
   compliance?: import("../../shared/policy-compliance").PolicyCompliance;
   implementation: "rules" | "nemo_native";
   id: string;
   name: string;
   description: string;
-  source: "built_in" | "custom";
+  source?: "built_in" | "custom";
   version: string;
   tags: PolicyTag[];
   parameters: PolicyParameter[];

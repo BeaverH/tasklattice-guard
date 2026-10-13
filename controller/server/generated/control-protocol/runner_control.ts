@@ -27,6 +27,7 @@ import type { EndpointCredential as _tasklattice_guard_control_v1_EndpointCreden
 import type { EndpointRuntime as _tasklattice_guard_control_v1_EndpointRuntime, EndpointRuntime__Output as _tasklattice_guard_control_v1_EndpointRuntime__Output } from './tasklattice/guard/control/v1/EndpointRuntime.js';
 import type { EndpointVerification as _tasklattice_guard_control_v1_EndpointVerification, EndpointVerification__Output as _tasklattice_guard_control_v1_EndpointVerification__Output } from './tasklattice/guard/control/v1/EndpointVerification.js';
 import type { EvaluationTrigger as _tasklattice_guard_control_v1_EvaluationTrigger, EvaluationTrigger__Output as _tasklattice_guard_control_v1_EvaluationTrigger__Output } from './tasklattice/guard/control/v1/EvaluationTrigger.js';
+import type { FormalValidationContext as _tasklattice_guard_control_v1_FormalValidationContext, FormalValidationContext__Output as _tasklattice_guard_control_v1_FormalValidationContext__Output } from './tasklattice/guard/control/v1/FormalValidationContext.js';
 import type { GroundingClaimEvidence as _tasklattice_guard_control_v1_GroundingClaimEvidence, GroundingClaimEvidence__Output as _tasklattice_guard_control_v1_GroundingClaimEvidence__Output } from './tasklattice/guard/control/v1/GroundingClaimEvidence.js';
 import type { GroundingFilterAssessment as _tasklattice_guard_control_v1_GroundingFilterAssessment, GroundingFilterAssessment__Output as _tasklattice_guard_control_v1_GroundingFilterAssessment__Output } from './tasklattice/guard/control/v1/GroundingFilterAssessment.js';
 import type { GuardrailPlan as _tasklattice_guard_control_v1_GuardrailPlan, GuardrailPlan__Output as _tasklattice_guard_control_v1_GuardrailPlan__Output } from './tasklattice/guard/control/v1/GuardrailPlan.js';
@@ -105,6 +106,7 @@ export interface ProtoGrpcType {
           EvaluationTriggerType: EnumTypeDefinition
           EvaluatorVerdict: EnumTypeDefinition
           FailureMode: EnumTypeDefinition
+          FormalValidationContext: MessageTypeDefinition<_tasklattice_guard_control_v1_FormalValidationContext, _tasklattice_guard_control_v1_FormalValidationContext__Output>
           GroundingClaimEvidence: MessageTypeDefinition<_tasklattice_guard_control_v1_GroundingClaimEvidence, _tasklattice_guard_control_v1_GroundingClaimEvidence__Output>
           GroundingFilterAssessment: MessageTypeDefinition<_tasklattice_guard_control_v1_GroundingFilterAssessment, _tasklattice_guard_control_v1_GroundingFilterAssessment__Output>
           GroundingFilterType: EnumTypeDefinition
