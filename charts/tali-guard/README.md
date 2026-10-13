@@ -30,9 +30,12 @@ Guard application components.
 Set top-level `publicUrl` once to configure the shared UI/Endpoint address and
 Better Auth trusted origin. `runner.publicUrl` is only needed for a different
 data-plane domain or deployment prefix and takes precedence for Endpoint setup.
-If both are empty, Endpoint setup uses the stable Runtime Service DNS name:
-`http://<service>.<namespace>.svc.cluster.local:8091`. Helm derives the service
-and namespace from the release. The endpoint contains no Runner Pod identity.
+If both are empty, Endpoint setup derives its scheme, hostname and port from
+the incoming Controller request. Behind a reverse proxy, set `X-Forwarded-Host`
+and `X-Forwarded-Proto` to the external address; the ingress must overwrite these
+headers. Route `/runtime/v1/endpoints` to Runtime on that same origin.
+Service calls without an HTTP request fall back to the origin of `CONTROLLER_PUBLIC_URL`.
+The endpoint contains no Runner Pod identity.
 The Controller's internal calls (including Playground) always use Service DNS,
 independently of the advertised URL. Legacy `controller.publicUrl` still configures
 UI/auth when the shared `publicUrl` is empty.
@@ -133,7 +136,7 @@ preserve `/runtime/v1/endpoints/<uuid>/...`. The example above needs no rewrite.
 
 Without Helm, configure `CONTROLLER_RUNTIME_PUBLIC_URL` on the Controller for
 the advertised address and retain `CONTROLLER_RUNTIME_SERVICE_URL` for internal
-calls. An empty public URL keeps the previous Service-address behavior. Restart
+calls. An empty runtime public URL uses the incoming Controller origin. Restart
 the Controller after environment changes; Helm config changes trigger its
 rollout automatically. Existing Endpoint IDs and credentials do not change;
 reloading their details returns the newly configured address.

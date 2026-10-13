@@ -152,7 +152,7 @@
       ],
       "properties": {
         "publicUrl": {
-          "description": "Optional different external data-plane HTTP(S) base URL. Empty inherits top-level publicUrl, or Runtime Service DNS when neither is set. Internal calls always use Service DNS. No credentials, query, fragment or Endpoint suffix.",
+          "description": "Optional different external data-plane HTTP(S) base URL. Empty inherits top-level publicUrl, or the incoming Controller request origin when neither is set. Internal calls always use Service DNS. No credentials, query, fragment or Endpoint suffix.",
           "type": "string",
           "pattern": "^(https?://[^/?#@\\s]+(/[^?#\\s]*)?)?$"
         },

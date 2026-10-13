@@ -34,6 +34,48 @@ const endpoint = {
 };
 
 describe("Endpoint management HTTP routes", () => {
+  it.each(["f5-scan", "litellm-generic-guardrail"])("uses the incoming origin across all %s setup responses", async (adapter) => {
+    const resource = { ...endpoint, adapter, credential: "tg_one_time" };
+    const app = appWith({ user: { id: "admin-1", role: "admin" } }, {
+      listEndpoints: vi.fn().mockResolvedValue([resource]),
+      getEndpoint: vi.fn().mockResolvedValue(resource),
+      createEndpoint: vi.fn().mockResolvedValue(resource),
+      updateEndpoint: vi.fn().mockResolvedValue(resource),
+      rotateEndpointCredential: vi.fn().mockResolvedValue(resource),
+    });
+    const requests = [
+      { path: "", method: "GET" },
+      { path: "/endpoint-1", method: "GET" },
+      { path: "", method: "POST", body: JSON.stringify({ name: "New endpoint", adapter }) },
+      { path: "/endpoint-1", method: "PATCH", body: JSON.stringify({ enabled: false }) },
+      { path: "/endpoint-1/credentials", method: "POST" },
+    ];
+    for (const request of requests) {
+      const response = await app.request(`https://console.example.test:8443/api/v1/endpoints${request.path}`, {
+        ...request, headers: { "content-type": "application/json" },
+      });
+      expect(response.status).toBe(request.method === "POST" ? 201 : 200);
+      const body = await response.json();
+      const result = body.items?.[0] ?? body;
+      expect(result.setup.api_base_url).toBe("https://console.example.test:8443/runtime/v1/endpoints/endpoint-1");
+      expect(result.setup.callback_url).toBe(`${result.setup.api_base_url}${adapter === "f5-scan" ? "/backend/v1/scans" : "/beta/litellm_basic_guardrail_api"}`);
+      if (adapter === "f5-scan") expect(result.setup.yaml_template).toContain(result.setup.callback_url);
+      expect(result.credential).toBe("tg_one_time");
+    }
+  });
+
+  it("uses the proxy's external origin and preserves an explicit runtime override", async () => {
+    const session = { user: { id: "member-1", role: "user" } };
+    const service = { getEndpoint: vi.fn().mockResolvedValue(endpoint) };
+    const headers = { "x-forwarded-host": "guard.example.test:9443", "x-forwarded-proto": "https" };
+    for (const runtimePublicUrl of [null, "https://runtime.example.test:8443/guard"]) {
+      const app = appWith(session, service, { ...config, runtimePublicUrl });
+      const response = await app.request("http://controller.internal:8080/api/v1/endpoints/endpoint-1", { headers });
+      expect(response.status).toBe(200);
+      expect((await response.json()).setup.api_base_url).toBe(`${runtimePublicUrl ?? "https://guard.example.test:9443"}/runtime/v1/endpoints/endpoint-1`);
+    }
+  });
+
   it("retains an explicit false default during creation and updates", async () => {
     const createEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter: "f5-scan", scanFlagOnlyDefault: false });
     const updateEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter: "f5-scan", scanFlagOnlyDefault: false });
@@ -91,7 +133,7 @@ describe("Endpoint management HTTP routes", () => {
     expect(getEndpoint).toHaveBeenCalledWith("endpoint-1");
     expect(body).toMatchObject({
       credentials: [{ id: "credential-1", keyHint: "tg_abcd…wxyz" }],
-      setup: { callback_url: "https://runtime.example.test/runtime/v1/endpoints/endpoint-1/beta/litellm_basic_guardrail_api" },
+      setup: { callback_url: "http://localhost/runtime/v1/endpoints/endpoint-1/beta/litellm_basic_guardrail_api" },
     });
     expect(JSON.stringify(body)).not.toContain("sha256");
   });
@@ -148,13 +190,14 @@ describe("Endpoint management HTTP routes", () => {
 function appWith(
   session: { user: { id: string; role: string } } | null,
   service: Partial<ControlPlaneService>,
+  appConfig = config,
 ) {
   const auth = {
     api: { getSession: vi.fn().mockResolvedValue(session) },
     handler: vi.fn(),
   } as unknown as ControllerAuth;
   return createHttpApp({
-    config,
+    config: appConfig,
     auth,
     service: service as ControlPlaneService,
     runnerControl: {

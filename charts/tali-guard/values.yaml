@@ -30,7 +30,10 @@ imagePullSecrets: []
 # Host casing and default ports (HTTP 80 / HTTPS 443) normalize to browser Origin.
 # Takes precedence over legacy controller.publicUrl, including local dev URLs.
 # Ingress hosts are derived from it; VirtualService still needs matching routes.
-# Empty preserves legacy Controller URLs and Runtime Service-address advertising.
+# Maps to CONTROLLER_PUBLIC_URL and, unless runner.publicUrl overrides it,
+# CONTROLLER_RUNTIME_PUBLIC_URL in the Controller ConfigMap.
+# Empty preserves legacy Controller URLs; without runner.publicUrl, Endpoint
+# addresses derive from the incoming Controller request origin.
 # Internal requests always use Service DNS, independently of this setting.
 publicUrl: ""
 
@@ -71,7 +74,8 @@ controller:
 
 runner:
   # Optional different data-plane URL; normally inherits top-level publicUrl.
-  # When neither URL is configured, Endpoint addresses use Runtime Service DNS.
+  # Overrides CONTROLLER_RUNTIME_PUBLIC_URL in the Controller ConfigMap.
+  # When neither URL is configured, Endpoint addresses use the incoming Controller origin.
   # Never append /runtime/v1/endpoints/<uuid>; internal calls always use Service DNS.
   # publicUrl: https://runtime.example.com:8443
   # Shared image for all data-plane pools. Tags default to Chart.appVersion.

@@ -35,7 +35,8 @@ import { enforcementActions } from "../domain/guardrail-plan.js";
 import { deriveRunnerFleetStatus } from "../domain/platform-status.js";
 import { deriveComponentHealth } from "../domain/component-health.js";
 import type { RunnerControlServer } from "../control-channel/control-server.js";
-import type { ControlPlaneService } from "../services/control-plane.js";
+import { endpointSetup, type ControlPlaneService } from "../services/control-plane.js";
+import { endpointRequestOrigin } from "./endpoint-origin.js";
 import type { ControllerMetrics } from "../metrics.js";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
 import { actionCatalog } from "../action-catalog/catalog.js";
@@ -217,8 +218,12 @@ export function createHttpApp(input: {
     return configured ? new OpenAICompatiblePlaygroundModel(configured) : legacyPlaygroundModel;
   };
   const playgroundDraftPreviews = new PlaygroundDraftPreviewStore();
-  const withDistribution = async <T extends Record<string, unknown>>(resource: T, wait = false) => ({
+  const withEndpointSetup = <T extends { id: string; adapter: string }>(resource: T, context: Context) => ({
     ...resource,
+    setup: endpointSetup(input.config.runtimePublicUrl ?? endpointRequestOrigin(context.req.raw), resource.id, resource.adapter),
+  });
+  const withDistribution = async <T extends { id: string; adapter: string }>(resource: T, context: Context, wait = false) => ({
+    ...withEndpointSetup(resource, context),
     ...(wait ? await input.runnerControl.distributeDesiredState() : await input.runnerControl.distributionStatus()),
   });
   app.use("*", logger());
@@ -855,15 +860,15 @@ export function createHttpApp(input: {
       input.service.listEndpoints(),
       input.runnerControl.distributionStatus(),
     ]);
-    return context.json({ items: items.map((item) => ({ ...item, ...distribution })) });
+    return context.json({ items: items.map((item) => ({ ...withEndpointSetup(item, context), ...distribution })) });
   });
   app.post("/api/v1/endpoints", authenticated, administrator, async (context) => {
     const body = endpointInput.parse(await context.req.json());
     const created = await input.service.createEndpoint({ ...body, actorId: context.get("actor").id });
-    return context.json(await withDistribution(created, true), 201);
+    return context.json(await withDistribution(created, context, true), 201);
   });
   app.get("/api/v1/endpoints/:id", authenticated, async (context) => {
-    return context.json(await withDistribution(await input.service.getEndpoint(context.req.param("id"))));
+    return context.json(await withDistribution(await input.service.getEndpoint(context.req.param("id")), context));
   });
   app.patch("/api/v1/endpoints/:id", authenticated, administrator, async (context) => {
     const body = endpointUpdateInput.parse(await context.req.json());
@@ -872,14 +877,14 @@ export function createHttpApp(input: {
       ...body,
       actorId: context.get("actor").id,
     });
-    return context.json(await withDistribution(updated, true));
+    return context.json(await withDistribution(updated, context, true));
   });
   app.post("/api/v1/endpoints/:id/credentials", authenticated, administrator, async (context) => {
     const updated = await input.service.rotateEndpointCredential({
       id: context.req.param("id"),
       actorId: context.get("actor").id,
     });
-    return context.json(await withDistribution(updated, true), 201);
+    return context.json(await withDistribution(updated, context, true), 201);
   });
   app.delete("/api/v1/endpoints/:id/credentials/:credentialId", authenticated, administrator, async (context) => {
     await input.service.revokeEndpointCredential({

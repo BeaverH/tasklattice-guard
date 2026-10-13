@@ -2761,7 +2761,7 @@ export class ControlPlaneService {
       createdAt: endpoint.createdAt,
       updatedAt: endpoint.updatedAt,
       credentials: publicEndpointCredentials(endpoint.verification),
-      setup: endpointSetup(this.config.runtimePublicUrl ?? this.config.runtimeServiceUrl, endpoint.id, endpoint.adapter),
+      setup: endpointSetup(this.config.runtimePublicUrl ?? new URL(this.config.publicUrl).origin, endpoint.id, endpoint.adapter),
     };
   }
 
