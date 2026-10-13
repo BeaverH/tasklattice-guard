@@ -12,20 +12,8 @@ import { createValidationRun, resumeValidationRun, publishGuardrail, type Guardr
 import { isValidationRunning, ValidationRunProgress } from "@/components/validation-run-progress";
 import { ValidationCaseResults } from "@/routes/validation";
 
-export function draftStateKey(guardrail: Guardrail) {
-  if (!hasUnpublishedDraft(guardrail)) return "guardrails.releasePublished";
-  if (guardrail.published_current) return "guardrails.releasePublished";
-  if (guardrail.tested_current) return "guardrails.draftTested";
-  if (guardrail.latest_validation_run && guardrail.latest_validation_run.source_draft_version === guardrail.draft_revision) {
-    if (isValidationRunning(guardrail.latest_validation_run)) return "guardrails.draftTesting";
-    if (guardrail.latest_validation_run.status === "failed") return "guardrails.draftTestFailed";
-  }
-  return "guardrails.draftUntested";
-}
-
-export function hasUnpublishedDraft(guardrail: Guardrail) {
-  return guardrail.has_unpublished_changes ?? !guardrail.published_current;
-}
+import { draftStateKey } from "@/lib/guardrail-draft-state";
+export { draftStateKey, hasUnpublishedDraft } from "@/lib/guardrail-draft-state";
 
 /** Tests and publication stay in the same drawer, over the user's current tab. */
 export function GuardrailDraftReviewSheet({ guardrail, policies, versions, policiesReady = true, policiesError = false, onRetryPolicies, initialPublish = false, justSaved = false, readOnly = false, onClose, onEdit, onChanged, onPublished }: {
@@ -93,7 +81,7 @@ export function GuardrailDraftReviewSheet({ guardrail, policies, versions, polic
     </> : <>
       <Button variant="ghost" className="mr-auto" disabled={pending} onClick={onEdit}><Pencil />{t("guardrails.continueEditing")}</Button>
       <Button variant="outline" disabled={pending} onClick={onClose}>{t(currentResult ? "common.close" : "guardrails.skipTest")}</Button>
-      <Button variant={canPublish ? "outline" : "default"} disabled={pending || (!reconnect && readiness.blocked)} onClick={() => run.mutate(reconnect ? observedRun!.id : undefined)}>{run.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(run.isPending ? "guardrails.runningValidation" : reconnect ? "guardrails.testProgress.reconnect" : currentResult ? "validation.runAgain" : "guardrails.testNow")}</Button>
+      <Button variant="testing" disabled={pending || (!reconnect && readiness.blocked)} onClick={() => run.mutate(reconnect ? observedRun!.id : undefined)}>{run.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(run.isPending ? "guardrails.runningValidation" : reconnect ? "guardrails.testProgress.reconnect" : currentResult ? "validation.runAgain" : "guardrails.testNow")}</Button>
       {canPublish ? <Button disabled={pending} onClick={() => setPublishRevision(guardrail.draft_revision ?? null)}><ShieldCheck />{t("guardrails.publishVersion")}</Button> : null}
     </>}>
     <div className="space-y-5">

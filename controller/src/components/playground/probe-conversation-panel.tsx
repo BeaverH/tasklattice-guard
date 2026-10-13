@@ -264,7 +264,7 @@ function PlaygroundComposer({ guardrail, guardrails, versions, target, selectedV
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {canTestDraft ? <SelectGroup><SelectLabel>{t("playground.draftTargetGroup")}</SelectLabel><SelectItem value="draft"><FlaskConical className="size-4 text-amber-600" /><span className="font-mono font-medium">{t("playground.draftRevision", { revision: guardrail.draft_revision ?? 1 })}</span><span className="text-amber-700">· {t("playground.unpublished")}</span></SelectItem></SelectGroup> : null}
+                {canTestDraft ? <SelectGroup><SelectLabel>{t("playground.draftTargetGroup")}</SelectLabel><SelectItem value="draft"><span className="playground-target-label"><FlaskConical className="size-4 shrink-0 text-amber-600" /><span className="truncate"><span className="font-mono font-medium">{t("playground.draftRevision", { revision: guardrail.draft_revision ?? 1 })}</span><span className="text-amber-700"> · {t("playground.unpublished")}</span></span></span></SelectItem></SelectGroup> : null}
                 {canTestDraft && versions.length ? <SelectSeparator /> : null}
                 {versions.length ? <SelectGroup><SelectLabel>{t("playground.publishedTargetGroup")}</SelectLabel>{versions.map((item) => <SelectItem key={item.version} value={`version:${item.version}`}><span className="font-mono font-medium">{t("playground.versionNumber", { version: item.version })}</span></SelectItem>)}</SelectGroup> : null}
               </SelectContent>

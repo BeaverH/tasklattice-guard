@@ -301,16 +301,16 @@ export function GuardrailCatalogPage() {
         onConfirm={confirmPendingAction}
       >
         {pendingAction === "activate" && activationReview ? <>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          {changes.length > 0 || dirty ? <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{t("modelSettings.pendingConfiguration")}</span>
-              <StateBadge state={activationReview.draft?.state === "validated" && !hasRailEvidence ? "needs_validation" : activationReview.draft?.state ?? "draft"} />
+              {changes.length ? <StateBadge state={activationReview.draft?.state === "validated" && !hasRailEvidence ? "needs_validation" : activationReview.draft?.state ?? "draft"} /> : null}
               {dirty ? <Badge variant="secondary">{t("modelSettings.unsaved")}</Badge> : null}
             </div>
-          </div>
+          </div> : null}
           <RunnerConfigurationComparison view={activationReview} selectedBindings={selectedBindings} onSelectionChange={setSelectedBindings} disabled={confirmationPending} />
-          <p className="text-sm text-muted-foreground">{t("modelSettings.partialActivationDescription")}</p>
-          {dirty || !changes.some(change => change.ready) ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t(dirty ? "modelSettings.reviewUnsavedBindings" : "modelSettings.reviewNeedsValidation")}</AlertDescription></Alert> : null}
+          {changes.length > 0 ? <p className="text-sm text-muted-foreground">{t("modelSettings.partialActivationDescription")}</p> : null}
+          {dirty || changes.length > 0 && !changes.some(change => change.ready) ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t(dirty ? "modelSettings.reviewUnsavedBindings" : "modelSettings.reviewNeedsValidation")}</AlertDescription></Alert> : !changes.length ? <p className="text-sm text-muted-foreground">{t("modelSettings.reviewNeedsValidation")}</p> : null}
           {query.data.activating ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t("modelSettings.activationInProgress")}</AlertDescription></Alert> : null}
         </> : null}
         {pendingAction === "activate" && activationReviewChanged ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t("modelSettings.activationReviewChanged")}</AlertDescription></Alert> : null}
@@ -325,7 +325,7 @@ function RunnerConfigurationComparison({ view, selectedBindings, onSelectionChan
   const draft = view.draft;
   if (!draft) return null;
   const changes = modelBindingChanges(draft.assignments, view.active?.assignments, draft.validationReport?.checks ?? []);
-  const bindings = capabilityBindingDefinitions;
+  const bindings = capabilityBindingDefinitions.filter(binding => changes.some(change => change.id === binding.id));
   const modelLabel = (id: string | null | undefined, change?: "added" | "removed") => {
     if (!id) return <span className="text-muted-foreground">{t("modelSettings.notAssigned")}</span>;
     const model = view.models.find((item) => item.id === id);
@@ -336,10 +336,10 @@ function RunnerConfigurationComparison({ view, selectedBindings, onSelectionChan
     </div>;
   };
   return <div className="space-y-3">
-    <p className="text-sm text-muted-foreground">{t("modelSettings.savedConfigurationOnly")}</p>
-    {bindings.every((binding) => (view.active?.assignments.bindings[binding.id] ?? null) === draft.assignments.bindings[binding.id]) ? <p role="status" className="text-sm font-medium">{t("modelSettings.noBindingChanges")}</p> : null}
+    {bindings.length > 0 ? <p className="text-sm text-muted-foreground">{t("modelSettings.savedConfigurationOnly")}</p> : null}
+    {!bindings.length ? <p role="status" className="text-sm font-medium">{t("modelSettings.noBindingChanges")}</p> : null}
     {!capabilityBindingDefinitions.some(binding => selectedBindings.includes(binding.id) ? draft.assignments.bindings[binding.id] : view.active?.assignments.bindings[binding.id]) ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t("modelSettings.emptyRunnerConfiguration")}</AlertDescription></Alert> : null}
-    <Table className="table-fixed">
+    {bindings.length > 0 ? <Table className="table-fixed">
       <TableHeader><TableRow>
         <TableHead className="w-[34%] whitespace-normal">{t("modelSettings.capabilityColumn")}</TableHead>
         <TableHead className="w-[33%] whitespace-normal">{view.active ? t("modelSettings.currentConfiguration") : t("modelSettings.noActiveConfiguration")}</TableHead>
@@ -362,7 +362,7 @@ function RunnerConfigurationComparison({ view, selectedBindings, onSelectionChan
           </TableCell>
         </TableRow>;
       })}</TableBody>
-    </Table>
+    </Table> : null}
   </div>;
 }
 
@@ -388,11 +388,7 @@ function ControlPlaneSection({ models, selectedId, savedId, report, disabled, sa
         <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><CloudCog className="size-5" /></span>
         <div><h2 id="control-plane-title" className="text-base font-semibold">{t("modelSettings.controlPlane")}</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">{t("modelSettings.controlPlaneDescription")}</p></div>
       </div>
-      <div className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(13rem,0.7fr)_minmax(20rem,1.3fr)_minmax(10rem,0.7fr)_auto] lg:items-center">
-        <div>
-          <h3 className="text-sm font-semibold">{t("modelSettings.controlPlaneModel")}</h3>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("modelSettings.controlPlaneModelDescription")}</p>
-        </div>
+      <div className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(8rem,0.4fr)_auto] lg:items-center">
         <div>
           <Label htmlFor="control-plane-model" className="sr-only">{t("modelSettings.assignedModel")}</Label>
           <Select value={selectedId ?? noneValue} disabled={disabled} onValueChange={(value) => onChange(value === noneValue ? null : value)}>
@@ -405,8 +401,8 @@ function ControlPlaneSection({ models, selectedId, savedId, report, disabled, sa
           {selected ? <p className="mt-2 text-xs text-muted-foreground">{t("modelSettings.recommendedControlPlane")}</p> : null}
         </div>
         <AssignmentValidationStatus target="control_plane" model={selected} report={report} dirty={dirty} />
-        <div className="flex flex-wrap gap-2 lg:justify-self-end">
-          <Button type="button" variant="outline" className="h-11" disabled={disabled || !selected || saving || validating} onClick={onValidate}>{validating ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{t("modelSettings.validateAssignment")}</Button>
+        <div className="flex items-center gap-2 lg:justify-self-end">
+          <Button type="button" variant="testing" className="h-11" disabled={disabled || !selected || saving || validating} onClick={onValidate}>{validating ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{t("modelSettings.validateAssignment")}</Button>
           <Button type="button" className="h-11" disabled={disabled || saving || validating || (selectedId ? !report?.checks.some((check) => check.id === `probe:control_plane:${selectedId}` && check.status === "passed") : !dirty)} onClick={() => onSave(selectedId)}>{saving ? <LoaderCircle className="animate-spin" /> : <Play />}{t("modelSettings.activateControlPlane")}</Button>
         </div>
       </div>
@@ -445,7 +441,7 @@ function GuardrailCatalogSection({ action, assignments, savedAssignments, models
     <section className="mt-6 overflow-hidden rounded-lg border bg-card" aria-labelledby="guardrail-catalog-title">
       <div className="flex flex-col gap-4 border-b px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1"><h2 id="guardrail-catalog-title" className="text-base font-semibold">{t("modelSettings.catalogConfiguration")}</h2>
-        <p className="mt-1 max-w-4xl text-sm leading-6 text-muted-foreground">{t("modelSettings.catalogConfigurationDescription")}</p></div>
+        <details className="mt-1 text-xs leading-5 text-muted-foreground"><summary className="w-fit cursor-pointer py-2">{t("modelSettings.catalogValidationHelp")}</summary><p className="max-w-4xl pb-2">{t("modelSettings.catalogConfigurationDescription")}</p></details></div>
         {action}
       </div>
       <Tabs value={rail} onValueChange={(value) => setRail(value as ImplementedGuardrailRailType)}>
@@ -581,7 +577,7 @@ function AssignmentActions({ report, target, modelId, dirty, disabled, saving, v
 }) {
   const { t } = useTranslation();
   return <div className="flex flex-col items-stretch justify-end gap-2 2xl:flex-row">
-    <Button type="button" variant="outline" className="h-11" disabled={disabled || !modelId || saving || validating} onClick={() => onValidate(target)}>{validating ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{t("modelSettings.validateAssignment")}</Button>
+    <Button type="button" variant="testing" className="h-11" disabled={disabled || !modelId || saving || validating} onClick={() => onValidate(target)}>{validating ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{t("modelSettings.validateAssignment")}</Button>
     <Button type="button" className="h-11" disabled={disabled || saving || validating || (modelId ? !report?.checks.some((check) => check.id === `probe:${target}:${modelId}` && check.status === "passed" && check.evidenceKind === "nemo-rail-v1") : !dirty)} onClick={() => onSave(target, modelId)}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}{t("modelSettings.saveAssignment")}</Button>
   </div>;
 }
@@ -636,6 +632,7 @@ function ResourceManagement({ resource, view, administrator, onChanged }: { reso
       {resource === "provider" ? <ResourceSection
         title={t("modelSettings.providers")}
         description={t("modelSettings.providersDescription")}
+        helpLabel={t("modelSettings.providerConnectionsHelp")}
         action={<Button type="button" variant="create" className="h-11" disabled={!administrator} onClick={() => { setInitialProviderId(undefined); setCreateMode("provider"); }}><Plus />{t("modelSettings.addProvider")}</Button>}
       >
         {view.providers.length ? (
@@ -679,6 +676,7 @@ function ResourceManagement({ resource, view, administrator, onChanged }: { reso
       {resource === "model" ? <ResourceSection
         title={t("modelSettings.models")}
         description={t("modelSettings.modelsDescription")}
+        helpLabel={t("modelSettings.modelCallsHelp")}
         action={<div className="flex flex-wrap gap-2"><ModelProtocolSettings models={view.models} disabled={!administrator || pending} onChanged={onChanged} /><Button type="button" variant="create" className="h-11" disabled={!administrator} onClick={() => { setInitialProviderId(undefined); setCreateMode("model"); }}><Plus />{t("modelSettings.addModel")}</Button></div>}
       >
         {view.models.length ? (
@@ -753,12 +751,12 @@ function ResourceManagement({ resource, view, administrator, onChanged }: { reso
   );
 }
 
-function ResourceSection({ title, description, action, children }: { title: string; description: string; action: ReactNode; children: ReactNode }) {
+function ResourceSection({ title, description, helpLabel, action, children }: { title: string; description: string; helpLabel: string; action: ReactNode; children: ReactNode }) {
   return (
     <section className="mt-6 overflow-hidden rounded-lg border bg-card">
       <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-base font-semibold">{title}</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p></div>
-        {action}
+        <div className="min-w-0 flex-1"><h2 className="sr-only">{title}</h2><details className="text-xs leading-5 text-muted-foreground"><summary className="w-fit cursor-pointer py-2">{helpLabel}</summary><p className="pb-2">{description}</p></details></div>
+        <div className="shrink-0">{action}</div>
       </div>
       {children}
     </section>
@@ -796,7 +794,7 @@ function ResourceActions({ kind, name, pending, checking = false, onRetest, onRe
   const { t } = useTranslation();
   return (
     <div className="flex justify-end gap-1">
-      <Button type="button" variant={kind === "model" ? "outline" : "ghost"} className="h-11 min-w-11" aria-label={`${t(kind === "model" ? "modelSettings.testCall" : "modelSettings.retest")} ${name}`} disabled={pending} onClick={onRetest}>{checking ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{kind === "model" ? t("modelSettings.testCall") : null}</Button>
+      <Button type="button" variant="testing" className="h-11 min-w-11" aria-label={`${t(kind === "model" ? "modelSettings.testCall" : "modelSettings.retest")} ${name}`} disabled={pending} onClick={onRetest}>{checking ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{kind === "model" ? t("modelSettings.testCall") : null}</Button>
       <Button type="button" size="icon-sm" className="size-11" variant="destructive" aria-label={`${t("common.remove")} ${name}`} disabled={pending} onClick={onRemove}><Trash2 /></Button>
     </div>
   );

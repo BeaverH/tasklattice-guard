@@ -6,10 +6,10 @@ import { MultiSelectCombobox } from "./multi-select-combobox";
 
 afterEach(cleanup);
 
-function Example({ disabled = false }: { disabled?: boolean }) {
+function Example({ disabled = false, selectionDisplay = "tags" }: { disabled?: boolean; selectionDisplay?: "tags" | "count" }) {
   const [value, setValue] = useState(["dev", "prod"]);
   return <MultiSelectCombobox ariaLabel="Endpoints" value={value} onValueChange={setValue}
-    disabled={disabled} maxSelected={2} placeholder="Select Endpoints" options={[
+    disabled={disabled} selectionDisplay={selectionDisplay} maxSelected={2} placeholder="Select Endpoints" options={[
       { value: "prod", label: "Production" },
       { value: "dev", label: "dev" },
       { value: "test", label: "Test" },
@@ -57,4 +57,19 @@ it("disables both the input and selected-name removal", () => {
   render(<Example disabled />);
   expect(screen.getByRole("combobox", { name: "Endpoints" }).matches(":disabled")).toBe(true);
   expect(screen.getByRole("button", { name: "Remove dev", exact: true }).matches(":disabled")).toBe(true);
+});
+
+it("keeps compact selections searchable and individually removable from the options", async () => {
+  render(<Example selectionDisplay="count" />);
+  const input = screen.getByRole("combobox", { name: "Endpoints" });
+  const field = within(input.parentElement!);
+  expect(field.getByText("2 selected")).toBeTruthy();
+  expect(field.queryByRole("button", { name: "Remove Production", exact: true })).toBeNull();
+  fireEvent.click(input);
+  fireEvent.click(screen.getByRole("option", { name: "Production" }));
+  expect(await field.findByText("1 selected")).toBeTruthy();
+  fireEvent.change(input, { target: { value: "Tes" } });
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+  expect(await field.findByText("2 selected")).toBeTruthy();
 });

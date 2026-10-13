@@ -44,7 +44,7 @@ export function RouteEditorSheet({
             ? localize("routing.createRoutingRule")
             : localize("routing.editRoutingRule")
       }
-      description={localize("routing.selectIncomingTrafficThenChooseItsGuardRailDestinationsChanges")}
+      description={localize(fallback ? "routing.fallbackDraftDescription" : "routing.selectIncomingTrafficThenChooseItsGuardRailDestinationsChanges")}
       closeDisabled={busy}
       onOpenChange={(open) => {
         if (!open && !busy) onClose();
@@ -75,30 +75,18 @@ export function RouteEditorSheet({
             />
           </Field>
         )}
-        <section className="min-w-0 space-y-4">
+        {!fallback && <section className="min-w-0 space-y-4">
           <div>
-            <h3 className="font-semibold">
-              {fallback ? localize("routing.unmatchedTraffic") : localize("routing.trafficSelector")}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {fallback
-                ? localize("routing.allTrafficThatDidNotMatchAnEarlierRule")
-                : localize("routing.describeWhichRequestsThisRuleShouldReceive")}
-            </p>
+            <h3 className="font-semibold">{localize("routing.trafficSelector")}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{localize("routing.describeWhichRequestsThisRuleShouldReceive")}</p>
           </div>
-          {!fallback && (
-            <>
-              <SelectorEditor
-                value={route.selector.expression}
-                fields={fields}
-                onChange={(expression) =>
-                  setRoute({ ...route, selector: { expression } })
-                }
-              />
-            </>
-          )}
-        </section>
-        <section className="min-w-0 space-y-4 border-t pt-6">
+          <SelectorEditor
+            value={route.selector.expression}
+            fields={fields}
+            onChange={(expression) => setRoute({ ...route, selector: { expression } })}
+          />
+        </section>}
+        <section className={`min-w-0 space-y-4${fallback ? "" : " border-t pt-6"}`}>
           <div>
             <h3 className="font-semibold">{localize("routing.guardRails")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">

@@ -9,11 +9,11 @@
 .resource-list-filter { flex: 0 0 13rem; border-inline-start: 1px solid var(--cds-border-subtle-01); }
 .resource-list-toolbar > .cds--btn { flex-shrink: 0; white-space: nowrap; }
 .resource-list-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-block-size: 3rem; padding-inline: 1rem; color: var(--cds-text-secondary); font-size: 0.75rem; }
-.resource-list .resource-table { table-layout: fixed; min-inline-size: 66rem; }
-.resource-list .resource-table th { white-space: nowrap; }
+.resource-list .resource-table { table-layout: fixed; inline-size: 100%; min-inline-size: 0; }
+.resource-list .resource-table th { white-space: normal; overflow-wrap: normal; }
 .resource-list .resource-table td { height: 4.5rem; white-space: normal; overflow-wrap: anywhere; }
 .resource-list .resource-table .resource-name-column { width: 30%; }
-.resource-list .resource-table .resource-actions-column { width: 4.5rem; padding-inline: 0.5rem; text-align: center; }
+.resource-list .resource-table .resource-actions-column { width: 3.5rem; padding-inline: 0.25rem; text-align: center; position: sticky; inset-inline-end: 0; z-index: 1; }
 .resource-list .resource-row { cursor: pointer; }
 .resource-list .resource-row:focus-within { background: var(--cds-layer-hover-01); }
 .resource-name { display: inline-flex; align-items: center; gap: 0.5rem; min-block-size: 2rem; max-inline-size: 100%; padding: 0; border: none; background: none; color: var(--cds-link-primary); font-size: 0.875rem; font-weight: 600; text-align: start; cursor: pointer; }
@@ -26,5 +26,21 @@
 
 .resource-list .resource-router-table .resource-name-column { width: 25%; }
 .resource-list .resource-router-table .resource-endpoints-column { width: 18%; }
-.resource-list .resource-router-table .resource-routes-column { width: 9rem; }
-.resource-list .resource-router-table .resource-rollout-column { width: 13rem; }
+.resource-list .resource-router-table .resource-routes-column { width: 7rem; }
+.resource-list .resource-router-table .resource-rollout-column { width: 12rem; }
+
+// Keep actions visible when a desktop window is narrowed. Tables own their overflow.
+.resource-list .resource-table th.resource-actions-column { background: var(--cds-layer-accent-01); }
+.resource-list .resource-table td.resource-actions-column { background: var(--cds-layer-01); }
+.resource-list .resource-row:hover td.resource-actions-column,
+.resource-list .resource-row:focus-within td.resource-actions-column { background: var(--cds-layer-hover-01); }
+.resource-related-link { display: block; inline-size: fit-content; max-inline-size: 100%; padding-block: 0.25rem; font-size: 0.75rem; line-height: 1.5; color: var(--cds-link-primary); overflow-wrap: anywhere; }
+.resource-related-link:hover { text-decoration: underline; }
+.resource-related-link:focus-visible { outline: 2px solid var(--cds-focus); outline-offset: 2px; }
+.resource-pending-link { color: var(--warning); }
+.resource-lifecycle { margin-block-start: 0.5rem; font-size: 0.75rem; line-height: 1.5; color: var(--cds-text-secondary); }
+.resource-list .resource-guardrail-table .resource-name-column { width: 25%; }
+.resource-list .resource-guardrail-table .resource-protection-column { width: 12%; }
+.resource-list .resource-guardrail-table .resource-versions-column { width: 13%; }
+.resource-list .resource-guardrail-table .resource-traffic-column { width: 23%; }
+.resource-list .resource-endpoint-table .resource-name-column { width: 24%; }

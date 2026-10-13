@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Braces, GitBranch, ShieldCheck } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { StateBadge } from "@/components/product-shell";
 import type { PathTestRecord } from "./use-path-workbench";
 
 const object = (value: unknown): Record<string, unknown> =>
@@ -13,9 +14,13 @@ const rows = (value: unknown) =>
 export function PathTestResult({
   item,
   guardrailNames,
+  routerNames = {},
+  endpointNames = {},
 }: {
   item: PathTestRecord;
   guardrailNames: Record<string, string>;
+  routerNames?: Record<string, string>;
+  endpointNames?: Record<string, string>;
 }) {
   const { t } = useTranslation();
   const body = item.result?.body ?? {};
@@ -85,7 +90,6 @@ export function PathTestResult({
         )}
         <p className="break-words text-xs text-muted-foreground">
           {item.label} · {item.configuration}
-          {body.runnerId ? ` · Runner: ${String(body.runnerId)}` : ""}
           {item.result ? ` · ${item.result.durationMs} ms` : ""}
           {body.simulation
             ? ` · ${t("routing.matchingOnlyNoEvaluation")}`
@@ -108,12 +112,17 @@ export function PathTestResult({
           className="min-h-0 space-y-4 overflow-auto p-4"
         >
           {assignment.routerId ? (
-            <p className="break-words text-sm">
-              {String(assignment.endpointId ?? "")} →{" "}
-              {String(assignment.routerId)} · r
-              {String(assignment.routerRevision)} → {String(assignment.routeId)}{" "}
-              → {name}
-            </p>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              {[
+                [t("routing.sourceEndpoint"), endpointNames[String(assignment.endpointId)] ?? assignment.endpointId],
+                [t("routing.router"), `${routerNames[String(assignment.routerId)] ?? assignment.routerId} · r${assignment.routerRevision}`],
+                [t("routing.rule"), selected?.name ?? assignment.routeId],
+                [t("routing.guardrail"), name],
+              ].map(([label, value]) => value ? <div key={String(label)} className="min-w-0">
+                <dt className="text-xs text-muted-foreground">{String(label)}</dt>
+                <dd className="mt-1 break-words">{String(value)}</dd>
+              </div> : null)}
+            </dl>
           ) : null}
           {body.pinned === true && (
             <p className="text-sm">
@@ -128,7 +137,7 @@ export function PathTestResult({
             >
               <div
                 role="row"
-                className="grid grid-cols-[minmax(0,1fr)_6rem_minmax(0,2fr)] gap-3 border-b pb-2 text-xs text-muted-foreground"
+                className="grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,2fr)] gap-3 border-b pb-2 text-xs text-muted-foreground"
               >
                 <span role="columnheader">{t("routing.rule")}</span>
                 <span role="columnheader">{t("routing.result")}</span>
@@ -138,12 +147,12 @@ export function PathTestResult({
                 <div
                   role="row"
                   key={String(rule.routeId ?? index)}
-                  className="grid grid-cols-[minmax(0,1fr)_6rem_minmax(0,2fr)] gap-3 border-b py-3"
+                  className="grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,2fr)] gap-3 border-b py-3"
                 >
                   <span role="cell" className="break-words font-medium">
                     {String(rule.name ?? rule.routeId)}
                   </span>
-                  <span role="cell">{stateLabel(rule.state)}</span>
+                  <span role="cell"><StateBadge state={rule.state === "selected" ? "success" : "neutral"} label={stateLabel(rule.state)} /></span>
                   <div
                     role="cell"
                     className="break-words text-xs leading-5 text-muted-foreground"
@@ -177,19 +186,14 @@ export function PathTestResult({
               </p>
               {rows(selected?.targets ?? body.candidates).map(
                 (target, index) => (
-                  <p key={index} className="break-words">
-                    {guardrailNames[String(target.guardrailId)] ??
-                      String(target.guardrailId)}{" "}
-                    ·{" "}
-                    {String(
-                      target.guardrailVersion ?? target.versionStrategy ?? "",
-                    )}{" "}
-                    · {Number(target.weightBps) / 100}%
-                    {target.guardrailId === guardrail &&
-                    target.guardrailVersion === version
-                      ? ` · ${t("routing.selected")}`
-                      : ""}
-                  </p>
+                  <div key={index} className="grid grid-cols-[minmax(0,1fr)_5rem_8rem] items-start gap-3 border-b py-3">
+                    <div className="min-w-0">
+                      <p className="break-words font-medium">{guardrailNames[String(target.guardrailId)] ?? String(target.guardrailId)}</p>
+                      <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{String(target.guardrailVersion ?? target.versionStrategy ?? "")}</p>
+                    </div>
+                    <span className="text-right tabular-nums">{Number(target.weightBps) / 100}%</span>
+                    <span>{target.guardrailId === guardrail && target.guardrailVersion === version && <StateBadge state="success" label={t("routing.selected")} />}</span>
+                  </div>
                 ),
               )}
             </div>
@@ -209,16 +213,13 @@ export function PathTestResult({
             </p>
           ) : (
             <>
-              <p className="text-sm">
-                {t("routing.decision")}:{" "}
-                <strong>{String(outcome ?? "—")}</strong>
-              </p>
               {["action", "reason"].map((key) => {
                 const value = decision[key] ?? body[key];
-                return value !== undefined && value !== null ? (
-                  <p key={key} className="break-words text-sm">
-                    {key}: {String(value)}
-                  </p>
+                return value !== undefined && value !== null && (key !== "action" || value !== outcome) ? (
+                  <div key={key} className="text-sm">
+                    <p className="text-xs text-muted-foreground">{t(key === "action" ? "logs.action" : "routing.reason")}</p>
+                    <p className="mt-1 break-words">{String(value)}</p>
+                  </div>
                 ) : null;
               })}
               {rows(decision.findings ?? body.findings).map((finding, i) => (
@@ -229,15 +230,21 @@ export function PathTestResult({
                   {String(finding.evidence ?? finding.reason ?? "")}
                 </p>
               ))}
-              <p className="text-xs text-muted-foreground">
-                {item.input.target === "endpoint"
+              <details className="border-t text-xs text-muted-foreground">
+                <summary className="min-h-11 cursor-pointer content-center">{t("routing.testScope")}</summary>
+                <p className="pb-3 leading-5">{item.input.target === "endpoint"
                   ? t("routing.executedThroughTheRunnerEndpointExternalIngressTLSIs")
-                  : t("routing.runnerEvaluatedTheBodyAsInputEndpointAuthenticationIs")}
-              </p>
+                  : t("routing.runnerEvaluatedTheBodyAsInputEndpointAuthenticationIs")}</p>
+              </details>
             </>
           )}
         </TabsContent>
-        <TabsContent value="raw" className="min-h-0 overflow-auto p-4">
+        <TabsContent value="raw" className="min-h-0 space-y-3 overflow-auto p-4">
+          <dl className="grid grid-cols-2 gap-3 border-b pb-3 text-xs">
+            {[["Call ID", item.result?.callId ?? item.input.callId], ["Runner", body.runnerId]].map(([label, value]) => value ? <div key={String(label)} className="min-w-0">
+              <dt className="text-muted-foreground">{String(label)}</dt><dd className="mt-1 break-all font-mono">{String(value)}</dd>
+            </div> : null)}
+          </dl>
           <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-6">
             {JSON.stringify(
               item.result?.body ?? { error: item.error },

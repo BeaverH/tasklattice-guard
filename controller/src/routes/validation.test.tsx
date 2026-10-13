@@ -244,6 +244,32 @@ describe("Testing Report acceptance evidence", () => {
     expect(screen.getByText("Passing case")).toBeTruthy();
   });
 
+  it("explains an empty result filter and lets reviewers return to all Cases", () => {
+    render(<ValidationCaseResults results={[{ ...result, passed: true }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Failed/ }));
+    expect(screen.getByRole("status").textContent).toBe("validation.emptyCaseResults.failed");
+    expect(screen.queryByText(result.name)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /All/ }));
+    expect(screen.getByText(result.name)).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("recovers a failed detail load through retry", async () => {
+    const getDetail = vi.spyOn(api, "getValidationRun").mockRejectedValueOnce(new Error("Report temporarily unavailable"))
+      .mockResolvedValueOnce({ ...validationRun, details_loaded: true, results: [result] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<QueryClientProvider client={client}><TooltipProvider><ValidationDetailSheet
+      run={{ ...validationRun, details_loaded: false }} canManage={false} running={false} onRunAgain={vi.fn()} onClose={vi.fn()}
+    /></TooltipProvider></QueryClientProvider>);
+    expect(await screen.findByText("Report temporarily unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(await screen.findByText(result.name)).toBeTruthy();
+    expect(getDetail).toHaveBeenCalledTimes(2);
+    view.unmount();
+    client.clear();
+    getDetail.mockRestore();
+  });
+
   it("marks a failed Case and explains decision and Rule-contract mismatches", () => {
     render(<TestCaseResultRow result={{ ...result, expected_decision: "block", actual_decision: "transform", covered_rule_ids: ["credentials/aws_access_key"], matched_rule_ids: ["contact/br_phone_landline"] }} />);
 

@@ -2,6 +2,12 @@
 
 The top of Playground offers “Normal mode / Advanced mode,” with Normal mode selected by default. Normal mode continues to provide GuardRail chat testing, with the model, GuardRail, Version, and send button below the input. Advanced mode uses an API request workbench layout.
 
+## Chat model and request-test availability
+
+Normal chat mode requires a validated Chat model assignment in **Settings → Models**. Registering a Provider or a model alone does not assign it to chat. Run the assignment validation and save the successful result; the Controller applies the chat assignment without a Runner rollout. If a hosted model exceeds its configured request timeout, adjust the unused model definition before validating it again rather than bypassing the probe.
+
+Advanced Router / Endpoint tests do not require a chat model. The mode switch and advanced deep links stay available while model discovery is loading, empty, or failing. Published execution requires a synchronized Router revision and a bound Endpoint; Endpoint execution additionally requires that Endpoint's credential.
+
 ## Usage
 
 1. Switch to Advanced mode at the top of the page, or enter through the test action on a Router / Endpoint detail page.

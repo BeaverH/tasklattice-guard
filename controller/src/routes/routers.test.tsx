@@ -64,6 +64,7 @@ async function chooseGuardrail(container: HTMLElement) {
 }
 
 async function configureRule(number: number, value: string) {
+  if (!screen.queryByRole("article", { name: `Rule ${number}` })) fireEvent.click(screen.getByRole("button", { name: "Add conditional route" }));
   const rule = screen.getByRole("article", { name: `Rule ${number}` });
   fireEvent.click(within(rule).getByRole("button", { name: "Add condition", exact: true }));
   await waitFor(() => expect(within(within(rule).getByTestId("fields")).getByRole("combobox").textContent).toContain("protocol"));
@@ -179,7 +180,7 @@ describe("Router creation", () => {
     create.mockRejectedValueOnce(new Error("Could not create Router"));
     const { onCreated, onOpenChange } = mount();
     await configureSource("Fallback only");
-    fireEvent.click(screen.getByRole("button", { name: "Remove Rule 1" }));
+    expect(screen.queryByRole("article")).toBeNull();
     expect(screen.getByText("No conditional routes. All incoming traffic will use the fallback below.")).toBeTruthy();
     await chooseGuardrail(fallbackRegion());
     fireEvent.click(screen.getByRole("button", { name: "Review configuration" }));

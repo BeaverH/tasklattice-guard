@@ -105,7 +105,7 @@ export function RouterRouting(props: Props) {
             <Plus />{localize("routing.addRoutingRule")}</Button>
         )}
       </div>
-      {!normal.length && (
+      {!normal.length && !fallback && (
         <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{localize("routing.noRoutingRulesConfiguredUnmatchedTrafficWillUseThe")}</p>
       )}
       <div className="overflow-x-auto">

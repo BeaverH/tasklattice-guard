@@ -11,7 +11,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, values?: Record<string, unknown>) => key === "auditLog.eventCount" ? `${values?.count} events` : key, i18n: { language: "en-US", exists: () => false } }),
 }));
 const before = "2026-09-29T00:00:00.000Z";
-const row: api.AuditEvent = { id: "event-1", kind: "guardrail.published", actorId: "admin", resourceType: "guardrail", resourceId: "guardrail-1", occurredAt: before, detail: { name: "Production Guardrail" } };
+const row: api.AuditEvent = { id: "event-1", kind: "guardrail.published", actorId: "admin", resourceType: "guardrail", resourceId: "guardrail-1", occurredAt: before, detail: { name: "Production Guardrail", snapshot: { enabled: false, revision: 0 }, reason: "Reviewed release", ticket: "" } };
 const clients: QueryClient[] = [];
 afterEach(() => { cleanup(); clients.splice(0).forEach(c => c.clear()); vi.restoreAllMocks(); });
 async function setup(path = `/audit-log?before=${before}`) {
@@ -71,6 +71,12 @@ describe("audit search workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardrail · Published" }));
     const dialog = await screen.findByRole("dialog", { name: "Guardrail · Published" });
     expect(within(dialog).getByText("event-1")).toBeTruthy();
+    expect(within(dialog).getByText("Reviewed release")).toBeTruthy();
+    expect(within(dialog).getByText("ticket").nextElementSibling?.textContent).toBe("—");
+    const snapshot = within(dialog).getByText("snapshot").closest("details")!;
+    expect(snapshot.open).toBe(false);
+    expect(JSON.parse(snapshot.querySelector("pre")!.textContent!)).toEqual({ enabled: false, revision: 0 });
+    expect(within(dialog).getByText("reason").compareDocumentPosition(snapshot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(within(dialog).getAllByRole("button", { name: "common.close" }).at(-1)!);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(router.state.location.search.actor).toBe("human");

@@ -308,7 +308,7 @@ function ReleasePanel({ version, release, canManage, testing, onTest, onRelease,
           {t("immutableVersions.reportLink", { run: run.id, passed: run.metrics.passed, total: run.metrics.total })}</button> : null}
       </div>
       {canManage ? <div className="flex shrink-0 gap-2">
-        <Button variant="outline" className="min-h-11" disabled={!version.test_suite_count || testing || release.state === "testing"} onClick={onTest}>
+        <Button variant="testing" disabled={!version.test_suite_count || testing || release.state === "testing"} onClick={onTest}>
           {testing || release.state === "testing" ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t("immutableVersions.runTests")}</Button>
         {version.status === "pending" ? <Button className="min-h-11" disabled={release.state !== "releasable"} onClick={onRelease}><Rocket />{t("immutableVersions.release")}</Button> : null}
       </div> : null}

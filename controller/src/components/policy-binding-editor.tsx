@@ -107,6 +107,7 @@ export function PolicyBindingEditor({
         <div className="min-w-0 space-y-2">
           <MultiSelectCombobox
             ariaLabel={t("guardrailWizard.selectPolicies")}
+            selectionDisplay="count"
             value={selectedIds}
             options={options}
             placeholder={t("guardrailWizard.selectPolicies")}

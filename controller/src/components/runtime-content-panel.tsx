@@ -89,13 +89,13 @@ export function RuntimeContentPanel({ title, description, blocks, available, tra
     } catch { /* The inline error offers retry for both expansion and download. */ }
   };
   return <section className="min-w-0 rounded-md border bg-card">
-    <header className="flex items-center justify-between gap-3 px-3 py-2">
-      <h4 className="min-w-0 flex-1 text-sm font-semibold">{collapsible ? <button type="button" className="flex min-h-8 w-full items-center gap-2 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-ring" aria-expanded={expanded} aria-controls={contentId} onClick={toggle}><ChevronDown aria-hidden className={`size-4 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`} />{title}</button> : title}</h4>
-      {canDownload ? <Button type="button" variant="ghost" size="sm" className="shrink-0" disabled={loading} onClick={() => void download()}><Download className="size-4" />{t(content.httpRequest ? "logs.downloadHttpRequest" : loadContent && !loaded ? "logs.downloadContent" : "logs.downloadBody")}</Button> : null}
+    <header className="flex min-h-11 items-center justify-between gap-3 px-4">
+      <h4 className="min-w-0 flex-1 text-sm font-semibold">{collapsible ? <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-ring" aria-expanded={expanded} aria-controls={contentId} onClick={toggle}><ChevronDown aria-hidden className={`size-4 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`} />{title}</button> : title}</h4>
+      {canDownload ? <Button type="button" variant="ghost" size="sm" className="min-h-11 shrink-0" disabled={loading} onClick={() => void download()}><Download className="size-4" />{t(content.httpRequest ? "logs.downloadHttpRequest" : loadContent && !loaded ? "logs.downloadContent" : "logs.downloadBody")}</Button> : null}
     </header>
     {loading ? <p role="status" className="px-4 pb-3 text-xs text-muted-foreground">{t("logs.loadingContent")}</p> : null}
     {error ? <div className="px-4 pb-3"><ErrorNotice error={error} /><Button variant="outline" onClick={() => expanded ? void ensureContent().catch(() => {}) : void download()}>{t("common.retry")}</Button></div> : null}
-    <div id={contentId} hidden={!expanded} className="border-t">{expanded ? <p className="px-3 pt-2 text-xs leading-5 text-muted-foreground">{content.httpRequest ? t("logs.httpBodyDescription") : description}</p> : null}{expanded && !loading && !error ? <>
+    <div id={contentId} hidden={!expanded} className="border-t">{expanded && (content.httpRequest || visibleBlocks.length > 0) ? <p className="px-4 pt-2 text-xs leading-5 text-muted-foreground">{content.httpRequest ? t("logs.httpBodyDescription") : description}</p> : null}{expanded && !loading && !error ? <>
       {body !== null ? <LogBody body={body.text} truncated={body.truncated} /> : visibleBlocks.length ? <div className="divide-y">{visibleBlocks.map(block => <div key={block.id} className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-4 py-2 text-xs text-muted-foreground"><span>{t("logs.contentRole")}: <span className="font-medium text-foreground">{block.role}</span></span>{block.source !== block.role ? <span className="break-all">{t("logs.contentSource")}: {block.source}</span> : null}{block.truncated ? <span>{t("logs.truncated")}</span> : null}</div>
         <LogBody body={block.text} truncated={block.truncated} />
@@ -103,7 +103,7 @@ export function RuntimeContentPanel({ title, description, blocks, available, tra
       {content.blocks && visibleBlocks.length < content.blocks.length ? <p className="px-4 py-2 text-xs text-muted-foreground">{t("logs.bodyPreviewLimited")}</p> : null}
       {downloadId && !content.httpRequest && content.blocks?.length ? <p className="border-t px-4 py-2 text-xs text-muted-foreground">{t("logs.legacyBodyOnly")}</p> : null}
       {content.httpRequest?.redactedHeaders.length ? <p className="border-t px-4 py-2 text-xs text-muted-foreground">{t("logs.httpHeadersRedacted")}</p> : null}
-      {transformed ? <p className="border-t px-4 py-2 text-xs text-muted-foreground">{t("logs.transformation")}</p> : null}
+      {transformed && visibleBlocks.length > 0 ? <p className="border-t px-4 py-2 text-xs text-muted-foreground">{t("logs.transformation")}</p> : null}
     </> : null}</div>
   </section>;
 }

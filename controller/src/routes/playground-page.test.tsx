@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PlaygroundPage } from "./playground";
 
@@ -42,31 +42,31 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-it("hides mode tabs while the model connection loads, then renders the actual workspace", async () => {
-  let resolve!: (value: typeof models) => void;
-  api.models.mockReturnValue(new Promise(done => { resolve = done; }));
-  const { container } = mount();
-  expect(screen.queryByRole("tablist")).toBeNull();
-  expect(container.querySelector('.cds--skeleton__placeholder')).not.toBeNull();
-  await act(async () => resolve(models));
-  expect(await screen.findByRole("tablist", { name: "playground.modeLabel" })).toBeTruthy();
-  expect(await screen.findByText("Simple conversation")).toBeTruthy();
+it("keeps path testing available while the chat model request is loading", async () => {
+  api.models.mockReturnValue(new Promise(() => {}));
+  mount();
+  fireEvent.click(screen.getByRole("tab", { name: "playground.advancedMode" }));
+  expect(await screen.findByLabelText("Request body")).toBeTruthy();
 });
 
-it.each(["/playground", "/playground?mode=advanced"])("shows setup guidance without mode tabs when no model connection is available at %s", async (url) => {
-  window.history.replaceState({}, "", url);
+it("shows chat setup guidance and lets administrators configure the model", async () => {
+  session.role = "admin";
   api.models.mockResolvedValue({ items: [] });
   mount();
   expect(await screen.findByText("playground.controllerUnavailableTitle")).toBeTruthy();
-  expect(screen.queryByRole("tablist")).toBeNull();
-  expect(screen.queryByLabelText("Request body")).toBeNull();
+  expect(screen.getByRole("link", { name: "resourceList.configureChatModel" }).getAttribute("href")).toBe("/settings/models");
+  api.models.mockResolvedValue(models);
+  fireEvent.click(screen.getByRole("button", { name: "resourceList.retryTesting" }));
+  expect(await screen.findByText("Simple conversation")).toBeTruthy();
 });
 
-it("renders a connection error instead of an empty page or mode switch", async () => {
+it("keeps path testing available when the chat model lookup fails", async () => {
   api.models.mockRejectedValue(new Error("Model connection unavailable"));
   mount();
   expect(await screen.findByText("Model connection unavailable")).toBeTruthy();
-  expect(screen.queryByRole("tablist")).toBeNull();
+  expect(screen.queryByText("playground.controllerUnavailableTitle")).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "playground.advancedMode" }));
+  expect(await screen.findByLabelText("Request body")).toBeTruthy();
 });
 
 it("switches actual panels and keeps the advanced request when returning to it", async () => {
@@ -89,3 +89,14 @@ it("opens a ready advanced deep link without selecting Simple mode first", async
   expect(screen.getByRole("tab", { name: "playground.advancedMode" }).getAttribute("aria-selected")).toBe("true");
 });
 
+
+it.each(["endpoint", "router"])("opens the %s deep link without a chat model or unrelated Guardrail selection", async (target) => {
+  window.history.replaceState({}, "", `/playground?mode=advanced&${target}=qa-target`);
+  api.models.mockResolvedValue({ items: [] });
+  api.guardrails.mockResolvedValue({ items: [] });
+  mount();
+  expect(await screen.findByLabelText("Request body")).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "playground.advancedMode" }).getAttribute("aria-selected")).toBe("true");
+  expect(new URLSearchParams(window.location.search).get(target)).toBe("qa-target");
+  expect(new URLSearchParams(window.location.search).get("guardrail")).toBeNull();
+});

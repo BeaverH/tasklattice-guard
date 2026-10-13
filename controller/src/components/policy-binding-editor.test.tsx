@@ -46,6 +46,7 @@ vi.mock("react-i18next", () => ({
         "guardrailWizard.noPoliciesDescription": "Select a Policy.",
         "policyLibrary.ruleCount": "{{count}} Rules",
         "policyLibrary.testCount": "{{count}} Test Cases",
+        "common.multiSelect.selectedCount": "{{count}} selected",
         "common.multiSelect.available": "{{count}} available",
         "common.multiSelect.matching": "{{count}} matching",
         "common.multiSelect.clearAll": "Clear all",
@@ -193,7 +194,8 @@ describe("PolicyBindingEditor", () => {
     const onChange = vi.fn();
     render(<PolicyBindingEditor policies={[latest]} value={[defaultPolicyBinding(old)]} onChange={onChange} />);
     const field = within(screen.getByRole("combobox", { name: "Select Policies" }).parentElement!);
-    expect(field.getByText("Published old", { exact: true })).toBeTruthy();
+    expect(field.getByText("1 selected", { exact: true })).toBeTruthy();
+    expect(field.queryByText("Published old", { exact: true })).toBeNull();
     expect(within(screen.getByRole("list")).getByRole("button", { name: "Remove Published old" })).toBeTruthy();
     expect(screen.queryByText("Published new")).toBeNull();
     fireEvent.change(screen.getByLabelText("Old required value *"), { target: { value: "reviewed value" } });
@@ -205,8 +207,7 @@ describe("PolicyBindingEditor", () => {
     const latest: Policy = { ...old, version: "2", name: "Published new", published_versions: [old] };
     const onChange = vi.fn();
     const { rerender } = render(<PolicyBindingEditor policies={[latest]} value={[defaultPolicyBinding(old)]} onChange={onChange} />);
-    const field = within(screen.getByRole("combobox", { name: "Select Policies" }).parentElement!);
-    fireEvent.click(field.getByRole("button", { name: "Remove Published old" }));
+    fireEvent.click(within(screen.getByRole("list")).getByRole("button", { name: "Remove Published old" }));
     expect(onChange).toHaveBeenLastCalledWith([]);
     rerender(<PolicyBindingEditor policies={[latest]} value={[]} onChange={onChange} />);
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Select Policies" }), { key: "ArrowDown" });
