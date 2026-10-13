@@ -37,6 +37,31 @@ class Registry:
         pass
 
 
+def test_scan_default_is_backward_compatible_atomic_and_restored(tmp_path):
+    store = ArtifactStore(FIXTURE / "public-key.pem", tmp_path / "state")
+    store.attach_registry(Registry())
+    desired = protocol.DesiredState(generation=1, endpoints=[protocol.EndpointRuntime(endpoint_id="scan", adapter="f5-scan")])
+    store.apply(desired)
+    assert store.endpoint_scan_flag_only_default("scan") is True
+    desired.generation = 2
+    desired.endpoints[0].scan_flag_only_default = False
+    store.apply(desired)
+    assert store.endpoint_scan_flag_only_default("scan") is False
+    restarted = ArtifactStore(FIXTURE / "public-key.pem", tmp_path / "state")
+    restarted.attach_registry(Registry())
+    assert restarted.endpoint_scan_flag_only_default("scan") is False
+    desired.generation = 3
+    desired.endpoints[0].scan_flag_only_default = True
+    # Duplicate Router IDs reject the snapshot without changing the active default.
+    desired.router_revisions.extend([protocol.RouterRevision(router_id="bad"), protocol.RouterRevision(router_id="bad")])
+    with pytest.raises(ValueError):
+        store.apply(desired)
+    assert store.endpoint_scan_flag_only_default("scan") is False
+    del desired.router_revisions[:]
+    store.apply(desired)
+    assert store.endpoint_scan_flag_only_default("scan") is True
+
+
 def test_runner_verifies_and_restores_complete_last_known_good(tmp_path):
     private_key = Ed25519PrivateKey.generate()
     public_path = tmp_path / "public.pem"

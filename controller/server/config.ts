@@ -107,6 +107,16 @@ const environmentSchema = z.object({
   CONTROLLER_DATABASE_URL: z.string().url(),
   CONTROLLER_PUBLIC_URL: z.string().url().default("http://localhost:8080"),
   CONTROLLER_RUNTIME_SERVICE_URL: z.string().url().default("http://localhost:8091"),
+  // Advertised Endpoint address only; Controller-to-Runner calls use the Service URL.
+  CONTROLLER_RUNTIME_PUBLIC_URL: z.string().trim().default("").refine((value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return /^https?:\/\//.test(value) && !url.username && !url.password && !/[?#\s]/.test(value);
+    } catch {
+      return false;
+    }
+  }, "Expected an HTTP(S) base URL without credentials, query, or fragment, or an empty value."),
   CONTROLLER_UI_DIST: z.string().default("dist"),
   CONTROLLER_POLICY_CATALOG_DIR: z
     .string()
@@ -261,6 +271,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     databaseUrl: parsed.CONTROLLER_DATABASE_URL,
     publicUrl: parsed.CONTROLLER_PUBLIC_URL.replace(/\/$/, ""),
     runtimeServiceUrl: parsed.CONTROLLER_RUNTIME_SERVICE_URL.replace(/\/$/, ""),
+    runtimePublicUrl: parsed.CONTROLLER_RUNTIME_PUBLIC_URL.replace(/\/+$/, "") || null,
     uiDist: parsed.CONTROLLER_UI_DIST,
     policyCatalogDir: parsed.CONTROLLER_POLICY_CATALOG_DIR,
     protoPath: parsed.CONTROLLER_PROTO_PATH,

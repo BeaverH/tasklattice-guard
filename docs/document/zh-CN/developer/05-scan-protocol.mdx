@@ -6,7 +6,7 @@ order: 2
 ---
 本章定义 **Scan Endpoint**（`f5-scan`）在本系统中的实际契约，面向现有的 F5 Scan 脚本、Python requests 和数据集评测。
 
-- 兼容范围是通过 `POST /backend/v1/scans` 的文本扫描。
+- 兼容范围是通过 `POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans` 的文本扫描。
 - 不包括 F5 的项目管理、历史查询、Scanner 配置 API 和 `/scans/raw`。
 - LiteLLM 的 `action`、Call ID 和 WebSocket 规则不适用于 Scan。
 
@@ -14,18 +14,18 @@ order: 2
 ## 地址、认证与路由
 
 ```http
-POST /backend/v1/scans HTTP/1.1
+POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans HTTP/1.1
 Authorization: Bearer <Endpoint 凭据>
 Content-Type: application/json
 ```
 
-- `CALYPSOAI_URL` 是 Runner Service 的运行时根地址，例如 `https://guard-runtime.example.com`。不要附带 `/runtime/v1/endpoints/{id}`。
+- `CALYPSOAI_URL` 是包含 Endpoint UUID 的基础地址，例如 `https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>`。将占位符替换为接入页提供的真实 ID。
 - `CALYPSOAI_TOKEN` 是创建 Scan Endpoint 时保存的完整凭据。
 
-所有 Scan Endpoint 共用这个路径。Bearer 凭据识别 Endpoint，该 Endpoint 已发布的 Router 再选择 Guardrail Version。
+路径中的 UUID 唯一指定 Endpoint；Bearer 凭据必须属于该 Endpoint，否则返回 `401`。该 Endpoint 已发布的 Router 再选择 Guardrail Version。根路径 `/backend/v1/scans` 不再提供接入。客户端应在 Endpoint 基础地址后拼接 `/backend/v1/scans`；使用 URL 拼接库时须保留 Endpoint 路径，不能重置到域名根路径。
 
 ```bash
-export CALYPSOAI_URL='https://guard-runtime.example.com'
+export CALYPSOAI_URL='https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>'
 export CALYPSOAI_TOKEN='<Scan Endpoint 凭据>'
 curl -sS --fail-with-body -X POST "${CALYPSOAI_URL%/}/backend/v1/scans" \
   -H "Authorization: Bearer $CALYPSOAI_TOKEN" \
@@ -73,7 +73,7 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 | --- | --- | --- |
 | `input` | 必填字符串 | 唯一要检测的文本。必须是字符串，不接受数组、对象或 `null`。schema 允许空字符串，但空扫描不能证明其他内容已通过。 |
 | `scanDirection` | `"request"`（默认）或 `"response"` | 选择 Input Rail 或 Output Rail。区分大小写。 |
-| `flagOnly` | 布尔值，默认 `true` | `true` 把每次命中都表示为 `flagged`。`false` 区分 `blocked` 和 `redacted`。 |
+| `flagOnly` | 布尔值；省略时使用 Endpoint 默认值，初始为 `true` | `true` 把每次命中都表示为 `flagged`。`false` 区分 `blocked` 和 `redacted`。 |
 | `verbose` | 布尔值，默认 `false` | 是否返回一条 Guardrail 的聚合结果详情。 |
 
 这四个字段严格校验类型：
@@ -83,6 +83,10 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 - 未知的枚举值或错误的类型返回 `422`。
 
 每次调用都重新解析当前路由，并返回新的 Scan ID。输入扫描和输出扫描不共享会话，也不共享固定的版本。重复提交会执行新的扫描。Scan 不保证去重或幂等。需要在一次模型调用中固定版本时，请使用 [LiteLLM Endpoint](/document/developer/gateway-connect)。
+
+管理员可在创建 Scan Endpoint 时选择“默认 flagOnly”，也可在 Endpoint 详情中修改。新建和升级前已有的 Endpoint 均初始使用 `true`；设为 `false` 后，省略该参数的请求可以区分 `blocked` 与 `redacted`。优先级为 **请求显式值 → Endpoint 默认值**，显式 `null` 仍返回 `422`。修改通过配置分发在 Runner 同步后生效，无须重新发布 Router。
+
+控制面创建与更新 Endpoint 的字段名为 `scanFlagOnlyDefault`，仅适用于 `f5-scan`。例如，`PATCH /api/v1/endpoints/{id}` 的请求体 `{"scanFlagOnlyDefault":false}` 修改默认值。接入页的 cURL 示例省略 `flagOnly`，会使用该设置。
 
 `flagOnly` 只影响结果的表达方式，不关闭检测，也不是服务端的 Dry Run。观察模式由客户端自己实现：分别记录判定结果和实际交付。`dry_run` 和兼容占位字段都不能开启服务端 Dry Run。
 
@@ -181,11 +185,9 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 | `result.outcome` | 含义与调用方处理 |
 | --- | --- |
 | `cleared` | 所需检测已完成，没有发现需要干预的内容。可以按结果继续。 |
-| `flagged` | 检测到需要干预的内容。默认的 `flagOnly=true` 不区分阻断和替换。不能当作放行。 |
+| `flagged` | 检测到需要干预的内容。`flagOnly=true` 不区分阻断和替换。不能当作放行。 |
 | `blocked` | `flagOnly=false` 时的阻断。停止当前阶段，不交付原文。 |
 | `redacted` | `flagOnly=false` 时发生了实际替换。使用处理后的文本，不交付原文。 |
-
-`flagOnly=false` 并不保证只返回三种结果。聚合结果需要干预、但最终动作不是 block 或 transform 时，仍可能返回 `flagged`。调用方必须处理全部四种值。
 
 | 返回字段 | 约束 |
 | --- | --- |
@@ -199,6 +201,22 @@ Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、�
 | `scanners` | 固定为 `null`。配置不适用。 |
 
 检测超时、缺少所需检测或执行出错，都不会变成 `cleared`。这些情况返回非 `2xx` 错误，而不是成功的 Scan 结果。
+
+<a id="scan-decision-mapping" />
+### 内部 decision 到 F5 outcome 的映射
+
+平台内部表示放行（pass）的 `decision` 值是 `allow`。Scan 适配器根据最终 decision、检测评估状态和 `flagOnly` 生成 `result.outcome`，输入与输出扫描使用同一套映射。省略 `flagOnly` 时使用 Endpoint 的默认值（初始为 `true`），显式请求值优先。下表适用于成功返回的扫描；“需要干预”表示至少一项检测的最终评估状态为 `intervene`。
+
+| `decision` | 检测评估条件 | `flagOnly=true` | `flagOnly=false` |
+| --- | --- | --- | --- |
+| `allow`（放行 / pass） | 无须干预 | `cleared` | `cleared` |
+| `allow`（放行 / pass） | 仍有评估需要干预 | `flagged` | `flagged` |
+| `block` | 无额外条件 | `flagged` | `blocked` |
+| `transform` | 无额外条件 | `flagged` | `redacted` |
+
+因此，`flagOnly=false` 仍可能返回 `flagged`，调用方必须处理全部四种 outcome。`flagOnly` 只改变对外的 outcome 标签，不关闭 Guardrail 的阻断或替换处理，也不把 `flagged` 变成放行。例如，`transform` 在 `flagOnly=true` 时返回 `flagged`，但 `redactedInput` 仍包含处理后的文本。
+
+`transform` 可以是局部替换，也可以是整段文本替换。映射为 `redacted` 是本平台的协议适配约定，不代表复用了 F5 的策略或具有相同的检测效果。
 
 <a id="scan-errors" />
 ## 错误格式、响应头与限制

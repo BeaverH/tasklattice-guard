@@ -13,6 +13,7 @@ const getEndpointMock = vi.fn();
 const getEndpointsMock = vi.fn();
 const getEndpointDeletionImpactMock = vi.fn();
 const deleteEndpointMock = vi.fn();
+const scanDefaultMock = vi.fn();
 
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => undefined },
@@ -34,6 +35,9 @@ vi.mock("react-i18next", () => ({
         "endpoints.namePlaceholder": "Corporate AI Gateway",
         "endpoints.endpointProtocol": "Adapter protocol",
         "endpoints.adapters.f5-scan": "F5 Scan",
+        "endpoints.scanDefaultLabel": "Default flagOnly",
+        "endpoints.scanDefaultTrue": "true · Return flagged for interventions",
+        "endpoints.scanDefaultFalse": "false · Distinguish blocked and redacted",
         "endpoints.adapters.litellm-generic-guardrail": "TaskLattice Guard for LiteLLM",
         "endpoints.adapterDescriptions.litellm-generic-guardrail": "Connect with an Endpoint and Secret.",
         "endpoints.credential": "Credential",
@@ -114,6 +118,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     getEndpoints: (...args: unknown[]) => getEndpointsMock(...args),
     getEndpointDeletionImpact: (...args: unknown[]) => getEndpointDeletionImpactMock(...args),
     deleteEndpoint: (...args: unknown[]) => deleteEndpointMock(...args),
+    setEndpointScanFlagOnlyDefault: (...args: unknown[]) => scanDefaultMock(...args),
   };
 });
 
@@ -179,6 +184,7 @@ describe("Endpoint onboarding", () => {
     getEndpointsMock.mockReset();
     getEndpointDeletionImpactMock.mockReset();
     deleteEndpointMock.mockReset();
+    scanDefaultMock.mockReset();
   });
 
   afterEach(() => {
@@ -197,6 +203,42 @@ describe("Endpoint onboarding", () => {
     ]);
     fireEvent.click(options[1]!);
     expect(screen.getByRole("combobox", { name: "Adapter protocol" }).textContent).toContain("F5 Scan");
+  });
+
+  it("only offers the Scan default for F5 and preserves a false value on creation", async () => {
+    const result = registration({ adapter_id: "f5-scan", protocol: "scan", scan_flag_only_default: false });
+    createEndpointMock.mockResolvedValue(result);
+    getEndpointMock.mockResolvedValue(result.endpoint);
+    renderWithProviders(<CreateEndpointSheet open onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    expect(screen.queryByRole("combobox", { name: "Default flagOnly" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Adapter protocol" }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: /F5 Scan/ }));
+    const selector = screen.getByRole("combobox", { name: "Default flagOnly" });
+    expect(selector.textContent).toContain("true");
+    fireEvent.keyDown(selector, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: /false ·/ }));
+    fireEvent.change(screen.getByPlaceholderText("Corporate AI Gateway"), { target: { value: "Scan" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add endpoint" }));
+    await waitFor(() => expect(createEndpointMock).toHaveBeenCalledWith({ name: "Scan", adapter_id: "f5-scan", scan_flag_only_default: false }));
+  });
+
+  it("keeps the stored Scan default after a failed save and supports retry", async () => {
+    const item = endpoint({ adapter_id: "f5-scan", protocol: "scan", scan_flag_only_default: true });
+    getEndpointsMock.mockResolvedValue({ items: [item], count: 1 });
+    getEndpointMock.mockResolvedValue(item);
+    scanDefaultMock.mockRejectedValueOnce(new Error("Save failed")).mockResolvedValueOnce({ ...item, scan_flag_only_default: false });
+    renderWithProviders(<EndpointsPage />);
+    fireEvent.click(await screen.findByText(item.name));
+    let selector = await screen.findByRole("combobox", { name: "Default flagOnly" });
+    fireEvent.keyDown(selector, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: /false ·/ }));
+    expect(await screen.findByText("Save failed")).toBeTruthy();
+    selector = screen.getByRole("combobox", { name: "Default flagOnly" });
+    expect(selector.textContent).toContain("true");
+    fireEvent.keyDown(selector, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: /false ·/ }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Default flagOnly" }).textContent).toContain("false"));
+    expect(scanDefaultMock).toHaveBeenLastCalledWith(item.id, false);
   });
 
   it("keeps connection values in onboarding and links to the LiteLLM setup guide", () => {

@@ -104,14 +104,16 @@ the distinction between enforce, dry run, and fail-open behavior.
 
 ## Deployment profiles
 
-- [Production values](../charts/tali-guard/values.yaml): externally managed
-  dependencies and Secrets, plus production observability defaults.
-- [Local values](../charts/tali-guard/values-dev.yaml): bundled development
-  PostgreSQL/Redis, an offline bootstrap password hash, and certificate-free
-  Token-authenticated control traffic. The chart generates internal keys/tokens
-  in a bootstrap Job; production keeps mTLS enabled by default.
-- [Debug overlay](../charts/tali-guard/values-debug.yaml): additional tracing and
-  profiling; use `npm run helm:deploy:dev:debug` for the local OrbStack deployment.
+- [Configuration reference](../charts/tali-guard/values.yaml): deployment defaults
+  and annotated examples for dependencies, Secrets, networking and observability.
+- [Development/UAT values](../charts/tali-guard/values-dev-uat.yaml): the only
+  development profile, with PostgreSQL/Redis, a local bootstrap account and
+  automatically generated internal credentials/mTLS certificates.
+
+For local performance diagnostics, use `npm run helm:deploy:dev:debug`; it applies
+telemetry flags to the same development values. For other environments, configure
+`observability.performanceDebug.enabled` and the Tempo/Pyroscope URLs documented
+in `values.yaml`. There is no separate debug or migration-target values file.
 
 The Helm installer does not read model credentials from `.env` or create
 Provider Secrets. Configure Providers, Models, and protection assignments

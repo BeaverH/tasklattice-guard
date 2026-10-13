@@ -49,7 +49,11 @@ describe("Policy-owned phrase configuration", () => {
       ["input", "internal-name", "transform"], ["input", "confidential", "block"],
       ["output", "internal-name", "transform"], ["output", "confidential", "block"],
     ]);
-    expect(cases.every(c => c.sourcePolicyId === PHRASE_POLICY_ID && c.coveredRuleIds.includes(PHRASE_RULE_ID))).toBe(true);
+    expect(cases.every(c => c.sourcePolicyId === PHRASE_POLICY_ID)).toBe(true);
+    expect(cases.map(c => c.coveredRuleIds)).toEqual([
+      [`${PHRASE_RULE_ID}/mask`], [`${PHRASE_RULE_ID}/block`],
+      [`${PHRASE_RULE_ID}/mask`], [`${PHRASE_RULE_ID}/block`],
+    ]);
   });
   it("keeps template-shaped phrases literal in acceptance inputs", () => {
     const candidate = structuredClone(draft);

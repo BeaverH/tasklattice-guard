@@ -198,7 +198,7 @@ class RunnerAPI:
                     "metrics": "/metrics",
                     "verify": "/runtime/v1/endpoints/{endpoint_id}/verify",
                     "litellm": "/runtime/v1/endpoints/{endpoint_id}/beta/litellm_basic_guardrail_api",
-                    "scan": "/backend/v1/scans",
+                    "scan": "/runtime/v1/endpoints/{endpoint_id}/backend/v1/scans",
                     "output_stream": "/runtime/v1/endpoints/{endpoint_id}/guardrails/output-stream",
                     "controller_evaluate": "/internal/v1/guardrails/{guardrail_id}/evaluate",
                     "draft_preview": "/internal/v1/playground/draft-previews/{preview_id}",

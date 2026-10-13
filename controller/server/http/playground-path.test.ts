@@ -134,7 +134,7 @@ describe("Playground path HTTP boundary", () => {
 it("binds Scan credentials to the selected Endpoint before forwarding", async () => {
   const { send, testPath, verifyScanTestCredential } = setup(true, true);
   const input = { target: "endpoint", targetId: "e1", configuration: "published", action: "execute",
-    request: 'POST /backend/v1/scans HTTP/1.1\nAuthorization: Bearer selected-key\n\n{"input":"hello"}' };
+    request: 'POST /runtime/v1/endpoints/e1/backend/v1/scans HTTP/1.1\nAuthorization: Bearer selected-key\n\n{"input":"hello"}' };
   expect((await send(input)).status).toBe(200);
   expect(verifyScanTestCredential).toHaveBeenCalledWith("e1", "selected-key");
   expect(testPath).toHaveBeenCalledWith(expect.objectContaining({ credential: "selected-key", targetId: "e1" }), "f5-scan");

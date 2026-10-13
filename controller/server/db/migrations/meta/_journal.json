@@ -257,8 +257,22 @@
     {
       "idx": 36,
       "version": "7",
+      "when": 1791760000002,
+      "tag": "0036_endpoint_scan_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
       "when": 1791760000003,
       "tag": "0037_policy_resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791760000004,
+      "tag": "0038_ensure_endpoint_scan_defaults",
       "breakpoints": true
     }
   ]

@@ -16,6 +16,11 @@ export interface EndpointRuntime {
    * Explicit composed Router binding; empty rejects public traffic.
    */
   'routerId'?: (string);
+  /**
+   * F5 Scan default when the request omits flagOnly. Absence preserves true.
+   */
+  'scanFlagOnlyDefault'?: (boolean);
+  '_scanFlagOnlyDefault'?: "scanFlagOnlyDefault";
 }
 
 /**
@@ -32,4 +37,9 @@ export interface EndpointRuntime__Output {
    * Explicit composed Router binding; empty rejects public traffic.
    */
   'routerId': (string);
+  /**
+   * F5 Scan default when the request omits flagOnly. Absence preserves true.
+   */
+  'scanFlagOnlyDefault'?: (boolean);
+  '_scanFlagOnlyDefault'?: "scanFlagOnlyDefault";
 }

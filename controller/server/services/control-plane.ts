@@ -1845,20 +1845,22 @@ export class ControlPlaneService {
     return queryAuditEvents(this.db, query);
   }
 
-  async createEndpoint(input: { name: string; adapter: string; actorId: string }) {
+  async createEndpoint(input: { name: string; adapter: string; scanFlagOnlyDefault?: boolean | undefined; actorId: string }) {
     if (!["litellm-generic-guardrail", "f5-scan"].includes(input.adapter)) throw new ValidationError("Unsupported Endpoint adapter.");
+    if (input.scanFlagOnlyDefault !== undefined && input.adapter !== "f5-scan") throw new ValidationError("scanFlagOnlyDefault is only supported by F5 Scan Endpoints.");
     const id = randomUUID();
     const issued = issueEndpointCredential();
     const verification = { credentials: [issued.stored] };
     const [created] = await this.db.transaction(async (tx) => {
       const rows = await tx.insert(endpoints).values({
-        id, name: input.name, adapter: input.adapter, verification,
+        id, name: input.name, adapter: input.adapter, verification, scanFlagOnlyDefault: input.scanFlagOnlyDefault ?? true,
       }).returning();
       await this.advanceEndpointDesiredState(tx, {
         endpointId: id,
         actorId: input.actorId,
         auditKind: "endpoint.created",
-        auditDetail: { name: input.name, adapter: input.adapter, credentialId: issued.stored.id },
+        auditDetail: { name: input.name, adapter: input.adapter, credentialId: issued.stored.id,
+          ...(input.adapter === "f5-scan" ? { scanFlagOnlyDefault: input.scanFlagOnlyDefault ?? true } : {}) },
       });
       if (!rows[0]) throw new Error("Endpoint creation did not return the stored resource.");
       return rows;
@@ -1873,23 +1875,27 @@ export class ControlPlaneService {
     };
   }
 
-  async setEndpointEnabled(input: { id: string; enabled: boolean; actorId: string }) {
+  async updateEndpoint(input: { id: string; enabled?: boolean | undefined; scanFlagOnlyDefault?: boolean | undefined; actorId: string }) {
     return this.db.transaction(async (tx) => {
       const [endpoint] = await tx.select().from(endpoints)
         .where(and(eq(endpoints.id, input.id), isNull(endpoints.deletedAt))).for("update");
       if (!endpoint) throw new NotFoundError("Endpoint", input.id);
-      const status = input.enabled ? "active" : "disabled";
-      if (endpoint.status === status) return this.publicEndpoint(endpoint);
+      if (input.scanFlagOnlyDefault !== undefined && endpoint.adapter !== "f5-scan") throw new ValidationError("scanFlagOnlyDefault is only supported by F5 Scan Endpoints.");
+      const status = input.enabled === undefined ? endpoint.status : input.enabled ? "active" : "disabled";
+      const scanFlagOnlyDefault = input.scanFlagOnlyDefault ?? endpoint.scanFlagOnlyDefault;
+      const scanChanged = scanFlagOnlyDefault !== endpoint.scanFlagOnlyDefault;
+      if (endpoint.status === status && !scanChanged) return this.publicEndpoint(endpoint);
 
       const now = new Date();
-      const [updated] = await tx.update(endpoints).set({ status, updatedAt: now })
+      const [updated] = await tx.update(endpoints).set({ status, scanFlagOnlyDefault, updatedAt: now })
         .where(and(eq(endpoints.id, input.id), isNull(endpoints.deletedAt))).returning();
       if (!updated) throw new NotFoundError("Endpoint", input.id);
       await this.advanceEndpointDesiredState(tx, {
         endpointId: input.id,
         actorId: input.actorId,
-        auditKind: input.enabled ? "endpoint.enabled" : "endpoint.disabled",
-        auditDetail: { previousStatus: endpoint.status, status },
+        auditKind: scanChanged ? "endpoint.updated" : input.enabled ? "endpoint.enabled" : "endpoint.disabled",
+        auditDetail: { previousStatus: endpoint.status, status,
+          ...(scanChanged ? { previousScanFlagOnlyDefault: endpoint.scanFlagOnlyDefault, scanFlagOnlyDefault } : {}) },
       });
       return this.publicEndpoint(updated);
     });
@@ -2198,6 +2204,7 @@ export class ControlPlaneService {
         trafficRouterId: endpoint.trafficRouterId,
         adapter: endpoint.adapter,
         verification: endpoint.verification,
+        scanFlagOnlyDefault: endpoint.scanFlagOnlyDefault,
       })),
       guardrailLoggingLevels: Object.fromEntries(loggingLevels.map((item) => [item.id, item.level])),
     };
@@ -2733,10 +2740,11 @@ export class ControlPlaneService {
       name: endpoint.name,
       adapter: endpoint.adapter,
       status: endpoint.status,
+      ...(endpoint.adapter === "f5-scan" ? { scanFlagOnlyDefault: endpoint.scanFlagOnlyDefault } : {}),
       createdAt: endpoint.createdAt,
       updatedAt: endpoint.updatedAt,
       credentials: publicEndpointCredentials(endpoint.verification),
-      setup: endpointSetup(this.config.runtimeServiceUrl, endpoint.id, endpoint.adapter),
+      setup: endpointSetup(this.config.runtimePublicUrl ?? this.config.runtimeServiceUrl, endpoint.id, endpoint.adapter),
     };
   }
 
@@ -3180,18 +3188,18 @@ function ratio(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-export function endpointSetup(runtimeServiceUrl: string, endpointId: string, adapter: string) {
+export function endpointSetup(runtimeBaseUrl: string, endpointId: string, adapter: string) {
+  const apiBaseUrl = `${runtimeBaseUrl.replace(/\/+$/, "")}/runtime/v1/endpoints/${encodeURIComponent(endpointId)}`;
   if (adapter === "f5-scan") {
-    const baseUrl = new URL(runtimeServiceUrl).origin;
+    const callbackUrl = `${apiBaseUrl}/backend/v1/scans`;
     return {
-      api_base_url: baseUrl, callback_url: `${baseUrl}/backend/v1/scans`, stream_callback_url: null,
+      api_base_url: apiBaseUrl, callback_url: callbackUrl, stream_callback_url: null,
       auth_header: "Authorization: Bearer", credential_env_var: "CALYPSOAI_TOKEN", api_base_env_var: "CALYPSOAI_URL",
       recommended_modes: ["request", "response"], default_on: true, fail_on_error: true,
       unreachable_fallback: "fail_closed" as const,
-      yaml_template: scanRequestCommand(`${baseUrl}/backend/v1/scans`),
+      yaml_template: scanRequestCommand(callbackUrl),
     };
   }
-  const apiBaseUrl = `${runtimeServiceUrl}/runtime/v1/endpoints/${encodeURIComponent(endpointId)}`;
   if (adapter !== "litellm-generic-guardrail") throw new ValidationError("Unsupported Endpoint adapter.");
   const callbackUrl = `${apiBaseUrl}/beta/litellm_basic_guardrail_api`;
   const recommendedModes = ["pre_call", "post_call"];

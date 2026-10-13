@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { PolicyDto } from "../policy-catalog/catalog.js";
 import type { ProgrammablePolicySnapshot } from "../policy-studio/model.js";
 import { normalizeGuardrailDraft, type GuardrailDraftConfig, type ValidationExpectationOverride } from "./guardrail-plan.js";
-import { PHRASE_PARAMETER, PHRASE_POLICY_ID, parsePhraseEntries } from "../../shared/phrase-policy.js";
+import { PHRASE_PARAMETER, PHRASE_POLICY_ID, PHRASE_RULE_ID, parsePhraseEntries } from "../../shared/phrase-policy.js";
 import { isSplitTopicPolicy, TOPIC_ALLOW_RULE, TOPIC_DENY_RULE, topicLines, topicPolicyValues } from "../../shared/topic-policy.js";
 import type { ValidationCaseResult, ValidationMetrics } from "./models.js";
 import { definitionTestCases } from "../policy-studio/definition-tests.js";
@@ -76,6 +76,7 @@ export function generatedTestCases(
             ...item, id: `${item.id}/${entry.id}`, name: `${item.name}: ${entry.phrase}`,
             content: entry.phrase,
             expected_decision: entry.action,
+            covered_rule_ids: [`${PHRASE_RULE_ID}/${entry.id}`],
           })) : [item];
       return expanded.map((item) => ({
         id: generatedCaseId(policy.id, item.id),

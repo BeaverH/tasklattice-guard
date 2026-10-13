@@ -25,7 +25,7 @@ order: 6
 | 接入类型 | 适合谁 | 如何送检 |
 | --- | --- | --- |
 | **LiteLLM 的 TaskLattice Guard**（`litellm-generic-guardrail`） | LiteLLM 网关，或实现 LiteLLM Generic Guardrail 契约的自研网关、Agent | 用 `x-api-key` 调用 Endpoint 下的 `/beta/litellm_basic_guardrail_api`。使用 `litellm_call_id` 关联输入与输出。支持 Provider 的 WebSocket 输出保护。 |
-| **Scan（F5 兼容）**（`f5-scan`） | Python、requests、curl、F5 Scan 测试脚本，或需要独立文本检查的应用 | 用 Bearer 凭据调用固定路径 `/backend/v1/scans`，通过 `input` 提交文本，`scanDirection` 选择 request 或 response。每次调用独立，不生成业务模型回答。 |
+| **Scan（F5 兼容）**（`f5-scan`） | Python、requests、curl、F5 Scan 测试脚本，或需要独立文本检查的应用 | 用该 Endpoint 的 Bearer 凭据调用 `/runtime/v1/endpoints/{endpoint_id}/backend/v1/scans`，通过 `input` 提交文本，`scanDirection` 选择 request 或 response。每次调用独立，不生成业务模型回答。 |
 
 已有 LiteLLM 网关时，选择 LiteLLM。独立的文本扫描和数据集评测，选择 Scan。客户端必须遵守对应的请求和响应契约，先判断 outcome，再决定如何交付内容。参见[接入说明](/document/developer/endpoint-setup)、[LiteLLM 请求示例](/document/developer/gateway-connect)和[调用方职责](/document/developer/endpoint-setup#endpoint-delivery)。
 

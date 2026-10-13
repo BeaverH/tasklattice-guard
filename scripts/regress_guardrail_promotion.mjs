@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Opt-in end-to-end Guardrail promotion regression across the two isolated
- * Helm releases of the local promotion pair: UAT authors, tests, publishes and
- * exports; PROD, with exactly the same features, imports by procedure,
+ * Opt-in end-to-end Guardrail promotion regression across two explicitly
+ * configured isolated loopback deployments: source exports; target imports,
  * verifies, routes through an approved change and serves real traffic.
  *
- *   npm run helm:deploy:promotion   # releases tali-guard-uat and tali-guard-prod
- *   npm run test:promotion          # sets the environment below and runs this
+ *   npm run test:promotion
+ *
+ * Set GUARD_PROMOTION_* URLs, database connections and credentials as described
+ * in docs/development.md. This command does not provision a migration target.
  *
  * Real HTTP, PostgreSQL, Runner validation, signing, import, Runner load
  * checks, Router approval and runtime evaluation. Model-free content only.

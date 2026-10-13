@@ -494,6 +494,7 @@ export class RunnerControlServer {
           adapter: endpoint.adapter,
           routerId: endpoint.trafficRouterId ?? "",
           verification: endpointVerificationToWire(endpoint.verification),
+          scanFlagOnlyDefault: endpoint.scanFlagOnlyDefault,
         })),
         guardrailLoggingLevels: desired.guardrailLoggingLevels,
         modelConfiguration: modelConfiguration ? {

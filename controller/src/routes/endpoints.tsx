@@ -47,6 +47,7 @@ import {
   revokeEndpointCredential,
   rotateEndpointCredential,
   setEndpointEnabled,
+  setEndpointScanFlagOnlyDefault,
   type Endpoint,
   type EndpointAdapterId,
   type EndpointCredential,
@@ -291,6 +292,15 @@ function EndpointDetailContent({
     onError: showMutationError(t("endpoints.updateFailed")),
   });
 
+  const scanDefaultMutation = useMutation({
+    mutationFn: (flagOnly: boolean) => setEndpointScanFlagOnlyDefault(endpoint.id, flagOnly),
+    onSuccess: async (next) => {
+      await cacheEndpoint(next);
+      toast.success(t("endpoints.scanDefaultUpdated"));
+    },
+    onError: showMutationError(t("endpoints.updateFailed")),
+  });
+
   const rotateMutation = useMutation({
     mutationFn: () => rotateEndpointCredential(endpoint.id),
     onSuccess: async (result) => {
@@ -384,6 +394,14 @@ function EndpointDetailContent({
             />
           </div>
         </section>
+
+        {endpoint.protocol === "scan" ? <section className="rounded-lg border bg-card p-4">
+          <ScanFlagOnlyField id={`endpoint-scan-default-${endpoint.id}`} value={endpoint.scan_flag_only_default ?? true}
+            disabled={!canManage || scanDefaultMutation.isPending}
+            onChange={value => scanDefaultMutation.mutate(value)} />
+          {scanDefaultMutation.isPending ? <p role="status" className="mt-2 text-xs text-muted-foreground">{t("common.saving")}</p> : null}
+          {scanDefaultMutation.error ? <div className="mt-3"><ErrorNotice error={scanDefaultMutation.error} /></div> : null}
+        </section> : null}
 
         <SetupConfiguration endpoint={endpoint} />
 
@@ -527,6 +545,7 @@ export function CreateEndpointSheet({
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [adapterId, setAdapterId] = useState<EndpointAdapterId>("litellm-generic-guardrail");
+  const [scanFlagOnlyDefault, setScanFlagOnlyDefault] = useState(true);
   const [registration, setRegistration] = useState<EndpointRegistration | null>(null);
   const [credentialSaved, setCredentialSaved] = useState(false);
   const [configurationCopied, setConfigurationCopied] = useState(false);
@@ -545,6 +564,7 @@ export function CreateEndpointSheet({
     if (!open) return;
     setName("");
     setAdapterId("litellm-generic-guardrail");
+    setScanFlagOnlyDefault(true);
     setRegistration(null);
     setCredentialSaved(false);
     setConfigurationCopied(false);
@@ -552,7 +572,8 @@ export function CreateEndpointSheet({
   }, [open]);
 
   const mutation = useMutation({
-    mutationFn: () => createEndpoint({ name: name.trim(), adapter_id: adapterId }),
+    mutationFn: () => createEndpoint({ name: name.trim(), adapter_id: adapterId,
+      ...(adapterId === "f5-scan" ? { scan_flag_only_default: scanFlagOnlyDefault } : {}) }),
     onSuccess: (result) => {
       setRegistration(result);
       toast.success(t("endpoints.registered"));
@@ -653,10 +674,29 @@ export function CreateEndpointSheet({
               </SelectContent>
             </Select>
           </Field>
+          {adapterId === "f5-scan" ? <ScanFlagOnlyField id="new-endpoint-scan-default" value={scanFlagOnlyDefault}
+            disabled={mutation.isPending} onChange={setScanFlagOnlyDefault} /> : null}
         </div>
       )}
     </EntitySheet>
   );
+}
+
+function ScanFlagOnlyField({ id, value, onChange, disabled }: {
+  id: string; value: boolean; onChange: (value: boolean) => void; disabled: boolean;
+}) {
+  const { t } = useTranslation();
+  return <div className="grid gap-2">
+    <Label htmlFor={id}>{t("endpoints.scanDefaultLabel")}</Label>
+    <Select value={String(value)} disabled={disabled} onValueChange={next => onChange(next === "true")}>
+      <SelectTrigger id={id} aria-label={t("endpoints.scanDefaultLabel")} aria-describedby={`${id}-hint`}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="true">{t("endpoints.scanDefaultTrue")}</SelectItem>
+        <SelectItem value="false">{t("endpoints.scanDefaultFalse")}</SelectItem>
+      </SelectContent>
+    </Select>
+    <p id={`${id}-hint`} className="text-xs leading-5 text-muted-foreground">{t("endpoints.scanDefaultHint")}</p>
+  </div>;
 }
 
 export function SetupChecklist({

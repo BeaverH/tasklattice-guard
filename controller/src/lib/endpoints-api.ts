@@ -65,6 +65,7 @@ function mapEndpoint(value: CurrentEndpoint, events: controllerApi.RuntimeEvent[
     id: value.id,
     adapter_id: adapter.id,
     protocol: adapter.protocol,
+    ...(adapter.protocol === "scan" ? { scan_flag_only_default: value.scanFlagOnlyDefault ?? true } : {}),
     name: value.name,
     description: "",
     enabled: value.status === "active",
@@ -130,15 +131,24 @@ function oneTimeRegistration(value: CurrentEndpoint): EndpointRegistration {
   };
 }
 
-export async function createEndpoint(input: { name: string; adapter_id: EndpointAdapterId }): Promise<EndpointRegistration> {
-  const created = await controllerApi.createControllerEndpoint({ name: input.name, adapter: input.adapter_id }) as CurrentEndpoint;
+export async function createEndpoint(input: { name: string; adapter_id: EndpointAdapterId; scan_flag_only_default?: boolean }): Promise<EndpointRegistration> {
+  const created = await controllerApi.createControllerEndpoint({ name: input.name, adapter: input.adapter_id,
+    ...(input.scan_flag_only_default !== undefined ? { scanFlagOnlyDefault: input.scan_flag_only_default } : {}) }) as CurrentEndpoint;
   return oneTimeRegistration(created);
 }
 
 export async function setEndpointEnabled(id: string, enabled: boolean): Promise<Endpoint> {
+  return updateEndpoint(id, { enabled });
+}
+
+export async function setEndpointScanFlagOnlyDefault(id: string, flagOnly: boolean): Promise<Endpoint> {
+  return updateEndpoint(id, { scanFlagOnlyDefault: flagOnly });
+}
+
+async function updateEndpoint(id: string, settings: { enabled?: boolean; scanFlagOnlyDefault?: boolean }): Promise<Endpoint> {
   const updated = await controllerApi.requestController<CurrentEndpoint>(`/api/v1/endpoints/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(settings),
   });
   const events = await getActivity();
   return mapEndpoint(updated, [], events.items.find(item=>item.id===id));

@@ -822,6 +822,7 @@ export type Endpoint = {
   id: string;
   adapter_id: EndpointAdapterId;
   protocol: EndpointProtocol;
+  scan_flag_only_default?: boolean;
   name: string;
   description: string;
   enabled: boolean;

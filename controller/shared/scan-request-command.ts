@@ -9,7 +9,6 @@ export function scanRequestCommand(endpointUrl: string): string {
     "  --data '{",
     '    "input": "Hello, can you help me?",',
     '    "scanDirection": "request",',
-    '    "flagOnly": true,',
     '    "verbose": false',
     "  }'",
   ].join("\n");

@@ -231,7 +231,7 @@ export class RunnerPlaygroundClient {
     } else {
       const prefix = `/runtime/v1/endpoints/${encodeURIComponent(input.targetId)}`;
       const scan = endpointAdapter === "f5-scan";
-      const allowed = scan ? ["/backend/v1/scans"] : endpointAdapter === "litellm-generic-guardrail" ? [`${prefix}/beta/litellm_basic_guardrail_api`] : [];
+      const allowed = scan ? [`${prefix}/backend/v1/scans`] : endpointAdapter === "litellm-generic-guardrail" ? [`${prefix}/beta/litellm_basic_guardrail_api`] : [];
       if (parsed.method !== "POST" || !allowed.includes(parsed.path)) {
         throw new ValidationError("Use the selected Endpoint's POST evaluation path. Arbitrary URLs and query strings are not supported.");
       }

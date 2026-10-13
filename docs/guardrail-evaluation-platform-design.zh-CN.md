@@ -164,7 +164,7 @@ UI 和无界面调用使用同一套 API、权限和审计。以下为新评测�
 
 | 能力 | 已确认的证据 | 接入边界 |
 | --- | --- | --- |
-| 数据面调用入口 | Scan 使用 `/backend/v1/scans` 与 Bearer 凭据；LiteLLM 使用对应 Endpoint 下的 `/beta/litellm_basic_guardrail_api` 与 x-api-key；系统仅提供这两种 Endpoint | 使用实际提供的完整 URL 与匹配协议；不以 Profile 或 Guardrail ID 代替 Endpoint 地址 |
+| 数据面调用入口 | Scan 使用 `/runtime/v1/endpoints/{endpoint_id}/backend/v1/scans` 与该 Endpoint 的 Bearer 凭据；LiteLLM 使用对应 Endpoint 下的 `/beta/litellm_basic_guardrail_api` 与 x-api-key；系统仅提供这两种 Endpoint | 使用实际提供的完整 URL 与匹配协议；不以 Profile 或 Guardrail ID 代替 Endpoint 地址 |
 | 客户端关联身份 | LiteLLM 接收 `litellm_call_id` 并转换为内部 call ID；Scan 每次独立执行，忽略 requestPromptId | LiteLLM 按协议将 Attempt ID 映射到调用字段；Scan 以服务端返回的 id 关联测试记录 |
 | 实际执行身份 | 通用响应的 `ProtectionDecision` 包含 `guardrail_id`、`guardrail_version`、`router_id`、`route_assignment`、`effective_release_id`、`model_revision_id` 等可选字段 | 自动留存为扩展证据；不同协议的可用字段分别验证，不作为用户创建测试的必填配置 |
 | Endpoint 作用域 | `_scoped_call_id` 为 call ID 增加 `{endpoint_id}:` 前缀 | 遥测查询使用作用域内 ID；记录映射，不以裸 case ID 跨重复调用复用 |

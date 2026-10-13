@@ -10,6 +10,11 @@
     "security"
   ],
   "properties": {
+    "publicUrl": {
+      "description": "Shared external HTTP(S) origin for UI, Endpoint addresses and Better Auth. Empty preserves legacy per-component URLs; internal calls always use Service DNS. No path, credentials, query or fragment.",
+      "type": "string",
+      "pattern": "^(https?://[^/?#@\\s]+/?)?$"
+    },
     "nameOverride": {
       "type": "string"
     },
@@ -25,12 +30,11 @@
     "controller": {
       "type": "object",
       "required": [
-        "image",
-        "publicUrl"
+        "image"
       ],
       "properties": {
         "publicUrl": {
-          "description": "Public URLs. First is the canonical auth base URL; all default to trusted origins. A single string remains supported.",
+          "description": "Legacy UI-only URLs, used when top-level publicUrl is empty. First is the auth base URL; all derive trusted origins and Ingress hosts.",
           "oneOf": [
             {
               "type": "string",
@@ -52,7 +56,8 @@
           "items": {
             "type": "string",
             "pattern": "^https?://"
-          }
+          },
+          "description": "Optional browser origins. Shared publicUrl is always trusted; without a shared URL, this replaces the derived legacy origins."
         },
         "auth": {
           "type": "object",
@@ -146,6 +151,11 @@
         "callContextRedisUrl"
       ],
       "properties": {
+        "publicUrl": {
+          "description": "Optional different external data-plane HTTP(S) base URL. Empty inherits top-level publicUrl, or Runtime Service DNS when neither is set. Internal calls always use Service DNS. No credentials, query, fragment or Endpoint suffix.",
+          "type": "string",
+          "pattern": "^(https?://[^/?#@\\s]+(/[^?#\\s]*)?)?$"
+        },
         "image": {
           "$ref": "#/definitions/image"
         },
@@ -539,6 +549,9 @@
         },
         "bootstrapAdmin": {
           "type": "object",
+          "required": [
+            "name"
+          ],
           "properties": {
             "existingSecret": {
               "type": "string"
@@ -599,6 +612,9 @@
         },
         "controlTls": {
           "type": "object",
+          "required": [
+            "enabled"
+          ],
           "properties": {
             "existingSecret": {
               "type": "string"
