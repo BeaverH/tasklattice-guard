@@ -1,3 +1,4 @@
+import { EndpointRouterLink } from "@/components/endpoint-router-link";
 import { EndpointSetupBadge } from "@/components/endpoint-setup-badge";
 import { endpointsQueryOptions } from "@/features/endpoints-query";
 import { ResourceList } from "@/components/resource-list";
@@ -151,9 +152,9 @@ export function EndpointsPage({ endpointId, onEndpointChange }: {
         emptyTitle={t("endpoints.emptyTitle")} emptyDescription={t("endpoints.emptyDescription")}
         summary={<span>{t("endpoints.listSummary", { total: endpoints.length, verified })}{attention ? ` · ${t("endpoints.needsAttention", { count: attention })}` : ''}</span>}
         action={auth.user?.role === "admin" ? <Button variant="create" size="lg" onClick={() => setCreateOpen(true)}><Plus />{t("endpoints.register")}</Button> : undefined}>
-        {items => <Table className="resource-table" aria-label={t("pages.endpoints.title")}><TableHeader><TableRow>
+        {items => <Table className="resource-table resource-endpoint-table" aria-label={t("pages.endpoints.title")}><TableHeader><TableRow>
           <TableHead className="resource-name-column">{t("endpoints.gatewayInstance")}</TableHead>
-          <TableHead>{t("endpoints.setup")}</TableHead><TableHead>{t("endpoints.successRate24h")}</TableHead>
+          <TableHead>{t("endpoints.setup")}</TableHead><TableHead>{t("resourceList.boundRouter")}</TableHead><TableHead>{t("endpoints.successRate24h")}</TableHead>
           <TableHead>{t("endpoints.detectionP9524h")}</TableHead><TableHead>{t("endpoints.lastCallback")}</TableHead>
           <TableHead className="resource-actions-column"><span className="sr-only">{t("common.actions")}</span></TableHead>
         </TableRow></TableHeader><TableBody>{items.map(endpoint => <EndpointRow key={endpoint.id} endpoint={endpoint} onOpen={() => setSelected(endpoint)} />)}</TableBody></Table>}
@@ -208,6 +209,7 @@ function EndpointRow({ endpoint, onOpen }: { endpoint: Endpoint; onOpen: () => v
       <span className="resource-secondary" title={`${t(`endpoints.adapters.${endpoint.adapter_id}`)} · ${endpoint.id}`}>{t(`endpoints.protocolShort.${endpoint.protocol}`)} · {shortId(endpoint.id)}</span>
     </TableCell>
     <TableCell><EndpointSetupBadge status={endpoint.setup_status} /></TableCell>
+    <TableCell><EndpointRouterLink endpointId={endpoint.id} /></TableCell>
     <TableCell><EndpointSuccessRate endpoint={endpoint} /></TableCell>
     <TableCell><span className="text-xs tabular-nums" title={t("endpoints.detectionP95Explanation")}>
       {endpoint.request_count > 0 && endpoint.detection_p95_ms != null ? `${endpoint.detection_p95_ms.toLocaleString(i18n.language)} ms` : "—"}
@@ -338,7 +340,7 @@ function EndpointDetailContent({
       <Button variant="destructive" onClick={() => onOpenChange(false)}>{t("endpoints.leaveAndLoseKey")}</Button>
     </>
   ) : <>
-    {onDelete && (!oneTimeCredential || credentialSaved) ? <Button variant="destructive" onClick={() => onDelete(endpoint)}><Trash2 />{t("endpoints.deleteAction")}</Button> : null}
+    {onDelete && (!oneTimeCredential || credentialSaved) ? <Button variant="destructive" className="mr-auto" onClick={() => onDelete(endpoint)}><Trash2 />{t("endpoints.deleteAction")}</Button> : null}
     <Button variant="outline" onClick={requestClose}>{t("common.close")}</Button>
   </>;
 
@@ -375,10 +377,11 @@ function EndpointDetailContent({
               </div>
               <EndpointSetupBadge status={endpoint.setup_status} />
             </div>
-            <Button asChild variant="testing" size="sm"><Link to="/playground" search={{ mode: "advanced", endpoint: endpoint.id }}><FlaskConical />{t("endpoints.testEndpoint")}</Link></Button>
+            <Button asChild variant="testing"><Link to="/playground" search={{ mode: "advanced", endpoint: endpoint.id }}><FlaskConical />{t("endpoints.testEndpoint")}</Link></Button>
           </div>
           <dl className="divide-y divide-border">
             <Detail label={t("endpoints.id")} mono copyValue={endpoint.id}>{endpoint.id}</Detail>
+            <Detail label={t("resourceList.boundRouter")}><EndpointRouterLink endpointId={endpoint.id} /></Detail>
           </dl>
           <div className="flex items-center justify-between gap-4 border-t px-4 py-4">
             <div>
@@ -393,15 +396,14 @@ function EndpointDetailContent({
               aria-label={t("endpoints.acceptCallbacks")}
             />
           </div>
+          {endpoint.protocol === "scan" ? <div className="border-t p-4">
+            <ScanFlagOnlyField id={`endpoint-scan-default-${endpoint.id}`} value={endpoint.scan_flag_only_default ?? true}
+              disabled={!canManage || scanDefaultMutation.isPending}
+              onChange={value => scanDefaultMutation.mutate(value)} />
+            {scanDefaultMutation.isPending ? <p role="status" className="mt-2 text-xs text-muted-foreground">{t("common.saving")}</p> : null}
+            {scanDefaultMutation.error ? <div className="mt-3"><ErrorNotice error={scanDefaultMutation.error} /></div> : null}
+          </div> : null}
         </section>
-
-        {endpoint.protocol === "scan" ? <section className="rounded-lg border bg-card p-4">
-          <ScanFlagOnlyField id={`endpoint-scan-default-${endpoint.id}`} value={endpoint.scan_flag_only_default ?? true}
-            disabled={!canManage || scanDefaultMutation.isPending}
-            onChange={value => scanDefaultMutation.mutate(value)} />
-          {scanDefaultMutation.isPending ? <p role="status" className="mt-2 text-xs text-muted-foreground">{t("common.saving")}</p> : null}
-          {scanDefaultMutation.error ? <div className="mt-3"><ErrorNotice error={scanDefaultMutation.error} /></div> : null}
-        </section> : null}
 
         <SetupConfiguration endpoint={endpoint} />
 
@@ -537,12 +539,15 @@ export function CreateEndpointSheet({
   open,
   onOpenChange,
   onCreated,
+  completionLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (endpoint: Endpoint, openDetails: boolean) => Promise<void>;
+  completionLabel?: string;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [adapterId, setAdapterId] = useState<EndpointAdapterId>("litellm-generic-guardrail");
   const [scanFlagOnlyDefault, setScanFlagOnlyDefault] = useState(true);
@@ -576,6 +581,7 @@ export function CreateEndpointSheet({
       ...(adapterId === "f5-scan" ? { scan_flag_only_default: scanFlagOnlyDefault } : {}) }),
     onSuccess: (result) => {
       setRegistration(result);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.endpoints, exact: true });
       toast.success(t("endpoints.registered"));
     },
     onError: showMutationError(t("endpoints.registrationFailed")),
@@ -612,7 +618,7 @@ export function CreateEndpointSheet({
   ) : (
     <>
       <Button variant="outline" onClick={() => finish(false)}>{t("endpoints.finishLater")}</Button>
-      <Button onClick={() => finish(true)}>{t("endpoints.openEndpointDetails")}</Button>
+      <Button onClick={() => finish(true)}>{completionLabel ?? t("endpoints.openEndpointDetails")}</Button>
     </>
   ) : (
     <>
@@ -687,9 +693,9 @@ function ScanFlagOnlyField({ id, value, onChange, disabled }: {
 }) {
   const { t } = useTranslation();
   return <div className="grid gap-2">
-    <Label htmlFor={id}>{t("endpoints.scanDefaultLabel")}</Label>
+    <label htmlFor={id} className="text-sm font-medium">{t("endpoints.scanDefaultLabel")}</label>
     <Select value={String(value)} disabled={disabled} onValueChange={next => onChange(next === "true")}>
-      <SelectTrigger id={id} aria-label={t("endpoints.scanDefaultLabel")} aria-describedby={`${id}-hint`}><SelectValue /></SelectTrigger>
+      <SelectTrigger id={id} className="field:min-h-11" aria-label={t("endpoints.scanDefaultLabel")} aria-describedby={`${id}-hint`}><SelectValue /></SelectTrigger>
       <SelectContent>
         <SelectItem value="true">{t("endpoints.scanDefaultTrue")}</SelectItem>
         <SelectItem value="false">{t("endpoints.scanDefaultFalse")}</SelectItem>

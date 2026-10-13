@@ -378,13 +378,12 @@ export function CreateGuardrailWizard({
               {presetUndo && pendingPreset === null ? <Button variant="outline" className="min-h-11 justify-self-start" onClick={() => {
                 setBindings(presetUndo.bindings); setSelectedPreset(presetUndo.selected); setPresetUndo(null); setPresetFeedback(t("protection.wizard.undone"));
               }}>{t("protection.wizard.undoPreset")}</Button> : null}
-              <InfoNotice title={t("guardrailWizard.draftOnlyTitle")}>{t("guardrailWizard.draftOnlyDescription")}</InfoNotice>
             </div>
           </WizardSection>
         ) : null}
 
         {step === PROTECTIONS_STEP && policyWorkspace === "main" ? (
-          <WizardSection title={t("protection.wizard.protections")} description={t("protection.wizard.protectionsHint")}>
+          <WizardSection title={t("protection.wizard.protections")}>
             <div className="space-y-6">
               <p role="status" className="text-sm font-medium">{catalogReady ? t("protection.wizard.selectionSummary", { count: bindings.length, pending: incompleteBindings.length }) : catalogStatus}</p>
               {incompleteBindings.length ? <div className="flex flex-wrap gap-2">{incompleteBindings.map(binding => <Button key={binding.policy_id} className="min-h-11 h-auto max-w-full whitespace-normal break-words py-2" variant="outline" onClick={() => fixPolicy(binding)}>{t("protection.wizard.fixPolicy", { name: boundPolicy(policies, binding)?.name ?? binding.policy_id })}</Button>)}</div> : null}
@@ -472,7 +471,6 @@ export function CreateGuardrailWizard({
 
         {step === REVIEW_STEP ? (
           <WizardSection title={t("guardrailWizard.reviewTitle")} description={t("guardrailWizard.reviewDescription")}>
-            <InfoNotice title={t("guardrailWizard.reviewDraftTitle")}>{t("guardrailWizard.reviewDraftDescription")}</InfoNotice>
             <section className="mt-4 overflow-hidden rounded-xl border bg-card">
               <ReviewRow label={t("guardrailWizard.name")} value={name} />
               <ReviewRow label={t("guardrailWizard.policies")} value={t("protection.selected", { count: bindings.length })} />

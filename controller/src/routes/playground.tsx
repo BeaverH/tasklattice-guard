@@ -15,6 +15,7 @@ import {
   InfoNotice,
   PageHeader,
 } from "@/components/product-shell";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { queryKeys } from "@/features/query-keys";
 import { useAuth } from "@/lib/auth";
@@ -67,7 +68,7 @@ export function PlaygroundPage() {
   const selectableGuardrails = canTestDraft ? guardrails : publishedGuardrails;
   const models = modelsQuery.data?.items ?? [];
   const { guardrailId, target, selectGuardrail, selectTarget } =
-    usePlaygroundSelection(selectableGuardrails, canTestDraft);
+    usePlaygroundSelection(selectableGuardrails, canTestDraft, !advanced);
   const selected = selectableGuardrails.find((item) => item.id === guardrailId);
   const versionsQuery = useQuery({
     queryKey: queryKeys.guardrailVersions(guardrailId),
@@ -81,7 +82,7 @@ export function PlaygroundPage() {
       : undefined;
 
   useEffect(() => {
-    if (!versionsQuery.isSuccess) return;
+    if (advanced || !versionsQuery.isSuccess) return;
     if (target.kind === "draft" && canTestDraft) return;
     const requested = target.kind === "published" ? target.version : "";
     const resolved = resolvePublishedVersion(versions, requested);
@@ -93,12 +94,11 @@ export function PlaygroundPage() {
     } else if (!resolved && canTestDraft && target.kind !== "draft") {
       selectTarget({ kind: "draft" });
     }
-  }, [canTestDraft, selectTarget, target, versions, versionsQuery.isSuccess]);
+  }, [advanced, canTestDraft, selectTarget, target, versions, versionsQuery.isSuccess]);
 
   const loading = guardrailsQuery.isLoading || modelsQuery.isLoading;
-  const modeReady = guardrailsQuery.isSuccess && modelsQuery.isSuccess
-    && selectableGuardrails.length > 0 && models.length > 0;
-  const advancedActive = advanced && modeReady;
+  // Path testing uses Runner and Endpoint authentication, not the chat model.
+  const advancedActive = advanced;
   return (
     <Tabs
       value={advancedActive ? "advanced" : "simple"}
@@ -114,9 +114,7 @@ export function PlaygroundPage() {
               : t("pages.playground.description")}
           />
         </div>
-        {/* Keep the list in the Tabs children tree so Carbon can discover both
-            panels even while the mode switch is hidden during setup. */}
-        <div hidden={!modeReady} className="ml-auto min-w-0 shrink-0">
+        <div className="ml-auto min-w-0 shrink-0">
           <TabsList aria-label={t("playground.modeLabel")}>
             <TabsTrigger value="simple">
               {t("playground.simpleMode")}
@@ -166,10 +164,15 @@ export function PlaygroundPage() {
             />
           </div>
         ) : null}
-        {!loading && selectableGuardrails.length > 0 && !models.length ? (
+        {!loading && modelsQuery.isSuccess && selectableGuardrails.length > 0 && !models.length ? (
           <div className="mt-5">
             <InfoNotice title={t("playground.controllerUnavailableTitle")}>
-              {t("playground.controllerUnavailableDescription")}
+              <p>{t("resourceList.testUnavailable")}</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Button variant="outline" disabled={modelsQuery.isFetching} onClick={() => void modelsQuery.refetch()}>{t("resourceList.retryTesting")}</Button>
+                {canTestDraft ? <Button asChild variant="outline"><a href="/settings/models">{t("resourceList.configureChatModel")}</a></Button> : null}
+                <PlaygroundReturnLink />
+              </div>
             </InfoNotice>
           </div>
         ) : null}
@@ -194,7 +197,7 @@ export function PlaygroundPage() {
         forceMount
         className="mt-5 data-[state=inactive]:hidden"
       >
-        {advancedOpened && modeReady && (
+        {advancedOpened && (
           <AdvancedPlayground active={advancedActive} guardrails={guardrails} />
         )}
       </TabsContent>
@@ -412,12 +415,13 @@ export function resolvePublishedVersion(
 function usePlaygroundSelection(
   guardrails: Guardrail[],
   canTestDraft: boolean,
+  enabled = true,
 ) {
   const initial = initialPlaygroundSelection();
   const [selection, setSelection] = useState(initial);
   useEffect(() => {
     if (
-      !guardrails.length ||
+      !enabled || !guardrails.length ||
       guardrails.some((item) => item.id === selection.guardrailId)
     )
       return;
@@ -430,7 +434,7 @@ function usePlaygroundSelection(
     };
     setSelection(next);
     syncPlaygroundSearch(next);
-  }, [guardrails, selection.guardrailId]);
+  }, [enabled, canTestDraft, guardrails, selection.guardrailId]);
   const selectGuardrail = useCallback(
     (guardrailId: string) => {
       const guardrail = guardrails.find((item) => item.id === guardrailId);
@@ -501,4 +505,16 @@ function initialTargetFor(
   return canTestDraft && !hasPublishedVersion(guardrail)
     ? { kind: "draft" }
     : { kind: "published", version: "" };
+}
+
+function PlaygroundReturnLink() {
+  const { t } = useTranslation();
+  const search = new URLSearchParams(window.location.search);
+  const endpoint = search.get("endpoint");
+  const router = search.get("router");
+  const guardrail = search.get("guardrail");
+  const href = endpoint ? `/integration/endpoints?endpointId=${encodeURIComponent(endpoint)}`
+    : router ? `/integration/routers/${encodeURIComponent(router)}`
+      : guardrail ? `/guardrails/${encodeURIComponent(guardrail)}?tab=testing` : "/guardrails";
+  return <Button asChild variant="outline"><a href={href}>{t("common.back")}</a></Button>;
 }

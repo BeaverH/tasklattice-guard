@@ -367,9 +367,10 @@ export function PolicyCard({ policy, onOpen, onExport, onDelete }: { policy: Pol
   const { t } = useTranslation();
   const directory = declaredPolicyDirectory(policy);
   return (
-    <article className="group flex min-h-64 min-w-0 flex-col rounded-xl border bg-card p-4 shadow-xs transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-sm">
+    <article className="group flex min-w-0 flex-col rounded-xl border bg-card p-4 shadow-xs transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-sm">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <h3 className="line-clamp-2 min-w-0 flex-1 text-sm leading-5 font-semibold">{policy.name}</h3>
+        {policy.protection ? <Badge variant="secondary">{t(`protection.directories.${policy.protection.directory}`)}</Badge> : null}
         {policy.version === "0" ? <Badge variant="outline">Draft</Badge> : null}
       </div>
       <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">{policy.description}</p>
@@ -378,7 +379,7 @@ export function PolicyCard({ policy, onOpen, onExport, onDelete }: { policy: Pol
         {visiblePolicyTags(policy.tags).slice(0, 3).map((tag) => <Badge key={tag.id} variant="secondary" className="font-normal"><PolicyTagLabel tag={tag} /></Badge>)}
       </div>
       <div className="mt-auto pt-5">
-        <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/35 p-3 text-xs">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <Metric label={t("policyLibrary.rules")} value={policy.rules.length} />
           <Metric label={t("policyLibrary.testCases")} value={policy.test_count} />
         </div>
@@ -396,7 +397,7 @@ export function PolicyCard({ policy, onOpen, onExport, onDelete }: { policy: Pol
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
-  return <div><span className="block text-[10px] text-muted-foreground">{label}</span><strong className="mt-0.5 block font-mono font-medium">{value}</strong></div>;
+  return <div className="inline-flex items-baseline gap-1.5"><span className="text-muted-foreground">{label}</span><strong className="font-mono font-medium">{value}</strong></div>;
 }
 
 export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete }: { policy: Policy | null; onClose: () => void; onEdit?: (policy: Policy, trigger: HTMLButtonElement) => void; onExport?: (policy: Policy) => void; onDelete?: (policy: Policy) => void }) {
@@ -413,6 +414,7 @@ export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete }: { 
       footer={<>{onDelete ? <Button className="mr-auto" variant="destructive" onClick={() => onDelete(policy)}><Trash2 />{t("policyLibrary.deleteAction")}</Button> : null}{onExport ? <Button variant="outline" onClick={() => onExport(policy)}><Download />{t("policyStudio.exportPolicy")}</Button> : null}{onEdit ? <Button variant="edit" onClick={(event) => onEdit(policy, event.currentTarget)}>{t("policyLibrary.editPolicy")}</Button> : <Button variant="outline" onClick={onClose}>{t("common.close")}</Button>}</>}
     >
       <div className="flex flex-wrap gap-2">
+        {policy.protection ? <Badge variant="secondary">{t(`protection.directories.${policy.protection.directory}`)}</Badge> : null}
         {policy.version === "0" ? <Badge variant="outline">Draft</Badge> : null}
         {visiblePolicyTags(policy.tags).map((tag) => <Badge key={tag.id} variant={tag.source === "derived" ? "outline" : "secondary"}><PolicyTagLabel tag={tag} /></Badge>)}
       </div>
@@ -426,8 +428,7 @@ export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete }: { 
           </TabsList>
         </div>
         <TabsContent value="policy" className="space-y-5 pt-3 sm:pt-4">
-          {policy.protection ? <section className="space-y-3 rounded-lg border bg-muted/15 p-4 text-xs leading-5">
-            <div className="flex flex-wrap gap-2"><Badge variant="secondary">{t(`protection.directories.${policy.protection.directory}`)}</Badge></div>
+          {policy.protection ? <section className="space-y-3 text-xs leading-5">
             {policy.protection.requiredContext.length ? <p>{t("protection.requiredContext", { context: policy.protection.requiredContext.join(", ") })}</p> : null}
             {policy.protection.outputStreaming === "complete_response" ? <p>{t("protection.completeResponse")}</p> : null}
             {policy.protection.limitations.length ? <details><summary className="cursor-pointer font-medium">{t("protection.limits")}</summary><ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">{policy.protection.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details> : null}

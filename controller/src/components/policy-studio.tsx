@@ -228,7 +228,7 @@ export function PolicyStudioSheet({ policy, imported = null, open, onOpenChange,
           <div className="flex items-center justify-between gap-3">
           <Button variant="outline" disabled={busy} onClick={() => step ? setStep(step - 1) : onOpenChange(false)}>{step ? <><ArrowLeft />{t("common.previous")}</> : t("common.cancel")}</Button>
           {step < 2 ? <Button disabled={!canContinue[step] || busy} onClick={() => setStep(step + 1)}>{t("common.next")}<ArrowRight /></Button> : null}
-          {step === 2 && !currentRevisionPassed ? <Button disabled={!canContinue.every(Boolean) || busy} onClick={() => testMutation.mutate({ session: editorSession.current, revision: editRevision.current })}>{testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <PackageCheck />}{t("policyStudio.validateAndRun")}</Button> : null}
+          {step === 2 && !currentRevisionPassed ? <Button variant="testing" disabled={!canContinue.every(Boolean) || busy} onClick={() => testMutation.mutate({ session: editorSession.current, revision: editRevision.current })}>{testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <PackageCheck />}{t("policyStudio.validateAndRun")}</Button> : null}
           {step === 2 && currentRevisionPassed ? <Button disabled={busy} onClick={() => publishMutation.mutate(editorSession.current)}>{publishMutation.isPending ? <LoaderCircle className="animate-spin" /> : <ShieldCheck />}{t(publishMutation.isError ? "policyStudio.retryPublication" : "policyStudio.publish")}</Button> : null}
           </div>
         </div>

@@ -1,3 +1,6 @@
+import { CreateEndpointSheet } from "@/routes/endpoints";
+import { queryKeys } from "@/features/query-keys";
+import { toast } from "@/components/ui/notifications";
 import i18n from "@/i18n";
 import { useTranslation } from "react-i18next";
 import { useId, useState } from "react";
@@ -5,13 +8,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, CircleAlert, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { EntitySheet } from "@/components/entity-sheet";
 import { CreationFlow, ReviewList, WizardSection } from "@/components/creation-flow";
-import { ErrorNotice, InfoNotice } from "@/components/product-shell";
+import { ErrorNotice } from "@/components/product-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { listControllerEndpoints, listControllerGuardrails } from "@/lib/controller-api";
-import { createTrafficRouter, getSelectorFields, listTrafficRouters, trafficRouterKeys, type TrafficRoute } from "@/lib/traffic-routing-api";
+import { createTrafficRouter, getSelectorFields, listTrafficRouters, trafficRouterKeys, type TrafficRoute, type TrafficRouter } from "@/lib/traffic-routing-api";
 import { routingIssues } from "../../../shared/traffic-routing";
 import { percent } from "./form";
 import { selectorSummary } from "./router-view-model";
@@ -29,7 +32,7 @@ const newRoute = (kind: TrafficRoute["kind"]): TrafficRoute => ({
 });
 
 export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
-  open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void;
+  open: boolean; onOpenChange: (open: boolean) => void; onCreated: (router: TrafficRouter) => void;
 }) {
   const { t } = useTranslation();
   const nameId = useId();
@@ -44,7 +47,8 @@ export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
   const client = useQueryClient();
   const [name, setName] = useState("");
   const [endpointIds, setEndpointIds] = useState<string[]>([]);
-  const [routes, setRoutes] = useState(() => [newRoute("normal")]);
+  const [routes, setRoutes] = useState<TrafficRoute[]>([]);
+  const [createEndpointOpen, setCreateEndpointOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [fallback, setFallback] = useState(() => newRoute("fallback"));
   const endpoints = useQuery({ queryKey: ["routing-source-endpoints"], queryFn: listControllerEndpoints, enabled: open });
@@ -61,9 +65,9 @@ export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
     mutationFn: () => createTrafficRouter({ name: name.trim(), endpointIds, draft }),
     networkMode: "always",
     retry: false,
-    onSuccess: async () => {
+    onSuccess: async router => {
       await client.invalidateQueries({ queryKey: trafficRouterKeys.all });
-      onCreated();
+      onCreated(router);
     },
   });
   const options = (endpoints.data?.items ?? []).map(endpoint => {
@@ -98,6 +102,7 @@ export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
   }).join(" / ") || "—";
 
   return (
+    <>
     <EntitySheet width="workflow" bodyClassName="overflow-hidden p-0 sm:p-0" open={open} closeDisabled={mutation.isPending} onOpenChange={onOpenChange}
       eyebrow={t("routing.router")} title={t("routing.createRouter")}
       description={t("routing.selectIncomingTrafficAndRouteItToGuardrails")}
@@ -142,6 +147,10 @@ export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
             onValueChange={setEndpointIds} disabled={endpoints.isPending || routers.isPending || mutation.isPending}
             placeholder={t("routing.searchOrSelectEndpoints")} />
           <p className="create-router-help">{t("routing.selectedEndpointsShareTheseRulesEachEndpointBelongsTo")}</p>
+          <div className="mt-4 flex items-center gap-2">
+            <Button variant="create" onClick={() => setCreateEndpointOpen(true)}><Plus />{t("resourceList.addEndpointHere")}</Button>
+            <Button variant="outline" disabled={endpoints.isFetching || routers.isFetching} onClick={() => { void endpoints.refetch(); void routers.refetch(); }}>{t("resourceList.sourceRefresh")}</Button>
+          </div>
           {endpoints.error && <ErrorNotice error={endpoints.error} />}
           {routers.error && <ErrorNotice error={routers.error} />}
           {(endpoints.error || routers.error) && <Button className="mt-3" variant="outline"
@@ -222,7 +231,7 @@ export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
           </section>
         </WizardSection>}
         {step === 3 && <WizardSection title={t("routing.createSections.reviewTitle")} description={t("routing.createSections.reviewDescription")}>
-          <InfoNotice>{t("routing.createSections.savedAsDraft")}</InfoNotice>
+          <p className="text-sm text-muted-foreground">{t("routing.createSections.savedAsDraft")}</p>
           <div className="mt-4">
             <ReviewList items={[
               { label: t("routing.routerName"), value: name.trim() || "—" },
@@ -243,5 +252,13 @@ export function CreateRouterSheet({ open, onOpenChange, onCreated }: {
       </fieldset>
       </CreationFlow>
     </EntitySheet>
+    {createEndpointOpen && <CreateEndpointSheet open onOpenChange={setCreateEndpointOpen} completionLabel={t("resourceList.useEndpoint")}
+      onCreated={async endpoint => {
+        await Promise.all([endpoints.refetch(), client.invalidateQueries({ queryKey: queryKeys.endpoints, exact: true })]);
+        setEndpointIds(current => [...new Set([...current, endpoint.id])]);
+        setCreateEndpointOpen(false);
+        toast.success(t("resourceList.endpointAdded"));
+      }} />}
+    </>
   );
 }

@@ -241,7 +241,7 @@ describe("Models and Guardrail Catalog", () => {
     expect(activateModelConfiguration).not.toHaveBeenCalled();
   });
 
-  it("renders replacements as red removals and green additions while leaving unchanged bindings neutral", async () => {
+  it("renders replacements as red removals and green additions without repeating unchanged bindings", async () => {
     const configured = structuredClone(view);
     configured.models.push({ ...safetyModel, id: "old-model", name: "Previous guard" });
     configured.active = { ...structuredClone(view.draft!), id: "revision-1", revision: 1, state: "active" };
@@ -259,9 +259,7 @@ describe("Models and Guardrail Catalog", () => {
     expect(removals).toHaveLength(2);
     for (const label of additions) expect(label.closest("div")!.className).toContain("bg-emerald-500/10");
     for (const label of removals) expect(label.closest("div")!.className).toContain("bg-destructive/10");
-    const unchanged = within(review).getByText("modelSettings.detectors.content_safety.title · modelSettings.outputRail").closest("tr")!;
-    expect(within(unchanged).queryByText("modelSettings.bindingAdded")).toBeNull();
-    expect(within(unchanged).queryByText("modelSettings.bindingRemoved")).toBeNull();
+    expect(within(review).queryByText("modelSettings.detectors.content_safety.title · modelSettings.outputRail")).toBeNull();
     fireEvent.click(within(review).getByRole("button", { name: "common.cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(activateModelConfiguration).not.toHaveBeenCalled();
@@ -277,7 +275,9 @@ describe("Models and Guardrail Catalog", () => {
     fireEvent.click(await screen.findByRole("button", { name: "modelSettings.reviewActivation" }));
     const review = await screen.findByRole("dialog");
     expect(within(review).getByText("modelSettings.emptyRunnerConfiguration")).toBeTruthy();
-    expect(within(review).getByText("modelSettings.noActiveConfiguration")).toBeTruthy();
+    expect(within(review).getByText("modelSettings.noBindingChanges")).toBeTruthy();
+    expect(within(review).queryByRole("table")).toBeNull();
+    expect(within(review).getByRole("button", { name: "modelSettings.activateRevisionAction" })).toHaveProperty("disabled", true);
     expect(activateModelConfiguration).not.toHaveBeenCalled();
   });
 

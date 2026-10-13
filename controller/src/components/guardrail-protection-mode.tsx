@@ -83,26 +83,27 @@ export function useGuardrailProtectionActions(guardrail: Guardrail | undefined, 
 
 export function GuardrailProtectionMode({ guardrail }: { guardrail: Guardrail }) {
   const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const settings = guardrail.protection;
-  const pending = settings && settings.status !== "applied";
-  return <section className="border border-border bg-card p-5" aria-label={t("protectionMode.title")}>
-    <div className="space-y-2">
-      <h2 className="text-base font-medium">{t("protectionMode.title")}</h2>
-      <StateBadge state={guardrail.status} />
-      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{guardrail.status === "not_ready" ? t("protectionMode.notReady") : t(`protectionMode.descriptions.${guardrail.status}`)}</p>
+  const pending = settings?.ready && settings.status !== "applied";
+  return <>
+    <div className="flex flex-wrap items-center gap-2">
+      {settings?.ready ? <button ref={triggerRef} type="button" className="inline-flex min-h-11 items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" aria-label={t("protectionMode.details")} title={t("protectionMode.details")} onClick={() => setOpen(true)}><StateBadge state={guardrail.status} /></button> : <StateBadge state={guardrail.status} />}
+      {pending ? <span role="status" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        {settings.status !== "failed" ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+        {t(`protectionMode.states.${settings.status}`)} · {t("protectionMode.switching", { mode: t(`states.${settings.mode}`) })} · {t("protectionMode.progress", settings)}
+      </span> : null}
     </div>
-    {settings?.ready ? <div className="mt-4 space-y-2 text-sm">
-      <p role="status" className="flex items-center gap-2">
-        {pending && settings.status !== "failed" ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
-        <span>{t(`protectionMode.states.${settings.status}`)}{pending ? ` · ${t("protectionMode.switching", { mode: t(`states.${settings.mode}`) })}` : ""} · {t("protectionMode.progress", settings)}</span>
-      </p>
-      {settings.runners.length ? <details><summary className="inline-flex min-h-11 cursor-pointer items-center text-primary">{t("protectionMode.details")}</summary>
+    {open && settings ? <EntitySheet open width="md" returnFocusRef={triggerRef} onOpenChange={setOpen} eyebrow={guardrail.name} title={t("protectionMode.details")} description={null} footer={<Button variant="outline" onClick={() => setOpen(false)}>{t("common.close")}</Button>}>
+      <div className="space-y-4 text-sm">
+        <p>{t(`protectionMode.states.${settings.status}`)} · {t("protectionMode.progress", settings)}</p>
         <ul className="divide-y border-y">{settings.runners.map(runner => <li key={runner.runnerId} className="flex items-start justify-between gap-5 py-3">
           <span className="font-mono text-xs">{runner.runnerId}</span><span>{t(`protectionMode.runners.${runner.status}`)}{runner.reason ? ` · ${runner.reason}` : ""}</span>
         </li>)}</ul>
-      </details> : null}
-      {settings.updatedAt ? <p className="text-xs text-muted-foreground">{t("protectionMode.updated", { time: new Date(settings.updatedAt).toLocaleString(i18n.language), actor: settings.updatedBy ?? t("protectionMode.system") })}</p> : null}
-      {settings.reason ? <p className="text-xs text-muted-foreground">{t("protectionMode.reasonValue", { reason: settings.reason })}</p> : null}
-    </div> : !settings ? <p className="mt-3 text-sm text-muted-foreground">{t("protectionMode.unavailable")}</p> : null}
-  </section>;
+        {settings.updatedAt ? <p className="text-xs text-muted-foreground">{t("protectionMode.updated", { time: new Date(settings.updatedAt).toLocaleString(i18n.language), actor: settings.updatedBy ?? t("protectionMode.system") })}</p> : null}
+        {settings.reason ? <p className="text-xs text-muted-foreground">{t("protectionMode.reasonValue", { reason: settings.reason })}</p> : null}
+      </div>
+    </EntitySheet> : null}
+  </>;
 }

@@ -82,6 +82,22 @@ describe("Router list actions and publication state", () => {
     expect(screen.queryByText(/^r1$/i)).toBeNull();
   });
 
+  it("exposes pending approval separately from rollout and links Endpoints without opening the Router row", async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...router, endpointIds: ["endpoint"], activeRevision: null,
+      rolloutStatus: "unpublished", pendingChangeRequest: { id: "change", status: "pending" } }] });
+    mount();
+    const pending = await screen.findByRole("link", { name: "Awaiting approval" });
+    expect(pending.getAttribute("href")).toBe("/integration/routers/router?tab=change-requests");
+    expect(screen.queryByText("Draft changes")).toBeNull();
+    const endpoint = await screen.findByRole("link", { name: "Gateway" });
+    expect(endpoint.getAttribute("href")).toBe("/integration/endpoints?endpointId=endpoint");
+    fireEvent.click(endpoint);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("combobox", { name: "Status & changes" }));
+    fireEvent.click(screen.getByRole("option", { name: "Awaiting approval" }));
+    expect(await screen.findByText("1 of 1 records")).toBeTruthy();
+  });
+
   it("does not offer Delete to read-only users", async () => {
     mocks.role = "viewer";
     mount();

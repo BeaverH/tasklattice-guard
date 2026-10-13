@@ -4,7 +4,8 @@ import { getTestingReportDeletionImpact, deleteTestingReport } from "@/lib/contr
 import type { ValidationRun } from "@/lib/api";
 import { queryKeys } from "@/features/query-keys";
 import { ConfirmationSheet } from "./confirmation-sheet";
-import { ErrorNotice, InfoNotice } from "./product-shell";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { ErrorNotice } from "./product-shell";
 import { Skeleton } from "./ui/skeleton";
 import { Button } from "./ui/button";
 import { toast } from "./ui/notifications";
@@ -38,13 +39,13 @@ export function DeleteTestingReportSheet({ run, onClose, onDeleted }: { run: Val
     <p className="break-all font-mono text-xs text-muted-foreground">{run.id}</p>
     {impact.isPending ? <Skeleton className="h-24" /> : null}
     {impact.error ? <><ErrorNotice error={impact.error} /><Button variant="outline" onClick={() => { void impact.refetch(); }}>{t("common.retry")}</Button></> : null}
-    {result?.running ? <InfoNotice>{t("validation.deleteReportRunning")}</InfoNotice> : null}
-    {result?.pendingVersion ? <InfoNotice title={t("validation.deleteReportPendingTitle", { version: result.pendingVersion })}>{t("validation.deleteReportPending")}</InfoNotice> : result?.replacementRunId ? <InfoNotice>{t("validation.deleteReportRetainsRelease")}</InfoNotice> : null}
-    {result && (result.references.length > 0 || result.blockers.length > 0) ? <InfoNotice title={t("validation.deleteReportBlocked")}>
+    {result?.running ? <Alert variant="warning"><AlertDescription>{t("validation.deleteReportRunning")}</AlertDescription></Alert> : null}
+    {result?.pendingVersion ? <section className="text-sm"><h3 className="font-medium">{t("validation.deleteReportPendingTitle", { version: result.pendingVersion })}</h3><p className="mt-1 leading-5 text-muted-foreground">{t("validation.deleteReportPending")}</p></section> : result?.replacementRunId ? <p className="text-sm text-muted-foreground">{t("validation.deleteReportRetainsRelease")}</p> : null}
+    {result && (result.references.length > 0 || result.blockers.length > 0) ? <Alert variant="warning"><AlertTitle>{t("validation.deleteReportBlocked")}</AlertTitle><AlertDescription>
       <p>{t("validation.deleteReportUnbind")}</p>
       {result.references.length ? <ul className="mt-2 list-disc pl-5">{result.references.map((reference, index) => <li key={index}>{"routerName" in reference ? reference.routerName : t("guardrailPackage.baselineCurrent")}</li>)}</ul> : null}
       {result.blockers.length ? <p className="mt-2">{t("validation.deleteReportTraffic")}</p> : null}
-    </InfoNotice> : null}
+    </AlertDescription></Alert> : null}
     {result && !result.deletable ? <Button variant="outline" disabled={impact.isFetching} onClick={() => { void impact.refetch(); }}>{t("common.retry")}</Button> : null}
     {remove.error ? <ErrorNotice error={remove.error} /> : null}
   </ConfirmationSheet>;

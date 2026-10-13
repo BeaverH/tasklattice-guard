@@ -221,12 +221,12 @@ export function RegisterModelsDrawer({ providers, registeredModels, initialProvi
               </form>
             ) : step === "models" && discovery ? (
               <fieldset disabled={pending} className="min-w-0 space-y-6">
-                <div className={cn("border-l-2 px-4 py-3 text-sm", manualDiscoveryError ? "border-destructive bg-destructive/5" : "border-primary bg-primary/5")}>
+                <div className={cn("text-sm", manualDiscoveryError && "border-l-2 border-destructive bg-destructive/5 px-4 py-3")}>
                   <strong>{t(manualDiscoveryError ? "providerRegistration.manualRegistration" : suggestions ? "providerRegistration.jevVersions" : "providerRegistration.liveCatalog")}</strong>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">{manualDiscoveryError || t(suggestions ? "providerRegistration.jevVersionHint" : "providerRegistration.reviewDescription", { provider: discovery.providerName })}</p>
                 </div>
                 {suggestions && discover.error ? <div className="space-y-2"><ErrorMessage>{errorMessage(discover.error)}</ErrorMessage><p className="text-xs text-muted-foreground">{t("providerRegistration.optionalDiscoveryFailed")}</p></div> : null}
-                <section aria-label={t("providerRegistration.selectedModels")} className="rounded-lg border border-primary/25 bg-card p-4">
+                <section aria-label={t("providerRegistration.selectedModels")} className={models.length ? "rounded-lg border border-primary/25 bg-card p-4" : undefined}>
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold">{t("providerRegistration.selectedModels")}</h3>
                     <span role="status" aria-live="polite" className="text-sm font-medium text-primary">{t("providerRegistration.selected", { count: models.length })}</span>
@@ -238,7 +238,7 @@ export function RegisterModelsDrawer({ providers, registeredModels, initialProvi
                       {!availableModels.some((item) => item.id === model.model) ? <span className="text-xs text-muted-foreground">{t("providerRegistration.manual")}</span> : null}
                       <Button type="button" size="icon" variant="ghost" className="size-11 shrink-0" disabled={pending} aria-label={t("providerRegistration.deselectModel", { model: model.model })} onClick={() => toggle(model.model)}><X /></Button>
                     </li>
-                  ))}</ul> : <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("providerRegistration.selectAtLeastOne")}</p>}
+                  ))}</ul> : null}
                 </section>
                 <section className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
@@ -253,7 +253,7 @@ export function RegisterModelsDrawer({ providers, registeredModels, initialProvi
                       return <div key={item.id} className={cn("border-l-2 border-l-transparent px-3 py-2", model && "border-l-primary bg-primary/10")}>
                         <button type="button" aria-label={`${item.name} ${item.id}${alreadyRegistered ? ` ${t("providerRegistration.registered")}` : ""}`} aria-pressed={Boolean(model)} disabled={alreadyRegistered || pending} onClick={() => toggle(item.id)} className="flex min-h-11 w-full items-center gap-3 text-left disabled:opacity-60">
                           <span className={cn("grid size-5 shrink-0 place-items-center border", (model || alreadyRegistered) && "border-primary bg-primary text-primary-foreground")}>{model || alreadyRegistered ? <Check className="size-3.5" /> : null}</span>
-                          <span className="min-w-0 flex-1"><strong className="block break-words text-sm">{item.name}</strong><span className="block break-all font-mono text-xs text-muted-foreground">{item.id}</span></span>
+                          <span className="min-w-0 flex-1"><strong className="block break-words text-sm">{item.name}</strong>{item.name !== item.id ? <span className="block break-all font-mono text-xs text-muted-foreground">{item.id}</span> : null}</span>
                           {alreadyRegistered || model ? <span className={cn("shrink-0 text-xs font-medium", model ? "text-primary" : "text-muted-foreground")}>{t(alreadyRegistered ? "providerRegistration.registered" : "providerRegistration.selectedLabel")}</span> : null}
                         </button>
                       </div>;
@@ -273,7 +273,7 @@ export function RegisterModelsDrawer({ providers, registeredModels, initialProvi
                   {needsAttention ? <TriangleAlert className="mt-0.5 size-5 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />}
                   <div><strong>{t(summary.models.length ? "providerRegistration.registrationComplete" : "providerRegistration.registrationFailed")}</strong><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("providerRegistration.resultSummary", { provider: summary.providerName, count: summary.models.length })}</p></div>
                 </div>
-                {summary.models.length ? <section><h3 className="mb-2 text-sm font-semibold">{t("providerRegistration.readyModels")}</h3><p className="mb-3 text-xs leading-5 text-muted-foreground">{t("providerRegistration.configureLater")}</p><div className="divide-y border">{summary.models.map((model) => <div key={model.id} className="space-y-3 px-3 py-3"><div className="flex flex-wrap items-start justify-between gap-3"><span className="min-w-0 flex-1"><strong className="block break-words text-sm">{model.name}</strong><span className="break-all font-mono text-xs text-muted-foreground">{model.model}</span></span><ModelCallEvidence model={model} checking={retryConnection.isPending && retryConnection.variables === model.id} /></div>{model.connectionStatus !== "validated" ? <Button type="button" variant="outline" className="h-11" disabled={pending} aria-label={`${t("modelSettings.testCall")} ${model.name}`} onClick={() => retryConnection.mutate(model.id)}>{t("modelSettings.testCall")}</Button> : null}</div>)}</div></section> : null}
+                {summary.models.length ? <section><h3 className="mb-2 text-sm font-semibold">{t("providerRegistration.readyModels")}</h3><p className="mb-3 text-xs leading-5 text-muted-foreground">{t("providerRegistration.configureLater")}</p><div className="divide-y border">{summary.models.map((model) => <div key={model.id} className="space-y-3 px-3 py-3"><div className="flex flex-wrap items-start justify-between gap-3"><span className="min-w-0 flex-1"><strong className="block break-words text-sm">{model.name}</strong><span className="break-all font-mono text-xs text-muted-foreground">{model.model}</span></span><ModelCallEvidence model={model} checking={retryConnection.isPending && retryConnection.variables === model.id} /></div>{model.connectionStatus !== "validated" ? <Button type="button" variant="testing" className="h-11" disabled={pending} aria-label={`${t("modelSettings.testCall")} ${model.name}`} onClick={() => retryConnection.mutate(model.id)}>{t("modelSettings.testCall")}</Button> : null}</div>)}</div></section> : null}
                 {summary.failures.length ? <section><h3 className="mb-2 text-sm font-semibold">{t("providerRegistration.needsAttention")}</h3><div className="divide-y border border-destructive/30">{summary.failures.map((failure) => <div key={failure.model.model} className="p-3"><strong className="break-all text-sm">{failure.model.name}</strong><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-destructive">{failure.message}</p></div>)}</div><Button type="button" variant="outline" className="mt-3 h-11" disabled={pending} onClick={() => retryFailures.mutate()}>{t("providerRegistration.retryFailed")}</Button></section> : null}
               </div>
             ) : null}

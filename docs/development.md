@@ -31,7 +31,8 @@ TaskLattice brand and domain terminology.
   may be 32px. Keep visible keyboard focus and preserve existing accessible names.
 - Center button labels and inline icons together, with symmetric inline padding;
   do not reserve trailing-icon space for buttons that use inline children.
-- Blue identifies the primary operation. Editing is an operation, not a warning.
+- Blue identifies create, edit, and publish operations. Test actions use the shared
+  yellow `testing` button variant. Keep adjacent actions at the same Carbon size.
   Use warning, danger, and success colors for actual domain states and keep a text
   label alongside status color. Risk severity, requested action, and execution
   status remain separate concepts.

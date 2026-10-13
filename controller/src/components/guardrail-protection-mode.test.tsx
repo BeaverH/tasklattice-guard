@@ -38,6 +38,16 @@ function show(overrides: Partial<ProtectionModeSettings> = {}) {
 beforeEach(() => { mocks.role = "admin"; mocks.update.mockReset().mockResolvedValue(settings); });
 afterEach(cleanup);
 describe("protection-mode interaction", () => {
+  it("keeps healthy mode compact and opens Runner details without changing protection", () => {
+    show();
+    expect(screen.queryByRole("region", { name: "protectionMode.title" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText("protectionMode.descriptions.enforce")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "protectionMode.details" }));
+    expect(screen.getByRole("dialog", { name: "protectionMode.details" })).toBeTruthy();
+    expect(screen.getByText("protectionMode.runners.applied")).toBeTruthy();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
   it("stages selection until Apply with the reviewed generation and reason", async () => {
     const onChanged = show();
     openModeMenu();
@@ -82,7 +92,10 @@ describe("protection-mode interaction", () => {
   it("offers recovery while bypass is partially applied", async () => {
     show({ mode: "bypass", status: "partial", applied: 1, total: 2, runners: [...settings.runners, { runnerId: "offline", status: "offline", modeApplied: false, reason: null }] });
     expect(screen.getByText("enforce")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("protectionMode.states.partial");
+    fireEvent.click(screen.getByRole("button", { name: "protectionMode.details" }));
     expect(screen.getByText("protectionMode.runners.offline")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "common.close" }).at(-1)!);
     openModeMenu();
     const current = screen.getByRole("menuitem", { name: "states.enforce" });
     expect(current.getAttribute("aria-current")).toBe("true");
@@ -98,10 +111,13 @@ describe("protection-mode interaction", () => {
     openActions();
     expect(screen.getByRole("menuitem", { name: "protectionMode.change" }).getAttribute("aria-disabled")).toBe("true");
   });
-  it("keeps the Runtime panel read-only and retries rollout from Actions", async () => {
+  it("keeps rollout details on demand and retries rollout from Actions", async () => {
     show({ mode: "monitor", status: "failed", applied: 0 });
-    const panel = screen.getByRole("region", { name: "protectionMode.title" });
-    expect(within(panel).queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("region", { name: "protectionMode.title" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "protectionMode.details" }));
+    const panel = screen.getByRole("dialog", { name: "protectionMode.details" });
+    expect(within(panel).queryByRole("radio")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "common.close" }).at(-1)!);
     openModeMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.retry" }));
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith("g", { mode: "monitor", expectedGeneration: 7, reason: "" }));

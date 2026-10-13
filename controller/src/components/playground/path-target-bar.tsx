@@ -121,6 +121,7 @@ export function PathTargetBar({ workbench: w }: { workbench: PathWorkbench }) {
           onChange={(e) => w.setDraft({ ...w.draft, url: e.target.value })}
         />
         <Button
+          variant="testing"
           className="path-send-button"
           disabled={w.pending || Boolean(w.unavailable)}
           onClick={() => void w.submit()}

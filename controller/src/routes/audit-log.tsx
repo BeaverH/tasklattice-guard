@@ -136,16 +136,27 @@ function AuditEventSheet({ event, open, onOpenChange }: { event: AuditEvent | nu
   const { t, i18n } = useTranslation();
   if (!event) return null;
   const detail = Object.entries(event.detail);
-  return <EntitySheet open={open} onOpenChange={onOpenChange} eyebrow={t("auditLog.detailEyebrow")} title={formatKind(event.kind)} description={event.id} width="lg" footer={<Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.close")}</Button>}>
+  const fields = detail.filter(([, value]) => value === null || typeof value !== "object");
+  const structured = detail.filter(([, value]) => value !== null && typeof value === "object");
+  return <EntitySheet open={open} onOpenChange={onOpenChange} eyebrow={t("auditLog.detailEyebrow")} title={formatKind(event.kind)} description={<span className="break-all font-mono text-xs">{event.id}</span>} width="lg" footer={<Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.close")}</Button>}>
     <div className="grid gap-5">
-      <dl className="grid overflow-hidden rounded-lg border grid-cols-2"><Fact label={t("auditLog.columns.time")} value={formatDate(event.occurredAt, i18n.language)} /><Fact label={t("auditLog.columns.actor")} value={event.actorId ?? t("auditLog.systemActor")} /><Fact label={t("auditLog.columns.event")} value={event.kind} mono /><Fact label={t("auditLog.columns.resource")} value={formatResource(event)} mono /></dl>
-      <section><div className="mb-3"><h3 className="text-sm font-semibold">{t("auditLog.changeDetail")}</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("auditLog.changeDetailDescription")}</p></div>{detail.length ? <dl className="divide-y overflow-hidden rounded-lg border">{detail.map(([key, value]) => <div key={key} className="grid gap-4 px-4 py-3 grid-cols-[11rem_minmax(0,1fr)]"><dt className="font-mono text-xs text-muted-foreground">{key}</dt><dd className="whitespace-pre-wrap break-all text-sm leading-5">{formatDetailValue(value)}</dd></div>)}</dl> : <div className="rounded-lg border border-dashed p-5 text-center text-xs text-muted-foreground">{t("auditLog.noChangeDetail")}</div>}</section>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-b pb-5"><Fact label={t("auditLog.columns.time")} value={formatDate(event.occurredAt, i18n.language)} /><Fact label={t("auditLog.columns.actor")} value={event.actorId ?? t("auditLog.systemActor")} mono /><Fact label={t("auditLog.columns.event")} value={event.kind} mono wide /><Fact label={t("auditLog.columns.resource")} value={formatResource(event)} mono wide /></dl>
+      <section>
+        <h3 className="mb-3 text-sm font-semibold">{t("auditLog.changeDetail")}</h3>
+        {detail.length ? <div className="divide-y border-y">
+          {fields.length ? <dl className="divide-y">{fields.map(([key, value]) => <div key={key} className="grid grid-cols-[11rem_minmax(0,1fr)] items-baseline gap-4 py-3"><dt className="break-words font-mono text-xs leading-5 text-muted-foreground">{key}</dt><dd className="min-w-0 whitespace-pre-wrap break-words text-sm leading-5 [overflow-wrap:anywhere]">{formatDetailValue(value)}</dd></div>)}</dl> : null}
+          {structured.map(([key, value]) => <details key={key} className="group">
+            <summary className="min-h-11 cursor-pointer content-center py-3 font-mono text-xs text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">{key}</summary>
+            <pre className="mb-3 max-h-96 overflow-auto whitespace-pre-wrap break-words bg-muted/25 p-3 font-mono text-xs leading-5 [overflow-wrap:anywhere]">{formatDetailValue(value)}</pre>
+          </details>)}
+        </div> : <p className="text-sm text-muted-foreground">{t("auditLog.noChangeDetail")}</p>}
+      </section>
     </div>
   </EntitySheet>;
 }
 
-function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="border-b p-4 last:border-b-0 border-r [&:nth-child(even)]:border-r-0 [&:nth-last-child(-n+2)]:border-b-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className={`mt-1 break-all text-sm font-medium ${mono ? "font-mono text-xs" : ""}`}>{value}</dd></div>;
+function Fact({ label, value, mono = false, wide = false }: { label: string; value: string; mono?: boolean; wide?: boolean }) {
+  return <div className={wide ? "col-span-2 min-w-0" : "min-w-0"}><dt className="text-xs text-muted-foreground">{label}</dt><dd className={`mt-1 break-words leading-5 [overflow-wrap:anywhere] ${mono ? "font-mono text-xs" : "text-sm font-medium"}`}>{value}</dd></div>;
 }
 
 function formatDate(value: string, locale: string) {
@@ -169,7 +180,7 @@ function shortIdentifier(value: string) {
 
 function formatDetailValue(value: unknown) {
   if (value === null || value === undefined) return "—";
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return value || "—";
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value, null, 2);
 }

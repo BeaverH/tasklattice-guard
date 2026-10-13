@@ -18,7 +18,9 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { listControllerRouters, listControllerGuardrails, listControllerEndpoints } from "@/lib/controller-api";
+import { getGuardrails, getEndpoints } from "@/lib/api";
+import { queryKeys } from "@/features/query-keys";
+import { listTrafficRouters, trafficRouterKeys } from "@/lib/traffic-routing-api";
 
 const navigation = [
   {
@@ -52,9 +54,9 @@ export function ControlPlaneSidebar() {
   // Receiving environments do not author Guardrails; the API refuses these areas too.
   const pathname = useRouterState({ select: (routerState) => routerState.location.pathname });
   const settingsActive = pathname.startsWith("/settings/");
-  const guardrails = useQuery({ queryKey: ["controller", "guardrails"], queryFn: listControllerGuardrails });
-  const routers = useQuery({ queryKey: ["controller", "routers"], queryFn: listControllerRouters });
-  const endpoints = useQuery({ queryKey: ["controller", "endpoints"], queryFn: listControllerEndpoints });
+  const guardrails = useQuery({ queryKey: queryKeys.guardrails, queryFn: getGuardrails });
+  const routers = useQuery({ queryKey: trafficRouterKeys.all, queryFn: listTrafficRouters });
+  const endpoints = useQuery({ queryKey: queryKeys.endpoints, queryFn: getEndpoints });
   const counts: Record<string, number | undefined> = {
     guardrails: guardrails.data?.items.length,
     routers: routers.data?.items.length,

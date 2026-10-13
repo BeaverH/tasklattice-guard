@@ -42,7 +42,7 @@
 .monitoring-trend-row meter::-moz-meter-bar { background: var(--cds-interactive); }
 .monitoring-trend-empty { padding: 1.25rem; font-size: 0.875rem; color: var(--cds-text-secondary); }
 .monitoring-target-detail { border: 1px solid var(--cds-border-subtle-01); background: var(--cds-layer-01); }
-.monitoring-target-detail > h3 { padding: 1.25rem; border-block-end: 1px solid var(--cds-border-subtle-01); overflow-wrap: anywhere; }
+.monitoring-target-heading { padding: 1.25rem; border-block-end: 1px solid var(--cds-border-subtle-01); overflow-wrap: anywhere; }
 .monitoring-target-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); font-size: 0.875rem; }
 .monitoring-target-metrics > div { padding: 1rem 1.25rem; border-block-end: 1px solid var(--cds-border-subtle-01); }
 .monitoring-target-detail > .cds--btn { margin: 1.25rem; }

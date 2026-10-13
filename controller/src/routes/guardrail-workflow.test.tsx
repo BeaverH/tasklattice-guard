@@ -149,7 +149,9 @@ describe("Guardrail edit, test and publish workflow", () => {
     render(wrap(<GuardrailDetailPage />));
     await screen.findByRole("heading", { name: draft.name });
     expect(screen.getByRole("tab", { name: /guardrails.validationHistoryTab/ }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("immutableVersions.testingDescription")).toBeTruthy();
+    const retention = screen.getByText("immutableVersions.reportRetention").closest("details");
+    expect(retention?.open).toBe(false);
+    expect(retention?.textContent).toContain("immutableVersions.testingDescription");
     expect(screen.getByText("immutableVersions.localTestingEmpty")).toBeTruthy();
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByRole("tab", { name: /guardrails.versions/ }).textContent).toContain("2/10");

@@ -62,3 +62,11 @@
     overflow-wrap: anywhere;
   }
 }
+
+.guard-multi-select__count {
+  order: -1;
+  flex: 0 0 auto;
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.5rem;
+}

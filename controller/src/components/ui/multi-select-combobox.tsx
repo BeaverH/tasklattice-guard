@@ -25,6 +25,8 @@ export type MultiSelectComboboxProps = {
   placeholder?: string;
   searchPlaceholder?: string;
   selectionMode?: "multiple" | "single";
+  selectionDisplay?: "tags" | "count";
+  size?: "md" | "lg";
   value: readonly string[];
 };
 export function MultiSelectCombobox({
@@ -38,6 +40,8 @@ export function MultiSelectCombobox({
   placeholder,
   searchPlaceholder,
   selectionMode = "multiple",
+  selectionDisplay = "tags",
+  size = "md",
   value,
   emptyMessage,
   noOptionsMessage,
@@ -126,7 +130,7 @@ export function MultiSelectCombobox({
             onValueChange(selectedItem ? [selectedItem.value] : [])
           }
           helperText={helper}
-          size="md"
+          size={size}
           translateWithId={translate}
         />
       ) : (
@@ -153,14 +157,14 @@ export function MultiSelectCombobox({
             onValueChange(selectedItems.map((item) => item.value))
           }
           helperText={helper}
-          size="md"
+          size={size}
           selectionFeedback="fixed"
           translateWithId={translate}
         />
       )}
       {selectionMode === "multiple" && selectionHost && createPortal(
         <div className="guard-multi-select__values">
-          {selected.map((item) => (
+          {selectionDisplay === "count" ? (selected.length > 0 && <span className="guard-multi-select__count">{t("common.multiSelect.selectedCount", { count: selected.length })}</span>) : selected.map((item) => (
             <DismissibleTag
               key={item.value}
               className="guard-multi-select__value"

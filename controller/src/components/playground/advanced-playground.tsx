@@ -71,14 +71,13 @@ export function AdvancedPlayground({
                   key={workbench.current.id}
                   item={workbench.current}
                   guardrailNames={names}
+                  routerNames={Object.fromEntries(workbench.routers.map((router) => [router.id, router.name]))}
+                  endpointNames={Object.fromEntries(workbench.endpoints.map((endpoint) => [endpoint.id, endpoint.name]))}
                 />
               ) : (
                 <div className="p-6 text-sm text-muted-foreground">
                   <p>
                     {t("routing.sendARequestToInspectTheSelectedGuardRailAnd")}
-                  </p>
-                  <p className="mt-2 text-xs">
-                    {t("routing.chooseATargetAboveThenEditHeadersOrBody")}
                   </p>
                 </div>
               )}

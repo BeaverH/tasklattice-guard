@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getControllerGuardrail,
@@ -82,13 +83,8 @@ export function TargetsEditor({
             )
           }
         >
-          {t("routing.addGuardrail")}
+          <Plus />{t("routing.addGuardrail")}
         </Button>
-      )}
-      {value.length === 1 && (
-        <p className="text-xs text-muted-foreground">
-          {t("routing.allMatchingTrafficGoesToThisGuardrail100")}
-        </p>
       )}
       {value.length > 1 && (
         <p
@@ -149,6 +145,7 @@ function TargetRow({
           <MultiSelectCombobox
             ariaLabel={`Guardrail ${index + 1}`}
             selectionMode="single"
+            size="lg"
             options={options.map((option) => ({
               value: option.id,
               label: option.name,
@@ -187,11 +184,12 @@ function TargetRow({
         {!fallback && (
           <Button
             variant="destructive"
-            className="size-12 shrink-0"
+            size="icon-lg"
+            className="shrink-0"
             aria-label={t("routing.removeGuardrail", { index: index + 1 })}
             onClick={onRemove}
           >
-            ×
+            <Trash2 />
           </Button>
         )}
       </div>
@@ -202,7 +200,7 @@ function TargetRow({
             onChange({ ...target, guardrailVersion })
           }
         >
-          <SelectTrigger aria-label={t("routing.targetVersion", { index: index + 1 })}>
+          <SelectTrigger className="field:h-12" aria-label={t("routing.targetVersion", { index: index + 1 })}>
             <SelectValue placeholder={t("routing.selectVersion")} />
           </SelectTrigger>
           <SelectContent>
