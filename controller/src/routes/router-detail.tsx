@@ -9,9 +9,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearch, useNavigate, useBlocker } from "@tanstack/react-router";
 import { toast } from "@/components/ui/notifications";
 import { useAuth } from "@/lib/auth";
-import { getEndpoints } from "@/lib/endpoints-api";
+import { endpointsQueryOptions } from "@/features/endpoints-query";
 import { listControllerGuardrails } from "@/lib/controller-api";
-import { queryKeys } from "@/features/query-keys";
 import * as api from "@/lib/traffic-routing-api";
 import { PageHeader, ErrorNotice } from "@/components/product-shell";
 import { RouterRolloutBadge } from "@/components/traffic-routing/router-rollout-badge";
@@ -131,10 +130,7 @@ export function RouterWorkspace({ router }: { router: api.TrafficRouter }) {
       setDraft(router.draft);
     }
   }, [router, editing, dirty, review]);
-  const endpoints = useQuery({
-    queryKey: queryKeys.endpoints,
-    queryFn: getEndpoints,
-  });
+  const endpoints = useQuery(endpointsQueryOptions());
   const guardrails = useQuery({
     queryKey: ["routing-guardrails"],
     queryFn: listControllerGuardrails,
@@ -347,6 +343,8 @@ export function RouterWorkspace({ router }: { router: api.TrafficRouter }) {
           ) : (
             <RouterOverview
               canEdit={canEdit}
+              refreshing={endpoints.isFetching}
+              onRefresh={() => { void endpoints.refetch(); }}
               router={router}
               endpoints={incoming}
               guardrails={names}

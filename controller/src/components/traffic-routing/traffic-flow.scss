@@ -25,9 +25,7 @@
 .router-flow-title { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 500; line-height: 1.4; }
 .router-flow-title > svg { flex: 0 0 1.125rem; width: 1.125rem; height: 1.125rem; margin-top: 1px; color: var(--cds-icon-secondary); }
 .router-flow-title > span, .router-flow-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.router-flow-detail, .router-flow-status { font-size: 0.75rem; line-height: 1.4; color: var(--cds-text-secondary); }
-.router-flow-status-healthy2 { color: var(--success); }
-.router-flow-status-unhealthy { color: var(--cds-support-error); }
+.router-flow-detail { font-size: 0.75rem; line-height: 1.4; color: var(--cds-text-secondary); }
 .router-flow-version { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--cds-text-secondary); }
 .router-flow-skipped { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 1rem; padding: 1rem 1.5rem; border-block-start: 1px solid var(--cds-border-subtle-01); font-size: 0.75rem; color: var(--cds-text-secondary); }
 .router-flow-skipped button { min-height: 44px; display: flex; align-items: center; gap: 0.75rem; color: var(--cds-link-primary); text-align: start; }

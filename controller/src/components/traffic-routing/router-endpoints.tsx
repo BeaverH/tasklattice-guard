@@ -10,7 +10,7 @@ import {
   ErrorNotice,
   StateBadge,
 } from "@/components/product-shell";
-import { Badge } from "@/components/ui/badge";
+import { EndpointSetupBadge } from "@/components/endpoint-setup-badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,7 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { queryKeys } from "@/features/query-keys";
-import { getEndpoints } from "@/lib/endpoints-api";
+import { endpointsQueryOptions } from "@/features/endpoints-query";
 import {
   bindTrafficRouter,
   listTrafficRouters,
@@ -58,10 +58,7 @@ export function RouterEndpoints({
   const opener = useRef<HTMLElement | null>(null);
   const [action, setAction] = useState<Action | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const endpoints = useQuery({
-    queryKey: queryKeys.endpoints,
-    queryFn: getEndpoints,
-  });
+  const endpoints = useQuery(endpointsQueryOptions());
   const routers = useQuery({
     queryKey: trafficRouterKeys.all,
     queryFn: listTrafficRouters,
@@ -215,11 +212,7 @@ export function RouterEndpoints({
                     <TableCell>
                       {endpoint ? (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">
-                            {translate(
-                              `endpoints.setupStatuses.${endpoint.setup_status}`,
-                            )}
-                          </Badge>
+                          <EndpointSetupBadge status={endpoint.setup_status} />
                           <StateBadge state={endpoint.runtime_status} />
                         </div>
                       ) : (
