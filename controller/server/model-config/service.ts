@@ -1,3 +1,4 @@
+import { formalValidationSchema, type FormalValidation } from "../../shared/formal-validation.js";
 import { createHash, randomUUID } from "node:crypto";
 import { modelBindingChanges, partialModelActivationSchema, type PartialModelActivation } from "../../shared/model-activation.js";
 
@@ -90,7 +91,7 @@ export class ModelConfigurationService {
 
   setRailValidator(validator: RailValidator): void { this.railValidator = validator; }
 
-  private async probeAssignment(target: ModelAssignmentTarget, provider: ProviderRow, model: ModelRow): Promise<RailValidationEvidence> {
+  private async probeAssignment(target: ModelAssignmentTarget, provider: ProviderRow, model: ModelRow, formalValidation?: FormalValidation): Promise<RailValidationEvidence> {
     if (target === "control_plane") return this.probeModel(provider, model);
     if (!this.railValidator) return { passed: false, message: "Runner Rail validation is unavailable. A model connection check cannot validate an Input/Output Rail.", latencyMs: 0 };
     const binding = capabilityBindingDefinitions.find((item) => item.id === target)!;
@@ -99,7 +100,7 @@ export class ModelConfigurationService {
     const leaseId = randomUUID();
     this.validationLeases.set(leaseId, { provider, expiresAt: Date.now() + 95_000 });
     try {
-      return await this.railValidator({ requestId: randomUUID(), bindingId: target, credentialLeaseId: leaseId,
+      return await this.railValidator({ requestId: randomUUID(), bindingId: target, credentialLeaseId: leaseId, ...(formalValidation ? { formalValidation } : {}),
         configuration: { revisionId: `validation:${leaseId}`, revision: 0,
           runtimes: [{ id: model.id, providerId: provider.id, providerName: provider.name, baseUrl: provider.baseUrl,
             credentialRef: provider.id, model: model.model, profileRef: model.profile,
@@ -492,14 +493,16 @@ export class ModelConfigurationService {
     return publicRevision(updated);
   }
 
-  async previewAssignment(target: ModelAssignmentTarget, modelId: string, actorId: string) {
+  async previewAssignment(target: ModelAssignmentTarget, modelId: string, actorId: string, formalValidation?: FormalValidation) {
     const draft = await this.ensureDraft(actorId);
     const model = await this.model(modelId);
     const provider = await this.provider(model.providerId);
     if (!assignmentTargetAcceptsModel(target, model.profile, provider.kind)) {
       throw new ValidationError(`${model.name} is incompatible with ${target}.`);
     }
-    const result = await this.probeAssignment(target, provider, model);
+    if (target === "automated_reasoning.output") formalValidation = formalValidationSchema.parse(formalValidation);
+    else if (formalValidation) throw new ValidationError("Formal validation context is only supported by automated reasoning.");
+    const result = await this.probeAssignment(target, provider, model, formalValidation);
     const check: ModelValidationCheck = {
       id: `probe:${target}:${modelId}`, scope: target === "control_plane" ? "model" : "capability",
       evidenceKind: target === "control_plane" ? "model-probe" : "nemo-rail-v1",
@@ -1016,7 +1019,25 @@ export class ModelConfigurationService {
         maxTokens: 64,
       });
     } catch (error) {
+      // A proof endpoint is not an OpenAI model catalog. Its authenticated
+      // readiness response proves connectivity only; Rail tests prove behavior.
+      const formal = await this.probeFormalConnection(baseUrl, apiKey, skipTlsVerify);
+      if (formal.passed) return formal;
       return probe(false, probeError("Provider credential verification failed", error), started);
+    }
+  }
+
+  private async probeFormalConnection(baseUrl: string, apiKey: string, skipTlsVerify: boolean) {
+    const started = performance.now();
+    try {
+      const response = await providerFetch(skipTlsVerify, this.fetcher)(baseUrl, {
+        headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      z.object({ protocol: z.literal("tali.automated-reasoning.v1"), ready: z.literal(true) }).parse(await response.json());
+      return probe(true, "Authenticated formal proof endpoint is ready. Validate known proof cases before binding it.", started);
+    } catch {
+      return probe(false, "Formal service readiness could not be verified. Use binding validation with a policy ID and examples.", started);
     }
   }
 
@@ -1096,28 +1117,10 @@ export class ModelConfigurationService {
       }
     }
     if (model.profile === "tali.automated-reasoning.v1") {
-      try {
-        const response = await fetcher(provider.baseUrl, {
-          method: "POST",
-          headers: {
-            ...(credential ? { authorization: `Bearer ${credential}` } : {}),
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            policy: { id: "validator", version: "1" },
-            query_content: "A is true.",
-            guard_content: "A is true.",
-            confidence_threshold: 0.5,
-          }),
-          signal: AbortSignal.timeout(model.timeoutSeconds * 1_000),
-        });
-        if (!response.ok) return probe(false, `Automated Reasoning probe returned HTTP ${response.status}.`, started);
-        await response.json();
-        return probe(true, mode === "connection" ? "Model endpoint accepted an actual request." : "Automated Reasoning endpoint accepted the capability probe.", started);
-      } catch (error) {
-        return probe(false, probeError("Automated Reasoning probe failed", error), started);
-      }
+      if (mode === "connection") return this.probeFormalConnection(provider.baseUrl, credential, provider.skipTlsVerify);
+      return probe(false, "Formal proof services require a policy ID, version and known valid/invalid examples. Use Guardrail Catalog binding validation to verify this service.", started);
     }
+
     try {
       const response = await fetcher(`${provider.baseUrl}/chat/completions`, {
         method: "POST",

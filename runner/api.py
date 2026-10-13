@@ -15,7 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from opentelemetry import trace
 
-from runner.toolkit.runtime.contracts import ProtectionDecision, ProtectionRequest, RequestContext
+from runner.toolkit.runtime.contracts import GuardContentBlock, ProtectionDecision, ProtectionRequest, RequestContext
+from runner.toolkit.runtime.content_views import text_blocks
 from runner.toolkit.runtime.service import GuardrailRuntimeService
 
 from .artifact_store import ArtifactStore
@@ -39,6 +40,32 @@ _TRACER = trace.get_tracer("tasklattice.guard-runner.api")
 GUARDRAIL_VERSION_PATTERN = r"^\d{8}-\d{6}\.\d{3}Z$"
 
 
+class GuardrailContext(BaseModel):
+    """Explicit untrusted evidence; callers cannot promote it to instructions."""
+
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(default="", max_length=100_000)
+    grounding_sources: list[str] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def bounded_sources(self):
+        if sum(len(source) for source in self.grounding_sources) > 500_000:
+            raise ValueError("Grounding sources exceed the request context limit.")
+        return self
+
+
+def _request_content(phase, texts, context: GuardrailContext | None, source="user_input"):
+    if context is None:
+        return ()
+    blocks = list(text_blocks(phase, tuple(texts or ()), source))
+    if context.query.strip():
+        blocks.append(GuardContentBlock(id="context:query", text=context.query, role="query", trust="untrusted",
+            source="request", qualifiers=("query",)))
+    blocks.extend(GuardContentBlock(id=f"context:source:{index}", text=value, role="grounding_source", trust="untrusted",
+        source="request", qualifiers=("grounding_source",)) for index, value in enumerate(context.grounding_sources) if value.strip())
+    return tuple(blocks)
+
+
 class InternalEvaluationRequest(BaseModel):
     """Controller-only Playground evaluation; never an Endpoint wire adapter."""
     model_config = ConfigDict(extra="forbid")
@@ -50,6 +77,7 @@ class InternalEvaluationRequest(BaseModel):
     messages: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
     attributes: dict[str, str] = Field(default_factory=dict)
     mode: Literal["enforce"] = "enforce"
+    guardrail_context: GuardrailContext | None = None
 
     @model_validator(mode="after")
     def validate_phase(self):
@@ -94,6 +122,7 @@ class LiteLLMGuardrailRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     input_type: Literal["request", "response"]
+    guardrail_context: GuardrailContext | None = None
     litellm_call_id: str | None = None
     litellm_trace_id: str | None = None
     structured_messages: list[dict[str, Any]] | None = None
@@ -289,6 +318,8 @@ class RunnerAPI:
             protection_request = ProtectionRequest(
                 phase=payload.resolved_phase,
                 texts=tuple(payload.texts),
+                content_blocks=_request_content(payload.resolved_phase, payload.texts, payload.guardrail_context,
+                    payload.attributes.get("target_source", "user_input")),
                 context=RequestContext(
                     protocol=payload.protocol,
                     endpoint_id=None,
@@ -381,6 +412,8 @@ class RunnerAPI:
             protection_request = ProtectionRequest(
                 phase=payload.resolved_phase,
                 texts=tuple(payload.texts),
+                content_blocks=_request_content(payload.resolved_phase, payload.texts, payload.guardrail_context,
+                    payload.attributes.get("target_source", "user_input")),
                 context=RequestContext(
                     protocol=payload.protocol,
                     endpoint_id=None,
@@ -741,6 +774,7 @@ def _litellm_protection_request(
     return ProtectionRequest(
         phase="input" if payload.input_type == "request" else "output",
         texts=tuple(payload.texts or ()),
+        content_blocks=_request_content("input" if payload.input_type == "request" else "output", payload.texts, payload.guardrail_context),
         context=RequestContext(
             protocol="litellm",
             endpoint_id=endpoint_id,

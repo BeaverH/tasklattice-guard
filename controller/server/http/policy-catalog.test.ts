@@ -12,6 +12,7 @@ import type { ControlPlaneService } from "../services/control-plane.js";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
 import { NotFoundError } from "../domain/errors.js";
 import { createHttpApp } from "./app.js";
+import { emptyPolicyDefinition } from "../../shared/policy-definition.js";
 
 const config = loadConfig({
   NODE_ENV: "test",
@@ -23,6 +24,26 @@ const config = loadConfig({
 });
 
 describe("Policy catalog HTTP compatibility", () => {
+  it("authorizes maintenance by administrator role and validates Policy identity", async () => {
+    const definition = emptyPolicyDefinition(); definition.metadata.id = "builtin-secrets"; definition.metadata.name = "Maintained Policy";
+    const save = vi.fn().mockResolvedValue({ id: definition.metadata.id, definition, revision: 1 });
+    const publish = vi.fn().mockResolvedValue({ id: definition.metadata.id, version: "r1-test", source: "custom" });
+    const overrides = { policyResources: { save, publish } as unknown as ControlPlaneService["policyResources"] };
+    const body = { definition, maintainer: "Platform administrators", expectedRevision: 0 };
+    const path = `/api/v1/policies/${definition.metadata.id}/definition`;
+    const member = appWithSession({ user: { id: "member", role: "user" } }, overrides);
+    for (const [url, method, payload] of [[path, "PUT", body], [`${path}/test-runs`, "POST", {}], [`${path}/publish`, "POST", { expectedRevision: 1 }]] as const) {
+      expect((await member.request(url, { method, body: JSON.stringify(payload) })).status).toBe(403);
+    }
+    expect(save).not.toHaveBeenCalled(); expect(publish).not.toHaveBeenCalled();
+    const admin = appWithSession({ user: { id: "admin", role: "admin" } }, overrides);
+    expect((await admin.request(path, { method: "PUT", body: JSON.stringify(body) })).status).toBe(200);
+    expect(save).toHaveBeenCalledWith({ ...body, actorId: "admin" });
+    expect((await admin.request("/api/v1/policies/another/definition", { method: "PUT", body: JSON.stringify(body) })).status).toBe(422);
+    const response = await admin.request(`${path}/publish`, { method: "POST", body: JSON.stringify({ expectedRevision: 1 }) });
+    expect(response.status).toBe(201); expect(await response.json()).not.toHaveProperty("source");
+    expect(publish).toHaveBeenCalledWith(definition.metadata.id, 1, "admin");
+  });
   it("validates and forwards the requested publication revision", async () => {
     const publishPolicy = vi.fn().mockResolvedValue({ version: "1" });
     const app = appWithSession({ user: { id: "author", role: "admin" } }, { publishPolicy });
@@ -50,7 +71,8 @@ describe("Policy catalog HTTP compatibility", () => {
     expect(listResponse.status).toBe(200);
     expect(collection.count).toBe(PolicyCatalog.load(config.policyCatalogDir).list().length);
     expect(collection.items).toHaveLength(collection.count);
-    expect(collection.items.filter(item => item.source === "built_in")).toHaveLength(71);
+    expect(collection.items).toHaveLength(71);
+    expect(collection.items.every(item => !("source" in item))).toBe(true);
     expect(collection.items.some((item) => ["mas-ai-risk-management", "singapore-financial-conduct"].includes(item.id))).toBe(false);
     expect(collection.items.find((item) => item.id === "pattern-matching")?.test_count).toBeGreaterThan(0);
 

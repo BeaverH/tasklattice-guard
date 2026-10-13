@@ -4,71 +4,77 @@ title: "Create a Policy: turn a business need into a check"
 summary: "Split a business requirement into Rules, choose detectors and handling, then test the expected behavior."
 order: 2
 ---
-First decide which case applies: an existing Policy needs different binding parameters, or a new reusable detection is missing. Change Guardrail Binding parameters or Rules for the former. Create a Policy for the latter. For example, if several applications need to detect requests to reveal a system prompt, make that detection reusable instead of encoding it separately in each Router.
-
-<a id="operator-policy-declarative" />
-
-## Declarative Policies: define Rules before choosing a detector
-
-Built-in and custom Policies use the same directory package: one directory for each Policy, and one YAML file for each Rule. The `policy.yaml` manifest lists the Rule order, tests and resources. The compiler produces the shared runtime catalog. Write a Policy in this order: **purpose → Rules → detector and parameters → action after a match → tests**. You do not need to start by learning Colang.
-
-For example, “support responses must not reveal customer identifiers or internal secret labels” becomes two Output Rules. The first uses `text/regex@1.0.0` to detect a format such as `CUS-123456` and redact it. The second uses `text/keyword@1.0.0` to detect `INTERNAL_SECRET` and reject the response. Each Rule declares its own risk level. Rules run in order. Each Rule reads the output of the Rule before it. A rejection stops the detection.
-
-Use `scope: rule` to test an individual detector and `scope: policy` to test the complete sequence. Cases can assert the Decision, exact replacement text, and matched Rule IDs. Every Rule stage requires an acceptance case.
-
-The complete example is `policies/examples/customer-information`. From the repository root:
-
-```bash
-npm run policies:validate -- policies/examples/customer-information
-npm run policies:test -- policies/examples/customer-information
-npm run policies:import -- policies/examples/customer-information
-npm run policies:export -- policies/custom/customer-information --output /tmp/customer-information.zip
-```
-
-Import accepts only `source: custom` and cannot replace platform-owned IDs. It generates the custom catalog. After rebuilding and starting Controller, the Policy can be viewed in Policy Library and bound to a Guardrail. **Import does not publish**: Guardrail tests, Guardrail publication and Router publication are still required. Changed definitions need a new version, and published Guardrails retain their Rule snapshots.
-
-This path supports directory and ZIP transfer for local detectors. Run `npm run policies:regression` to check every current package. Model-dependent cases are explicitly reported as not run and require a configured model environment. Custom model-detector registration and console YAML editing are not available yet. Policy Studio below remains the existing programmable editor. Its import button accepts programmable Policy JSON packages. These package formats cannot be mixed.
-
-<a id="operator-policy-mechanism" />
-
-## How a business requirement becomes a check
-
-Consider “customer-support responses must not reveal customer IDs.” The **content to inspect** is a model response, so this belongs on the Output Rail. Next, choose the **detection method**. A stable ID format can use an existing detector. A semantic judgment needs a registered Action or a specialized model. The Colang Flow of a custom Policy orchestrates the call and records the result. The Action does the detection or transformation. A sentence saying “do not reveal IDs” does not create a detector by itself.
-
-The parts have distinct responsibilities:
-
-1. **Colang source declares a Flow**, such as `check_customer_id`, that calls a capability and handles its result. Policy Studio uses Colang 2.x. NeMo parses the source during runtime validation. It rejects undefined Flows, Actions that are not in the dependencies, and forbidden imports.
-2. **A Rail Binding attaches the Flow to the input or the output.** It selects `detect` (record a judgment) or `mutate` (possibly return replacement content). It also sets the action for unsafe content, the timeout and the failure behavior. The Rail and the Flow name form a stable Rule ID, such as `flow/output/check_customer_id`. Test results and runtime evidence use this ID.
-3. **Action References pin callable capabilities by name and version**. The Flow may call registered detectors or model-backed capabilities from the Action Catalog. A custom Policy cannot upload arbitrary Python to the Runner. The Policy Binding resolves the reviewed parameters and pins them with the version. Live requests cannot override them.
-4. **Test Cases demonstrate behavior**. A normal order response must pass. A response that contains a customer ID must transform or block as configured. Add look-alike values that must not match, and failure cases such as an Action timeout. Each case specifies a Rail, expected Decision, and covered Rule ID.
-
-The execution relationship for a custom Rule is **Policy Version → Rule (a Flow on an Input or Output Rail) → registered Action/model produces a finding → post-match directive → Decision**. A Policy defines the default action. A Policy Binding can override it for one application. The Endpoint and the Router decide which requests use which Guardrail Version. See the full [Policy–Rule–implementation–directive model](/document/overview/glossary-definition). Declarative directory packages use one [detector-reference contract](/document/overview/glossary-definition#term-rule-implementation). The programmable Policy Studio path described here still uses Flows and a separate import format.
+Policy Studio composes reusable Policies from registered detectors. Administrators can maintain shipped, locally created and imported Policies. Provenance belongs to compliance and traceability; it does not determine editing permission.
 
 <a id="operator-policy-create" />
 
-## Create it in Policy Studio
+## Create and maintain
 
-The current console provides **Create Policy** in the [Policy Library](/policy-library) (the arrow next to it holds **Import Policy**), and requires administrator access. Work through these decisions:
+Choose **Create Policy** in the [Policy Library](/policy-library), or inspect a Policy and choose **Edit**.
 
-1. **State its purpose and boundary**: explain what it detects and what it does not detect. Choose a protection directory. Decide whether it runs on the input Rail or the output Rail.
-2. **Define a Flow and Rule**: custom Policies use Colang 2.x. The bound Flow name must match the source and produces stable Rule ID `flow/{rail}/{flow_name}`. Arbitrary Python upload is not supported.
-3. **Declare dependencies**: select registered, version-pinned Actions. For model-backed checks, have the platform manager prepare a compatible Provider, Model, and capability binding first. Dependent Flows must appear earlier in the same Rail and cannot form a cycle.
-4. **Configure behavior and parameters**: distinguish `detect` from `mutate`, which may return replacement text. Review the unsafe directive, timeout, `fail_open`/`fail_closed`, and parameters exposed to the Guardrail Binding.
-5. **Add Test Cases**: cover normal input, content that should block or transform, and boundary cases. Each case records a Rail, expected Decision, and covered Rule IDs.
+The sidebar stepper follows **Basics → Rules → Test Cases → Review & publish**. You can revisit steps without losing edits; the footer keeps the next action visible.
+
+1. Enter its name, purpose and Maintenance contact. This contact records responsibility; the administrator role grants write access.
+2. Add at least one Rule. Choose a detector, input or output stages, handling action and detection parameters.
+3. Text detectors cover keywords, regular expressions, conditions and fenced code. Ordinary rules require no Colang. The Detector selector also provides model classification, grounding and formal verification. Choose a classification profile and edit topic boundaries in the form; advanced JSON is reserved for complex conditions and parameter definitions.
+4. Add a required acceptance Test Case for each Rule and each stage. Enter input text and the expected decision. Transform tests must assert the complete output text.
+5. For model tests, expand **Test context** to supply trusted instructions. Grounding tests require the user query and reference sources. Formal verification requires a service policy ID, version, confidence threshold, user query and expected proof result. External detectors use the active binding in **Settings → Guardrail Catalog**; missing bindings and model errors fail the run.
+6. **Save draft** adds a card to the Library immediately. An unpublished card displays Draft and cannot be bound to a Guardrail.
+
+Renaming a Rule preserves its ID. Rules execute in order, passing transformed text forward; blocking ends evaluation. Deleting a Rule also removes draft tests that reference it.
+
+<a id="operator-policy-declarative" />
+
+## Definitions and detectors
+
+The portable definition contains metadata, parameters, Rules, Test Cases and execution order. Each Rule references a versioned detector. The runtime supplies the implementation; origin and access permissions are outside this contract.
+
+Keywords and regular expressions support replacement. Conditions and fenced-code detectors support detection and blocking. Model classification, grounding and formal verification require compatible capabilities in the target environment. Model credentials are not embedded in Policy definitions.
+
+Parameterized Policies can declare test values in `testing.parameters` in the advanced definition. These values apply only to Studio tests; Guardrails use their own binding parameters. Phrase expansion creates an isolated test for each concrete entry. Test values cannot contain secrets.
+
+**Export definition** downloads editable JSON. The Library import control loads this JSON as a new draft. Cross-environment Guardrail packages preserve referenced Policy identities, complete Rules and test definitions.
+
+<a id="operator-policy-mechanism" />
+
+## Executable tests
+
+**Run tests** saves the draft and submits it to a healthy GuardRails 0 Runner. Compilation and evaluation use the same detectors as Guardrail execution.
+
+- Rule acceptance cases run the selected Rule in isolation and require an actual match. A different Rule blocking first cannot count as acceptance.
+- Clear the Rule acceptance checkbox to run a whole-Policy scenario, including safe inputs and ordering behavior.
+- Replacement output is compared exactly. Runtime errors, unknown verdicts and missing results cannot serve as match evidence.
+- Editing invalidates earlier results. An unavailable Runner produces an error instead of simulated publication evidence.
+
+Some historical replacement cases specify only an expected decision. Add an exact expected output before testing and publishing changes to those Policies. Existing published versions remain unchanged.
 
 <a id="operator-policy-release" />
 
-## Validate, publish, and use it
+## Publish and bind
 
-The next article, [test, publish, and transfer a custom Policy](/document/operator/developer-release-transfer), explains the test gate and the version semantics. After publishing a Policy Version, bind that exact version in a Guardrail draft and resolve required parameters. A published Policy alone does not cause any inspection of Endpoint traffic. An edit to the Policy creates a new draft and a new version. An existing Guardrail that pins the old version does not change.
+In **Review & publish**, inspect each test’s decision, matched Rules and actual output. Use **Edit & run tests** to fix failures.
 
-An export package contains editable definitions, not Testing Reports. In another environment, recheck Action and model dependencies, rerun tests, and publish there.
+**Publish** becomes available after the current draft passes its required tests. The server verifies the draft revision and makes publication retries idempotent. Published versions are immutable.
 
+Bind an exact Policy version in a Guardrail, then test and publish the Guardrail and configure routing. Maintaining a Policy creates a new draft; Guardrails pinned to earlier versions keep their behavior.
+
+Guardrail export includes reachable Policy nodes. Pruning unused resources does not remove Rules from a referenced Policy or change that node's identity. Imported Policies remain maintainable by administrators. Legacy Colang Policies and signed historical versions retain compatibility readers and the existing editor.
 
 <a id="operator-policy-risk-severity" />
 
-## Choose a risk level for each Rule
+## Risk and handling
 
-In the Flow/Rail configuration, set **Risk level** separately from the **Requested action**. New Rules start at Medium. Review this choice against the business impact. Built-in defaults are visible in Policy Library. Older imported drafts without levels must be classified before testing and publication.
+Risk severity belongs to each Rule; handling determines the response to a match. New Rules default to medium severity. Advanced definitions allow changing severity and taxonomy. Guardrails may override handling, while severity changes require testing and publishing a new Policy version.
 
-A customer-identifier detection can use Medium + Redact. A production-credential detection usually uses High + Block. During observation, override the action to Record only in the Guardrail. The event stays High. Guardrails cannot override risk levels. To change a level, update, test, and publish the Policy, then update the Guardrail. [Risk-level reference](/document/overview/glossary-definition#term-rule-risk-severity).
+
+<a id="operator-policy-formal-service" />
+
+## Running the reference proof service
+
+The repository includes an optional standalone Z3 service, independent of Controller and Runner state. Install it with `uv sync --extra formal --extra test`, set `FORMAL_SERVICE_API_KEY`, then run `.venv/bin/uvicorn runner.formal_service.app:create_app --factory --host 127.0.0.1 --port 8093`. The authenticated endpoint is `http://127.0.0.1:8093/evaluate`.
+
+Register this endpoint as a custom Provider and a Model using `tali.automated-reasoning.v1`. In **Settings → Guardrail Catalog → Output**, select it for Automated Reasoning and validate `warranty-duration`, version `1`, with query `How long is the warranty?`, valid response `The warranty lasts one year.`, and invalid response `The warranty lasts ten years.` Save and apply the validated binding. Use the same policy reference in Studio, add a required invalid-proof Rule case plus a valid-proof scenario, run the tests, and publish.
+
+The service proves bounded integer constraints. Its sample grammar accepts complete warranty sentences or JSON claims; it does not prove arbitrary natural-language answers. Unsupported text returns `no_translations`, inconsistent policies return `impossible`, and claims that are possible but not entailed return `satisfiable`. These are inconclusive for release. Low-confidence proof results also cannot establish a Rule match. Policy-specific tests remain required even after binding validation.
+
+See `runner/formal_service/README.md` for the portable service policy format and proof semantics. Service policy definitions are a separately versioned external dependency; a Guardrail package carries the reference, not the external service's rule catalog.

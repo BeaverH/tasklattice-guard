@@ -418,6 +418,28 @@ async def test_litellm_basic_guardrail_api_normalizes_and_maps_the_runtime_contr
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("internal", [False, True])
+async def test_detection_http_preserves_untrusted_query_and_sources(internal):
+    runtime = Runtime()
+    app = FastAPI()
+    app.include_router(RunnerAPI(runtime, Store(), Metrics(), Telemetry(), "runner", "controller-token").router)
+    path = "/internal/v1/guardrails/guardrail-1/evaluate" if internal else "/runtime/v1/endpoints/endpoint-1/beta/litellm_basic_guardrail_api"
+    headers = {"authorization": "Bearer controller-token"} if internal else {"x-api-key": "valid-secret"}
+    body = {"texts": ["The warranty lasts one year."], "guardrail_context": {
+        "query": "How long is the warranty?", "grounding_sources": ["The product warranty lasts one year."]}}
+    body.update({"phase": "output", "guardrail_version": "20260904-020000.002Z"} if internal else {"input_type": "response"})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://runner") as client:
+        assert (await client.post(path, headers=headers, json=body)).status_code == 200
+        blocks = runtime.request.content_blocks
+        assert [block.role for block in blocks] == ["model_output", "query", "grounding_source"]
+        assert all(block.trust == "untrusted" for block in blocks)
+        assert [block.guard_content for block in blocks] == [True, False, False]
+        assert blocks[1].text == body["guardrail_context"]["query"]
+        assert blocks[2].text == body["guardrail_context"]["grounding_sources"][0]
+        body["guardrail_context"]["trust"] = "trusted"
+        assert (await client.post(path, headers=headers, json=body)).status_code == 422
+
+
 async def test_litellm_basic_guardrail_api_fails_closed_when_no_router_matches():
     telemetry = Telemetry()
     metrics = RunnerMetrics(8)

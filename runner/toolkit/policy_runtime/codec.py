@@ -15,7 +15,7 @@ def policy_from_payload(payload: dict[str, object]) -> PolicySpec:
         id=str(payload["id"]),
         name=str(payload["name"]),
         description=str(payload["description"]),
-        source=str(payload["source"]),
+        source=str(payload.get("source", "custom")),
         version=str(payload["version"]),
         tags=tags,
         parameters=tuple(

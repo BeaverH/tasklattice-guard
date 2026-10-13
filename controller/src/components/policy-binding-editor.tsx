@@ -63,7 +63,7 @@ export function PolicyBindingEditor({
       label: `${catalogPolicy.id}@${binding!.policy_version}`,
       description: t("guardrailWizard.nextBlocked.policyUnavailable", { name: `${catalogPolicy.id}@${binding!.policy_version}` }),
     };
-    const bindable = policy.source === "built_in" || policy.version !== "0";
+    const bindable = policy.version !== "0";
     const frameworkLabels = policy.tags
       .filter((tag) => tag.namespace === "framework")
       .map((tag) => tag.label);

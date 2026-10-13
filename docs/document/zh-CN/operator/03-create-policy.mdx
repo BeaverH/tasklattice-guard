@@ -4,76 +4,79 @@ title: "自建 Policy：把业务要求变成可执行检查"
 summary: "从业务要求拆分 Rule，选择检测器、检查阶段和处理方式，再用测试证明预期行为。"
 order: 2
 ---
-先问一个问题：现有 Policy 只是参数不合适，还是缺少新的检测行为？前者通常在 Policy Binding 中调整参数或 Rule。只有确实缺少可复用的能力时，才自建 Policy。例如多个应用都需要判断“要求泄露系统提示词”这一意图，就适合把检测做成一项 Policy，而不是分别写进每个 Router。
-
-<a id="operator-policy-declarative" />
-
-## 声明式 Policy：先定义规则，再选择如何检查
-
-内建 Policy 和自建 Policy 都使用目录包：一个 Policy 一个目录，一条 Rule 一个 YAML 文件。`policy.yaml` 列出 Rule 的顺序、测试和资源，统一编译生成运行目录。开发一条 Policy 时，按 **用途 → 多条 Rule → 检测器和参数 → 命中后处理 → 测试** 组织，不需要先学习 Colang。
-
-例如“客服回复不得泄露客户编号，也不得出现内部密钥标签”，可以拆成两条 Output Rule：
-
-- 第一条用 `text/regex@1.0.0` 检测 `CUS-123456` 这样的固定格式，命中时遮盖。
-- 第二条用 `text/keyword@1.0.0` 检测 `INTERNAL_SECRET`，命中时阻断。
-
-每条 Rule 独立声明风险级别。Rule 按顺序执行，下一条读取上一条处理后的文本。阻断会结束检测。
-
-Rule 用例用 `scope: rule` 单独验证检测。组合场景用 `scope: policy` 验证完整的顺序。测试可以断言 Decision、替换后的精确文本和实际命中的 Rule ID。每条 Rule 的每个阶段都必须有验收用例。
-
-完整示例位于 `policies/examples/customer-information`。在仓库根目录可以运行：
-
-```bash
-npm run policies:validate -- policies/examples/customer-information
-npm run policies:test -- policies/examples/customer-information
-npm run policies:import -- policies/examples/customer-information
-npm run policies:export -- policies/custom/customer-information --output /tmp/customer-information.zip
-```
-
-导入只接受 `source: custom`，不能覆盖平台内建的 ID。目录或 ZIP 包导入后写入 `policies/custom/<id>/`。重新构建并启动 Controller 后，可以在 Policy Library 查看，并绑定到 Guardrail。**导入不是发布**：还需要完成 Guardrail 的测试和发布，以及路由的发布。新版内容须使用新版本号，已发布 Guardrail 保留自己的规则快照。
-
-这条开发路径支持本地检测器的目录和 ZIP 导入导出。`npm run policies:regression` 运行全部源包的回归。模型用例明确标记为未执行，需要在已配置模型的环境中另行测试。新建模型检测器和控制台 YAML 编辑尚未接入。下面介绍的 Policy Studio 仍是当前可编程编辑流程，它的导入按钮使用可编程策略 JSON 包。两种包不能混用。
-
-<a id="operator-policy-mechanism" />
-
-## 技术原理：从业务要求到检查结果
-
-以“客服回复不得泄露客户编号”为例。先确定 **检测对象** 是模型回复，所以选择 Output Rail。再确定 **判断方式**：结构固定的编号可以用已有的检测能力，复杂语义需要已注册的 Action 或专用模型。自建 Policy 的 Colang Flow 负责组织调用和记录结果，Action 负责具体的检测或变换。只写“禁止泄露”这样的描述，不会自动产生识别能力。
-
-这条链路中的对象各有职责：
-
-1. **Colang 源码声明 Flow**，例如 `check_customer_id`，说明收到文本后调用什么能力、如何处理其结果。Policy Studio 使用 Colang 2.x。源码由 NeMo 解析。未声明的 Flow、未列入依赖的 Action 和不允许的导入，会在运行验证时被拒绝。
-2. **Rail Binding 把 Flow 接到输入或输出阶段**。它指定 `detect`（记录判断）或 `mutate`（可能产生替换内容），以及不安全时的处理、超时和失败方式。由 Rail 与 Flow 名称形成稳定 Rule ID，例如 `flow/output/check_customer_id`。Rule ID 供测试结果和运行记录追溯。
-3. **Action Reference 固定可调用能力的名称和版本**。Flow 可以调用 Action Catalog 中已经注册的检测器或模型能力。自建 Policy 不能上传任意 Python 来扩展 Runner。参数在 Guardrail Binding 中解析并随版本固定，不能由生产请求临时改写。
-4. **Test Case 证明预期行为**。正常的订单回复应放行。包含客户编号的回复应按配置转换或阻断。还要覆盖相似但不应命中的编号、Action 超时等边界。测试写明 Rail、期望 Decision 和覆盖的 Rule ID。
-
-因此，一条自建 Rule 的执行关系是 **Policy Version → Rule（Input／Output Rail 上的 Flow）→ 已注册 Action／模型给出检测结果 → 命中后处理 → Decision**。Policy 定义默认处理，Policy Binding 可以按应用覆盖。Endpoint 和 Router 决定哪些请求使用哪个 Guardrail Version。完整概念链见[Policy、Rule、实现与处理](/document/overview/glossary-definition)。声明式目录包统一使用[检测器引用](/document/overview/glossary-definition#term-rule-implementation)。这里描述的 Policy Studio 可编程路径，仍以 Flow 作为实现入口。两种入口不能混用导入格式。
+Policy Studio 用已有 Detector 组合可复用的 Policy。管理员可以维护平台提供、本地创建或导入的 Policy；来源只用于合规与追溯，不决定编辑权限。
 
 <a id="operator-policy-create" />
 
-## 在 Policy Studio 创建
+## 创建和维护
 
-当前控制台的“创建 Policy”入口位于 [Policy Library](/policy-library)（按钮右侧箭头菜单中是“导入 Policy”），需要管理员权限。创建时按以下顺序核对：
+在 [Policy Library](/policy-library) 选择 **创建 Policy**，或打开已有 Policy 后选择 **编辑**。
 
-1. **说明用途与边界**：写清它检测什么、不检测什么，选择保护目录，并确定适用的输入或输出阶段（Rail）。
-2. **定义 Flow 和 Rule**：自定义 Policy 使用 Colang 2.x。Flow 名称必须与源码一致。绑定后形成稳定的 Rule ID `flow/{rail}/{flow_name}`。不支持上传任意 Python 作为执行逻辑。
-3. **声明运行依赖**：需要调用 Action 时，选择已注册、版本固定的 Action。需要模型时，先让平台管理人员准备兼容的 Provider、Model 和能力绑定。依赖的 Flow 要放在同一 Rail 的前面，不能形成循环。
-4. **设置行为和参数**：区分只检测的 `detect` 和可能返回替换内容的 `mutate`。声明不安全时的处理、超时、`fail_open`／`fail_closed`，以及可供 Guardrail 绑定的参数。
-5. **添加 Test Cases**：同时覆盖正常输入、应阻断或转换的输入，以及边界样例。每条用例写明 Rail、期望 Decision 和覆盖的 Rule IDs。
+左侧步骤导航依次为 **基本信息 → Rules → Test Cases → 审查与发布**。切换步骤保留编辑内容，底部固定显示当前操作。
+
+1. 填写名称、用途和 Maintenance 维护人。维护人用于记录责任，实际写权限由管理员角色控制。
+2. 添加至少一条 Rule。选择 Detector、输入或输出阶段、命中动作，再填写检测参数。
+3. 文本检测器包括关键词、正则表达式、组合条件和代码块检测。普通规则不需要编写 Colang。Detector 下拉框也提供模型分类、事实依据检查和形式验证；分类类型和话题边界可直接用表单编辑。复杂条件和参数定义保留高级 JSON 入口。
+4. 每条 Rule 的每个阶段至少添加一个必选验收 Test Case，填写输入和预期动作。替换规则还必须断言完整的预期输出。
+5. 模型用例可展开 **测试上下文** 填写可信指令；事实依据检查提供用户问题和参考资料。外部 Detector 使用 **设置 → Guardrail Catalog** 的已激活绑定，缺少绑定或模型调用异常会使测试失败。
+6. **保存草稿** 后，Policy 立即出现在 Library 中。未发布的草稿显示 Draft，不能被 Guardrail 绑定。
+
+Rule ID 在修改名称时保持不变。顺序决定执行行为，后续 Rule 读取前面的处理结果；阻断会结束本次检测。删除 Rule 会同时删除引用它的草稿测试。
+
+<a id="operator-policy-declarative" />
+
+## 声明式定义与 Detector
+
+Policy 的声明式定义包含元数据、参数、Rules、Test Cases 和执行顺序。每条 Rule 引用有版本的 Detector；引擎实现由执行环境提供。平台来源和访问权限不属于这份可移植定义。
+
+参数化 Policy 可以在高级定义的 `testing.parameters` 中设置测试值。测试值只用于 Studio 验收，Guardrail 使用自己绑定的参数。短语展开规则会按实际条目生成并隔离测试；这些测试值不能包含密钥。
+
+关键词和正则支持替换。组合条件与代码块检测支持检测和阻断。模型分类、事实依据检查和形式验证需要目标环境具备对应能力；模型凭据不会放入 Policy 定义中。
+
+**导出定义** 下载可编辑的 JSON。Library 的导入入口可以把它载入 Studio 作为新 Policy 草稿。完整 Guardrail 的跨环境迁移使用 Guardrail 资源包，保留引用的 Policy 版本、完整规则与测试定义。
+
+<a id="operator-policy-mechanism" />
+
+## 测试如何执行
+
+点击 **运行测试** 会先保存当前草稿，再交给 GuardRails 0 的真实 Runner 编译和执行。测试使用与实际 Guardrail 相同的 Detector。
+
+- Rule 验收用例隔离运行选中的 Rule，必须证明该 Rule 确实命中。另一条 Rule 提前阻断不能代替它通过验收。
+- 取消“Rule 验收”后，用例作为整套 Policy 的场景测试，可以检查正常放行、规则组合和执行顺序。
+- 替换结果按完整文本精确比较。运行错误、未知检测结果或缺少结果不能视为命中证据。
+- 编辑后，之前的通过状态失效。没有健康 Runner 时，界面显示错误，不能以模拟结果发布。
+
+部分历史替换用例只有预期动作，没有完整的预期输出。维护这些 Policy 时，需要先补全输出断言，再测试和发布；原有已发布版本继续保持不变。
 
 <a id="operator-policy-release" />
 
-## 验证、发布、使用
+## 发布与使用
 
-下一篇[自建 Policy 的测试、发布与跨环境迁移](/document/operator/developer-release-transfer)说明测试门槛和版本语义。发布 Policy Version 后，还要在 Guardrail 草稿中绑定确切的版本，并填写必填参数。单独发布 Policy，不会让任何 Endpoint 请求开始检测。修改 Policy 会形成新的草稿和版本，不会改变已绑定旧版本的 Guardrail。
+在 **审查与发布** 中逐条查看测试动作、命中 Rule 和实际输出；通过 **编辑并运行测试** 返回修复失败。
 
-跨环境导入的是可编辑的定义，不是测试报告。目标环境需要重新核对 Action 和模型依赖，运行测试并发布。
+当前草稿的必选测试通过后，才可以 **发布**。服务端检查测试对应的草稿版本，并发发布或重试不会创建重复版本。已发布版本不可变。
 
+发布后，在 Guardrail 中绑定确切的 Policy 版本，再完成 Guardrail 自己的测试、发布和路由配置。维护已有 Policy 会产生新草稿；已绑定旧版本的 Guardrail 不会被自动修改。
+
+Guardrail 导出携带被引用的 Policy 节点。裁剪未使用的资源不会删除这些 Policy 节点内的规则或改写它们的身份。导入后，管理员仍可维护新草稿。旧版 Colang Policy 和历史签名版本保留兼容读取及原有编辑入口。
 
 <a id="operator-policy-risk-severity" />
 
-## 为每条 Rule 选择风险级别
+## 风险与处理
 
-在 Flow／Rail 配置中，分别设置 **风险级别** 与 **命中后处理**。新建 Rule 预选“中”，请根据实际业务影响确认或修改。内建 Rule 的默认级别可以在 Policy Library 查看。导入的旧草稿如果没有级别，需要补齐后才能测试和发布。
+风险级别属于 Rule，命中动作决定本次如何处理文本。新 Rule 默认使用中等风险；可在高级定义中修改风险级别和风险分类。Guardrail 可以覆盖处理动作，不能覆盖 Policy 的风险级别。调整风险后，应重新测试并发布 Policy 版本。
 
-例如，检测客户编号可以按场景设为“中＋遮盖”。检测生产密钥通常设为“高＋阻断”。上线观察时，可以在 Guardrail 中把处理覆盖为“仅记录”，事件仍保留原来的高风险。风险级别不能在 Guardrail 中覆盖。要修改级别，应更新 Policy，测试并发布新版本，再更新 Guardrail。[完整分级说明](/document/overview/glossary-definition#term-rule-risk-severity)
+
+<a id="operator-policy-formal-service" />
+
+## 启动参考证明服务
+
+仓库提供可选的独立 Z3 服务，不依赖 Controller 或 Runner 状态。执行 `uv sync --extra formal --extra test`，设置 `FORMAL_SERVICE_API_KEY`，然后运行 `.venv/bin/uvicorn runner.formal_service.app:create_app --factory --host 127.0.0.1 --port 8093`。带认证的服务地址为 `http://127.0.0.1:8093/evaluate`。
+
+将地址注册为自定义 Provider，Model 协议选择 `tali.automated-reasoning.v1`。在 **Settings → Guardrail Catalog → Output** 中选择该服务，验证策略 `warranty-duration` 的版本 `1`：问题填 `How long is the warranty?`，有效回答填 `The warranty lasts one year.`，无效回答填 `The warranty lasts ten years.`。通过后保存、应用绑定。
+
+在 Studio 中选择形式验证 Detector，填写同一策略 ID、版本和证明置信度阈值。每个用例必须填写用户问题和预期证明结果；添加预期 `invalid` 的 Rule 验收，以及预期 `valid` 的放行场景。测试结果保留实际证明、命中 Rule 和调用次数，失败时不能发布。
+
+该服务验证有限整数约束，支持完整的保修期句式或 JSON 断言，不验证任意自然语言。无法解析返回 `no_translations`，策略矛盾返回 `impossible`，仅可满足而无法证明返回 `satisfiable`，这些都不能作为放行证明；低于阈值的证明也不能作为 Rule 命中。绑定验证不替代 Policy 自己的测试。
+
+服务策略格式见 `runner/formal_service/README.md`。服务中的形式规则是单独版本化的外部依赖；Guardrail 资源包携带其引用，不包含外部服务的规则目录。

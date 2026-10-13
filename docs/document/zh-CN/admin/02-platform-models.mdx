@@ -15,6 +15,10 @@ order: 1
 3. 在 [Guardrail Catalog](/settings/guardrail-catalog) 为具体能力绑定模型，例如 `content_safety.input` 或 `jailbreak.input`。输入和输出绑定独立，模型协议必须符合该能力的契约。
 4. 验证绑定的行为样例，保存并激活配置，再到[平台健康](/settings/health)确认 Runner 已应用。只在 Models 页面测试连接，不等于内容安全或越狱检测已通过行为验证。
 
+远程 Detector 模块的执行上限为 30 秒，能力探测使用相同的上限。Model 配置中的更长超时不会延长 Guardrail 的执行期限。超时会按失败关闭处理，不能计为成功检测，也不能据此通过发布验收。
+
+在 NVIDIA 托管 API 上使用 `nvidia/nemotron-3.5-lightning-30b-a3b` 进行 Grounding 时，适配器会关闭可选的 thinking 模式，让模型在执行预算内返回 JSON 判定。此选项不改变可迁移的 Policy 定义，也不会加入其他模型服务的请求。发布前仍需验证自己的正反测试用例。
+
 <a id="platform-model-boundary" />
 
 ## 控制面与数据面的边界

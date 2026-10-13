@@ -162,6 +162,7 @@ def dynamic_runtime_action_providers(
             provider_id=runtime.id,
             skip_tls_verify=runtime.skip_tls_verify,
             timeout_seconds=runtime.timeout_seconds,
+            request_options={"max_tokens": runtime.max_tokens},
             transport=transport,
         ))
 
@@ -174,6 +175,7 @@ def dynamic_runtime_action_providers(
             api_key=runtime.api_key,
             skip_tls_verify=runtime.skip_tls_verify,
             timeout_seconds=runtime.timeout_seconds,
+            request_options={"max_tokens": runtime.max_tokens},
             transport=transport,
         ))
 

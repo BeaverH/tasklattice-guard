@@ -1,3 +1,4 @@
+import type { FormalValidation } from "../../shared/formal-validation";
 import type { EndpointAdapterId } from "./api-types";
 import type { AuditQuery } from "../../shared/audit-query";
 import type { EnforcementAction } from "../../shared/enforcement-action.generated";
@@ -519,7 +520,7 @@ export const saveModelAssignments = (assignments: ModelAssignments) => requestCo
 export const validateModelConfiguration = () => requestController<ModelConfigurationRevision>("/api/v1/model-configuration/draft/validations", json("POST"));
 export type ModelAssignmentTarget = "control_plane" | CapabilityBindingId;
 export const saveModelAssignment = (target: ModelAssignmentTarget, modelId: string | null, validationId?: string) => requestController<ModelConfigurationRevision>(`/api/v1/model-configuration/draft/assignments/${encodeURIComponent(target)}`, json("PUT", { modelId, validationId }));
-export const validateModelAssignment = (target: ModelAssignmentTarget, modelId?: string) => requestController<ModelConfigurationRevision & { validationId?: string }>(`/api/v1/model-configuration/draft/assignments/${encodeURIComponent(target)}/${modelId ? "candidate-validations" : "validations"}`, json("POST", modelId ? { modelId } : undefined));
+export const validateModelAssignment = (target: ModelAssignmentTarget, modelId?: string, formalValidation?: FormalValidation) => requestController<ModelConfigurationRevision & { validationId?: string }>(`/api/v1/model-configuration/draft/assignments/${encodeURIComponent(target)}/${modelId ? "candidate-validations" : "validations"}`, json("POST", modelId ? { modelId, ...(formalValidation ? { formalValidation } : {}) } : undefined));
 export const applyModelConfiguration = (selection: import("../../shared/model-activation").PartialModelActivation) => requestController<ModelConfigurationView & { distribution: { desiredGeneration: number; distributionStatus: "ready" | "syncing" } }>("/api/v1/model-configuration/apply", json("POST", selection));
 export const listControllerGuardrails = () => requestController<Collection<Guardrail>>("/api/v1/guardrails");
 export const getControllerGuardrail = (id: string) => requestController<GuardrailDetail>(`/api/v1/guardrails/${encodeURIComponent(id)}`);

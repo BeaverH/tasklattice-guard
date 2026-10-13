@@ -404,6 +404,11 @@ def observe_model_call(
                 )
             if usage.result != "success":
                 span.set_status(Status(StatusCode.ERROR, usage.result))
+            # Cancellation prevents the Action from returning its usage. Keep
+            # that attempted call in the request scope without double-counting
+            # normal/error results that do return ActionUsage.
+            if scope is not None and usage.error_type == "action_deadline":
+                scope.calls.append(usage)
             if observer is not None:
                 observer.model_call_finished(
                     usage=usage,
