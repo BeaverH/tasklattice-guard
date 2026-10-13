@@ -59,6 +59,7 @@ def _compiler() -> NeMoConfigCompiler:
 
 class _ControlStore:
     generation = 0
+    protection_generation = 0
 
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
