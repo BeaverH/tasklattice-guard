@@ -1,3 +1,4 @@
+import { protectionModeEn, protectionModeZh } from "./protection-mode-i18n";
 import { declarativePolicyEn, declarativePolicyZh } from "./declarative-policy-i18n";
 import { immutableVersionsEn, immutableVersionsZh } from "./immutable-versions-i18n";
 import { guardrailPackageEn, guardrailPackageZh } from "./guardrail-package-i18n";
@@ -17,6 +18,7 @@ export type SupportedLanguage = "en" | "zh-CN";
 const resources = {
   en: {
     translation: {
+      protectionMode: protectionModeEn,
       declarativePolicy: declarativePolicyEn,
       routing: routingEn,
       uiCopy: uiCopyEn,
@@ -2344,8 +2346,8 @@ const resources = {
         draftRevisionTarget: "Draft revision {{revision}}",
       },
       guardrails: {
-        registryReadiness: "Readiness",
-        registryReadinessHelp: "Ready means at least one immutable version is Released here and still has a matching Passed report. Draft tests and traffic routing are separate.",
+        registryReadiness: "Protection",
+        registryReadinessHelp: "Not ready means no version meets publication and test requirements. Otherwise the status shows the last fully applied protection mode; rollout progress is shown separately.",
         registryVersions: "Versions",
         registryOpenVersions: "View versions of {{name}}",
         registryVersionCounts: "{{released}} Released · {{pending}} Pending",
@@ -3001,7 +3003,7 @@ const resources = {
         "not evaluated": "Not evaluated",
         stale: "Stale",
         needs_validation: "Needs testing",
-        not_ready: "Not ready",
+        not_ready: "Not ready", enforce: "Enforce", monitor: "Monitor", bypass: "Bypass",
         intervene: "Intervene",
         paused: "Paused",
         incomplete: "Incomplete",
@@ -3015,6 +3017,7 @@ const resources = {
   },
   "zh-CN": {
     translation: {
+      protectionMode: protectionModeZh,
       declarativePolicy: declarativePolicyZh,
       routing: routingZh,
       uiCopy: uiCopyZh,
@@ -5327,8 +5330,8 @@ const resources = {
         draftRevisionTarget: "草案 revision {{revision}}",
       },
       guardrails: {
-        registryReadiness: "就绪状态",
-        registryReadinessHelp: "就绪表示至少一个不可变版本已在本环境发布，且仍保留内容和测试集匹配的通过报告。草稿测试与流量路由是独立维度。",
+        registryReadiness: "防护状态",
+        registryReadinessHelp: "未就绪表示没有满足发布与测试要求的版本；满足条件后显示最近全部生效的防护模式，下发进度单独展示。",
         registryVersions: "不可变版本",
         registryOpenVersions: "查看 {{name}} 的版本",
         registryVersionCounts: "{{released}} 已发布 · {{pending}} 待发布",
@@ -5982,7 +5985,7 @@ const resources = {
         "not evaluated": "未评估",
         stale: "已过期",
         needs_validation: "需要测试",
-        not_ready: "未就绪",
+        not_ready: "未就绪", enforce: "正常防护", monitor: "仅观察", bypass: "应急放行",
         intervene: "干预",
         paused: "已暂停",
         incomplete: "未完成",

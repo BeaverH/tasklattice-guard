@@ -353,3 +353,25 @@ async function handle(
     ) => Promise<unknown>;
   }).handleMessage(stream, message, current);
 }
+
+it("sends protection modes before a failing model rollout and rejects foreign acknowledgements", async () => {
+  const service = { ...serviceMock(), protectionModes: {
+    desiredState: vi.fn().mockResolvedValue({ generation: 9, modes: { g: "bypass" } }), recordResult: vi.fn(),
+  } };
+  const models = { activeConfiguration: vi.fn().mockResolvedValue(null) };
+  const server = new RunnerControlServer(config, service as unknown as ControlPlaneService, metricsMock() as unknown as ControllerMetrics, models as unknown as ModelConfigurationService);
+  const stream = streamMock();
+  const hello = registration("runner-mode");
+  hello.registration.labels = { "tasklattice.protection-modes": "1" };
+  const connection = await handle(server, stream, hello, null);
+  stream.write.mockClear();
+  service.protectionModes.desiredState.mockResolvedValue({ generation: 10, modes: { g: "bypass" } });
+  models.activeConfiguration.mockRejectedValue(new Error("models unavailable"));
+  await server.distributeProtectionModes();
+  expect(stream.write.mock.calls.map(([m]) => m.protectionState).filter(Boolean)).toEqual([{ generation: "10", modes: { g: "bypass" } }]);
+  await handle(server, stream, { protectionResult: { runnerId: "runner-mode", generation: "9", accepted: true, reason: "" } }, connection);
+  expect(service.protectionModes.recordResult).toHaveBeenCalledWith({ runnerId: "runner-mode", bootId: "boot-runner-mode", generation: 9, accepted: true, reason: "" });
+  for (const result of [{ runnerId: "other", generation: "9" }, { runnerId: "runner-mode", generation: "11" }]) {
+    await expect(handle(server, stream, { protectionResult: { ...result, accepted: true } }, connection)).rejects.toThrow("does not match");
+  }
+});

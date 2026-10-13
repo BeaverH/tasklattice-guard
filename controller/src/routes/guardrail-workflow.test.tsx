@@ -67,6 +67,20 @@ describe("Guardrail edit, test and publish workflow", () => {
   beforeEach(() => { routing.tab = "testing"; routing.role = "admin"; routing.navigate.mockReset(); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+  it("opens protection mode from Actions while viewing the Testing tab", async () => {
+    setupPage({ status: "enforce", protection: { guardrailId: draft.id, mode: "enforce", appliedMode: "enforce", generation: 7, ready: true,
+      status: "applied", applied: 1, total: 1, runners: [], updatedAt: null, updatedBy: null, reason: "" } });
+    render(wrap(<GuardrailDetailPage />));
+    await screen.findByRole("heading", { name: draft.name });
+    expect(screen.getByRole("tab", { name: /guardrails.validationHistoryTab/ }).getAttribute("data-state")).toBe("active");
+    fireEvent.click(screen.getByRole("button", { name: "routing.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.change" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "states.monitor" }));
+    expect(await screen.findByRole("dialog", { name: "protectionMode.change" })).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "states.monitor" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("radio", { name: "states.bypass" })).toBeTruthy();
+  });
+
   it("hides draft status and Test draft when the working copy matches a published version", async () => {
     setupPage({ published_current: true, has_unpublished_changes: false });
     render(wrap(<GuardrailDetailPage />));
@@ -81,7 +95,7 @@ describe("Guardrail edit, test and publish workflow", () => {
 
   it.each(["local", "imported"] as const)("uses the same working draft Actions and default tab for %s Guardrails", async (origin) => {
     routing.tab = undefined as unknown as string;
-    setupPage({ origin, source_id: origin === "imported" ? "bank-uat" : undefined, published_current: true, has_unpublished_changes: false, status: "ready" });
+    setupPage({ origin, source_id: origin === "imported" ? "bank-uat" : undefined, published_current: true, has_unpublished_changes: false, status: "enforce" });
     render(wrap(<GuardrailDetailPage />));
     await screen.findByRole("heading", { name: draft.name });
     expect(Boolean(screen.queryByText("guardrailPackage.importedFrom"))).toBe(origin === "imported");
@@ -124,7 +138,7 @@ describe("Guardrail edit, test and publish workflow", () => {
   });
 
   it("runs the selected imported version from a direct Testing Report link and reruns that same version", async () => {
-    setupPage({ origin: "imported", source_id: "bank-uat", published_current: true, has_unpublished_changes: false, status: "ready" });
+    setupPage({ origin: "imported", source_id: "bank-uat", published_current: true, has_unpublished_changes: false, status: "enforce" });
     const versions = ["20261009-090837.640Z", "20261009-090835.526Z"].map(version => ({
       guardrail_id: draft.id, version, created_at: "2026-10-09T09:09:10Z", status: "ready", origin: "imported", test_suite_count: 12,
     } as api.GuardrailVersion));

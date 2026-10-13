@@ -25,7 +25,7 @@ it("provides the Endpoint-scoped Scan URL and Bearer examples while preserving t
 describe("Endpoint setup", () => {
   describe.each(["f5-scan", "litellm-generic-guardrail"])("%s advertised address", (adapter) => {
     it.each([undefined, "", "https://guard.example.test:8443/", "https://guard.example.test:8443/guard/"])(
-      "uses the configured public URL or falls back to Service DNS: %j",
+      "uses the configured runtime public URL or falls back to the Controller origin: %j",
       async (publicUrl) => {
         const config = loadConfig({
           NODE_ENV: "test",
@@ -33,7 +33,7 @@ describe("Endpoint setup", () => {
           CONTROLLER_RUNNER_TOKEN: "runner-token-that-is-at-least-32-characters",
           CONTROLLER_ARTIFACT_SIGNING_KEY_PATH: "/tmp/controller-signing-key.pem",
           BETTER_AUTH_SECRET: "better-auth-secret-that-is-at-least-32-characters",
-          CONTROLLER_PUBLIC_URL: "https://ui.example.test",
+          CONTROLLER_PUBLIC_URL: "https://ui.example.test:8443/console",
           CONTROLLER_RUNTIME_SERVICE_URL: "http://guard-runtime.uat.svc.cluster.local:8091",
           CONTROLLER_RUNTIME_PUBLIC_URL: publicUrl,
         });
@@ -47,7 +47,7 @@ describe("Endpoint setup", () => {
         const service = new ControlPlaneService(db, config);
         const detail = await service.getEndpoint(endpointId);
         expect((await service.listEndpoints())[0]!.setup).toEqual(detail.setup);
-        const advertisedBase = (publicUrl || config.runtimeServiceUrl).replace(/\/+$/, "");
+        const advertisedBase = (publicUrl || "https://ui.example.test:8443").replace(/\/+$/, "");
         expect(detail.setup.api_base_url).toBe(`${advertisedBase}/runtime/v1/endpoints/${endpointId}`);
         expect(detail.setup.callback_url).toBe(`${detail.setup.api_base_url}${adapter === "f5-scan" ? "/backend/v1/scans" : "/beta/litellm_basic_guardrail_api"}`);
         if (adapter === "f5-scan") expect(detail.setup.yaml_template).toContain(detail.setup.callback_url);

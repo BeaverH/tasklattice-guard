@@ -348,3 +348,18 @@ def test_admission_check_rejects_what_a_real_load_would_reject(tmp_path, change)
         store.admit(artifact)
     if change == "runtime":
         assert "Action providers are unavailable" in str(failure.value)
+
+
+def test_protection_modes_are_atomic_persisted_and_independent_of_artifacts(tmp_path):
+    store = ArtifactStore(FIXTURE / "public-key.pem", tmp_path / "state")
+    # No registry or Artifact is necessary to apply the emergency setting.
+    store.apply_protection_modes(protocol.GuardrailProtectionState(generation=7, modes={"g": "bypass"}))
+    assert store.protection_mode("g") == "bypass" and store.generation == 0
+    for generation, mode in [(6, "enforce"), (7, "monitor"), (8, "invalid")]:
+        with pytest.raises(ValueError):
+            store.apply_protection_modes(protocol.GuardrailProtectionState(generation=generation, modes={"g": mode}))
+        assert store.protection_mode("g") == "bypass" and store.protection_generation == 7
+    restarted = ArtifactStore(FIXTURE / "public-key.pem", tmp_path / "state")
+    assert restarted.protection_mode("g") == "bypass" and restarted.protection_generation == 7
+    restarted.apply_protection_modes(protocol.GuardrailProtectionState(generation=8))
+    assert restarted.protection_mode("g") == "enforce"

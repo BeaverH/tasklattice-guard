@@ -38,6 +38,11 @@ Scan has no `/verify` interface and no model-generation interface. To verify aut
 - A request scan does not call the business model.
 - A response scan does not get a model answer automatically.
 
+<a id="scan-protection-modes" />
+## Guardrail protection modes
+
+The routed Guardrail's operating mode applies to Scan too. In Enforce, the outcomes and strict coverage checks below apply normally. Monitor still detects but returns `cleared` with the original input even on a match or detector failure. Bypass does no detection and returns `cleared` with the original input. In both permissive modes, `scannerResults` is empty even when `verbose=true`; Runtime logs record the mode and Monitor's real evidence. A cleared response in these modes is permission to proceed, not proof of safe content. Authentication, UUID matching, Endpoint state, request validation and routing still apply. Clients cannot override the mode through request JSON.
+
 <a id="scan-request" />
 ## Request JSON and effective fields
 

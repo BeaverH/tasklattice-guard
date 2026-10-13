@@ -129,7 +129,8 @@ function mapGuardrail(
     safety_level: value.draftConfig.safetyLevel,
     output_delivery: value.draftConfig.outputDelivery,
     updated_at: value.updatedAt,
-    status: published ? "ready" : "not_ready",
+    status: published ? value.protection?.appliedMode ?? "enforce" : "not_ready",
+    protection: value.protection,
     version_summary: value.versionSummary,
     traffic_versions: trafficVersions,
     latest_validation_run: latestValidation,
@@ -175,6 +176,10 @@ export async function getGuardrails(): Promise<Collection<Guardrail>> {
   const items = guardrails.items.map((item) => mapGuardrail(item, routers.items));
   return { items, count: items.length };
 }
+
+export const updateGuardrailProtectionMode = (id: string, input: { mode: import("../../shared/protection-mode").ProtectionMode; expectedGeneration: number; reason: string }) =>
+  controllerApi.requestController<import("../../shared/protection-mode").ProtectionModeSettings>(`/api/v1/guardrails/${encodeURIComponent(id)}/protection-mode`,
+    { method: "PATCH", body: JSON.stringify(input) });
 
 export async function getGuardrail(id: string): Promise<Guardrail> {
   const [guardrail, routers] = await Promise.all([

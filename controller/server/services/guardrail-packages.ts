@@ -1,3 +1,4 @@
+import { resetProtectionMode } from "../../shared/protection-mode.js";
 import { clearGuardrailOperationalData } from "./guardrail-operational-data.js";
 import { assertGuardrailVersionCapacity, guardrailVersionLimitIssue } from "./guardrail-version-limit.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -222,7 +223,7 @@ export class GuardrailPackageService {
           .where(eq(controllerState.id, "singleton")).returning();
         if (!state) throw new Error("Controller state is not initialized.");
         await tx.update(guardrails).set({
-          deletedAt: null, deletedBy: null, deleteReason: null, status: "draft",
+          deletedAt: null, deletedBy: null, deleteReason: null, status: "draft", ...resetProtectionMode, protectionModeGeneration: state.desiredGeneration,
           desiredGeneration: state.desiredGeneration, updatedAt: new Date(),
         }).where(eq(guardrails.id, manifest.guardrail.id));
         await tx.insert(auditEvents).values({

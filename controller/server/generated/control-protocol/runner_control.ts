@@ -34,6 +34,8 @@ import type { GuardrailPlan as _tasklattice_guard_control_v1_GuardrailPlan, Guar
 import type { GuardrailPlanModule as _tasklattice_guard_control_v1_GuardrailPlanModule, GuardrailPlanModule__Output as _tasklattice_guard_control_v1_GuardrailPlanModule__Output } from './tasklattice/guard/control/v1/GuardrailPlanModule.js';
 import type { GuardrailPlanStep as _tasklattice_guard_control_v1_GuardrailPlanStep, GuardrailPlanStep__Output as _tasklattice_guard_control_v1_GuardrailPlanStep__Output } from './tasklattice/guard/control/v1/GuardrailPlanStep.js';
 import type { GuardrailPolicyBinding as _tasklattice_guard_control_v1_GuardrailPolicyBinding, GuardrailPolicyBinding__Output as _tasklattice_guard_control_v1_GuardrailPolicyBinding__Output } from './tasklattice/guard/control/v1/GuardrailPolicyBinding.js';
+import type { GuardrailProtectionResult as _tasklattice_guard_control_v1_GuardrailProtectionResult, GuardrailProtectionResult__Output as _tasklattice_guard_control_v1_GuardrailProtectionResult__Output } from './tasklattice/guard/control/v1/GuardrailProtectionResult.js';
+import type { GuardrailProtectionState as _tasklattice_guard_control_v1_GuardrailProtectionState, GuardrailProtectionState__Output as _tasklattice_guard_control_v1_GuardrailProtectionState__Output } from './tasklattice/guard/control/v1/GuardrailProtectionState.js';
 import type { ModelRuntime as _tasklattice_guard_control_v1_ModelRuntime, ModelRuntime__Output as _tasklattice_guard_control_v1_ModelRuntime__Output } from './tasklattice/guard/control/v1/ModelRuntime.js';
 import type { PolicyActionReference as _tasklattice_guard_control_v1_PolicyActionReference, PolicyActionReference__Output as _tasklattice_guard_control_v1_PolicyActionReference__Output } from './tasklattice/guard/control/v1/PolicyActionReference.js';
 import type { PolicyRailBinding as _tasklattice_guard_control_v1_PolicyRailBinding, PolicyRailBinding__Output as _tasklattice_guard_control_v1_PolicyRailBinding__Output } from './tasklattice/guard/control/v1/PolicyRailBinding.js';
@@ -115,6 +117,8 @@ export interface ProtoGrpcType {
           GuardrailPlanModule: MessageTypeDefinition<_tasklattice_guard_control_v1_GuardrailPlanModule, _tasklattice_guard_control_v1_GuardrailPlanModule__Output>
           GuardrailPlanStep: MessageTypeDefinition<_tasklattice_guard_control_v1_GuardrailPlanStep, _tasklattice_guard_control_v1_GuardrailPlanStep__Output>
           GuardrailPolicyBinding: MessageTypeDefinition<_tasklattice_guard_control_v1_GuardrailPolicyBinding, _tasklattice_guard_control_v1_GuardrailPolicyBinding__Output>
+          GuardrailProtectionResult: MessageTypeDefinition<_tasklattice_guard_control_v1_GuardrailProtectionResult, _tasklattice_guard_control_v1_GuardrailProtectionResult__Output>
+          GuardrailProtectionState: MessageTypeDefinition<_tasklattice_guard_control_v1_GuardrailProtectionState, _tasklattice_guard_control_v1_GuardrailProtectionState__Output>
           ModelRuntime: MessageTypeDefinition<_tasklattice_guard_control_v1_ModelRuntime, _tasklattice_guard_control_v1_ModelRuntime__Output>
           OutputDeliveryMode: EnumTypeDefinition
           PolicyActionReference: MessageTypeDefinition<_tasklattice_guard_control_v1_PolicyActionReference, _tasklattice_guard_control_v1_PolicyActionReference__Output>

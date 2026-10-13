@@ -53,12 +53,14 @@ export function graph(kind: StateMachineKind, zh: boolean): Graph {
   const edge = (path: string, x: number, y: number, chinese: string, english: string): Edge => ({ path, x, y, label: label(chinese, english) });
   switch (kind) {
     case "guardrail-readiness": return {
-      title: label("Guardrail 就绪性：独立于草稿与流量", "Guardrail readiness: separate from draft and traffic"),
-      caption: label("Ready 要求至少一个 Released 版本及仍保留的匹配 Passed 报告。修改草稿、复测失败或移除路由本身不改变就绪性。", "Ready needs at least one Released version with retained matching Passed evidence. Draft edits, failed retests or routing removal alone do not change readiness."),
-      height: 240,
-      nodes: [node("not_ready", 85, 65, "neutral"), node("ready", 660, 65, "healthy")],
-      edges: [edge("M245 92 L660 92", 452, 72, "发布且保留通过依据", "Release with passing evidence"),
-        edge("M660 119 Q450 230 245 119", 452, 195, "最后一个合格版本或依据移除", "Last qualifying version or evidence removed")],
+      title: label("Guardrail 防护状态", "Guardrail protection states"),
+      caption: label("后三种状态均满足就绪条件，可相互切换。删除最后一个合格版本或通过依据后，任一模式回到 Not ready；再次发布默认 Enforce。版本发布和测试流程不变。", "Enforce, Monitor and Bypass all imply readiness and can switch to one another. Losing the last qualifying release or its evidence returns any mode to Not ready; the next release defaults to Enforce. Publication and tests are unchanged."),
+      height: 360,
+      nodes: [node("Not ready", 40, 45, "neutral"), node("Enforce", 380, 45, "healthy"), node("Monitor", 220, 235, "change"), node("Bypass", 700, 235, "change")],
+      edges: [edge("M200 72 L380 72", 290, 52, "发布 + 通过依据", "Release + passing evidence"),
+        edge("M415 99 L330 235", 325, 165, "观察", "Monitor"), edge("M365 235 L450 99", 450, 175, "恢复防护", "Restore"),
+        edge("M510 99 L750 235", 660, 146, "应急放行", "Bypass"), edge("M700 235 L480 99", 570, 190, "恢复防护", "Restore"),
+        edge("M380 251 L700 251", 540, 237, "应急放行", "Bypass"), edge("M700 274 L380 274", 540, 302, "观察", "Monitor")],
     };
     case "guardrail-lifecycle": return {
       title: label("Guardrail 资源生命周期", "Guardrail resource lifecycle"),

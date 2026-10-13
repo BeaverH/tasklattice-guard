@@ -671,6 +671,9 @@ class ProtectionDecision:
     effective_release_id: str | None = None
     model_revision_id: str | None = None
     route_assignment: dict[str, Any] | None = None
+    protection_mode: Literal["enforce", "monitor", "bypass"] = "enforce"
+    detection_decision: str | None = None
+    detection_error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

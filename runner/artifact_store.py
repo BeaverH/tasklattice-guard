@@ -60,6 +60,13 @@ class ArtifactStore:
         self._nemo_version = importlib.metadata.version("nemoguardrails")
         self._state_path = state_path
         self._lock = threading.RLock()
+        self._protection_modes: dict[str, str] = {}
+        self._protection_generation = 0
+        protection_path = state_path / "protection-modes.pb"
+        if protection_path.exists():
+            protection = protocol.GuardrailProtectionState()
+            protection.ParseFromString(protection_path.read_bytes())
+            self.apply_protection_modes(protection, persist=False)
         # Serialize writers without holding the reader lock during NeMo work.
         self._apply_lock = threading.Lock()
         self._registry: NeMoRuntimeRegistry | None = None
@@ -91,6 +98,34 @@ class ArtifactStore:
     def generation(self) -> int:
         with self._lock:
             return self._generation
+
+    @property
+    def protection_generation(self) -> int:
+        with self._lock:
+            return self._protection_generation
+
+    def protection_mode(self, guardrail_id: str) -> str:
+        with self._lock:
+            return self._protection_modes.get(guardrail_id, "enforce")
+
+    def apply_protection_modes(self, state, *, persist: bool = True) -> None:
+        """Apply independently of model leases, runtime builds and Artifact loading."""
+        modes = dict(state.modes)
+        if any(not key or mode not in {"enforce", "monitor", "bypass"} for key, mode in modes.items()):
+            raise ValueError("Invalid Guardrail protection mode.")
+        with self._lock:
+            if state.generation < self._protection_generation:
+                raise ValueError("Protection generation is older than the applied generation.")
+            if state.generation == self._protection_generation and self._protection_generation and modes != self._protection_modes:
+                raise ValueError("Protection generation already contains different settings.")
+            if persist:
+                self._state_path.mkdir(parents=True, exist_ok=True)
+                target = self._state_path / "protection-modes.pb"
+                temporary = target.with_suffix(".tmp")
+                temporary.write_bytes(state.SerializeToString())
+                temporary.replace(target)
+            self._protection_modes = modes
+            self._protection_generation = int(state.generation)
 
     def observability_counts(self) -> tuple[int, int, int]:
         """Return loaded artifact, composed Route, and Endpoint counts."""

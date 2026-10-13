@@ -133,16 +133,12 @@ class RunnerControlClient:
             self._write_messages(response_stream), name="guard-control-writer",
         )
         try:
-            async for message in response_stream:
-                self._connected.set()
-                self._metrics.set_control_state(connected=True)
-                message_type = message.WhichOneof("body") or "unknown"
-                try:
-                    await self._handle(message)
-                    self._metrics.observe_control_message("received", message_type)
-                except Exception:
-                    self._metrics.observe_control_message("received", message_type, "error")
-                    raise
+            await self._receive_messages(response_stream)
+        except ExceptionGroup as errors:
+            # Preserve the transport error contract for callers and reconnect logic.
+            if len(errors.exceptions) == 1:
+                raise errors.exceptions[0] from None
+            raise
         finally:
             response_stream.cancel()
             sender.cancel()
@@ -155,6 +151,36 @@ class RunnerControlClient:
             self._capability_tasks.clear()
             await asyncio.gather(heartbeat, sender, return_exceptions=True)
             await channel.close()
+
+    async def _receive_messages(self, stream) -> None:
+        # Keep ordinary commands ordered while emergency modes can overtake
+        # model preparation or version tests already in progress.
+        pending = asyncio.Queue(maxsize=64)
+
+        async def handle(message):
+            kind = message.WhichOneof("body") or "unknown"
+            try:
+                await self._handle(message)
+                self._metrics.observe_control_message("received", kind)
+            except Exception:
+                self._metrics.observe_control_message("received", kind, "error")
+                raise
+
+        async def consume():
+            while (message := await pending.get()) is not None:
+                await handle(message)
+
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(consume())
+            async for message in stream:
+                self._connected.set()
+                self._metrics.set_control_state(connected=True)
+                if message.WhichOneof("body") == "protection_state":
+                    await handle(message)
+                else:
+                    # Reconnect on overflow instead of blocking mode delivery.
+                    pending.put_nowait(message)
+            await pending.put(None)
 
     async def _write_messages(self, stream) -> None:
         async for message in self._messages(self._registration()):
@@ -184,6 +210,7 @@ class RunnerControlClient:
                 boot_id=self._boot_id,
                 sequence=self._sequence,
                 applied_generation=self._store.generation,
+                applied_protection_generation=self._store.protection_generation,
                 load=self._metrics.heartbeat(),
             ),
         ))
@@ -194,6 +221,16 @@ class RunnerControlClient:
         if body == "registration_accepted":
             self._heartbeat_interval = max(2, message.registration_accepted.heartbeat_interval_seconds)
             self._metrics.set_desired_generation(message.registration_accepted.desired_generation)
+        elif body == "protection_state":
+            state = message.protection_state
+            reason, accepted = "", True
+            try:
+                self._store.apply_protection_modes(state)
+            except Exception as error:
+                reason, accepted = str(error) or type(error).__name__, False
+            await self._send(protocol.RunnerMessage(message_id=str(uuid.uuid4()), sent_at_unix_ms=_now_ms(),
+                protection_result=protocol.GuardrailProtectionResult(runner_id=self._settings.runner_id,
+                    generation=state.generation, accepted=accepted, reason=reason)))
         elif body == "desired_state":
             await self._apply_desired_state(message.desired_state)
         elif body == "validation_request":
@@ -494,11 +531,12 @@ class RunnerControlClient:
                 boot_id=self._boot_id,
                 pool_id=self._settings.pool_id,
                 runner_version=SOFTWARE_VERSION["version"],
-                labels={"tasklattice.build": json.dumps(SOFTWARE_VERSION)},
+                labels={"tasklattice.build": json.dumps(SOFTWARE_VERSION), "tasklattice.protection-modes": "1"},
                 nemo_version=importlib.metadata.version("nemoguardrails"),
                 max_concurrency=self._settings.max_concurrency,
                 compiler_capable=self._settings.compiler_capable,
                 applied_generation=self._store.generation,
+                applied_protection_generation=self._store.protection_generation,
             ),
         )
 

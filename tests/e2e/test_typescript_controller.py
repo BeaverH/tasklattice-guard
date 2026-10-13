@@ -65,6 +65,8 @@ async def test_typescript_controller_distributes_signed_artifact_or_rejects_inva
                 result = json.loads(await asyncio.wait_for(process.stdout.readline(), 15))
                 assert result == {"type": "ack", "desiredGeneration": 1, "distributionStatus": "ready"}
                 assert store.generation == 1 and client.synchronized
+                assert store.protection_generation == 1
+                assert store.protection_mode(artifact.guardrail_id) == "bypass"
                 assert store.observability_counts() == (1, 0, 0)
                 assert store.plan(artifact.guardrail_id, artifact.guardrail_version).guardrail_id == artifact.guardrail_id
                 assert registry.readiness()["ready"]

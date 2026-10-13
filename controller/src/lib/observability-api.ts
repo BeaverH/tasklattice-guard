@@ -63,6 +63,9 @@ function runtimeLogEntry(event: controllerApi.RuntimeEvent): RuntimeLogInteracti
     risk: runtimeFindings(event)[0]?.risk ?? arrayOfStrings(event.metadata.risks)[0] ?? null,
     latency_ms: event.durationMs,
     timed_out: isTimedOut(event),
+    protection_mode: event.metadata.protectionMode === "monitor" ? "monitor" : event.metadata.protectionMode === "bypass" ? "bypass" : "enforce",
+    detection_decision: stringValue(event.metadata.detectionDecision),
+    detection_error: stringValue(event.metadata.detectionError),
     execution_status: hasRuntimeError(event) ? "error" : event.metadata.executionStatus === "complete" ? "complete" : "unknown",
     ...(event.metadata.logKind === "call_completion" ? { call_completion: {
       inferred: event.metadata.completionInferred === true, reason: stringValue(event.metadata.failureReason),

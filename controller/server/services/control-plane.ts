@@ -13,6 +13,8 @@ import type { EventSeverity } from "../../shared/security-severity.js";
 import { readGuardrailProfiles } from "./guardrail-profiles.js";
 import { expandProtectionPreset } from "../policy-catalog/presets.js";
 import { TrafficRoutingService } from "./traffic-routing.js";
+import { ProtectionModeService } from "./protection-modes.js";
+import { resetProtectionMode } from "../../shared/protection-mode.js";
 import { GuardrailPackageService } from "./guardrail-packages.js";
 import { PolicyResourceService } from "./policy-resources.js";
 import type { ArtifactAdmission } from "../domain/environment-check.js";
@@ -118,6 +120,7 @@ export class ControlPlaneService {
     return this.resources ??= new PolicyResourceService(this.db, this.config.policyCatalogDir, () => this.policyCatalog().list());
   }
   readonly trafficRouting: TrafficRoutingService;
+  readonly protectionModes: ProtectionModeService;
   readonly packages: GuardrailPackageService;
   private catalog: PolicyCatalog | null = null;
   private readonly runtimeLogEncryptionKey: Buffer | null;
@@ -127,6 +130,7 @@ export class ControlPlaneService {
     private readonly config: ControllerConfig,
   ) {
     this.trafficRouting = new TrafficRoutingService(db);
+    this.protectionModes = new ProtectionModeService(db, config.offlineAfterSeconds);
     this.packages = new GuardrailPackageService(db, config, () => this.policyCatalog().list());
     this.runtimeLogEncryptionKey = decodeRuntimeLogKey(config.runtimeLogEncryptionKey);
   }
@@ -964,7 +968,13 @@ export class ControlPlaneService {
       await pruneTestingReports(tx, input.guardrailId);
       const [remaining] = await tx.select({ version: guardrailVersions.version }).from(guardrailVersions)
         .where(and(eq(guardrailVersions.guardrailId, input.guardrailId), eq(guardrailVersions.status, "ready"))).limit(1);
-      if (!remaining) await tx.update(guardrails).set({ status: "draft", updatedAt: new Date() }).where(eq(guardrails.id, input.guardrailId));
+      if (!remaining) {
+        const [state] = await tx.update(controllerState).set({ desiredGeneration: increment(controllerState.desiredGeneration), updatedAt: new Date() })
+          .where(eq(controllerState.id, "singleton")).returning();
+        if (!state) throw new Error("Controller state is not initialized.");
+        await tx.update(guardrails).set({ status: "draft", ...resetProtectionMode, protectionModeGeneration: state.desiredGeneration, desiredGeneration: state.desiredGeneration, updatedAt: new Date() }).where(eq(guardrails.id, input.guardrailId));
+        await tx.insert(outboxEvents).values({ id: randomUUID(), kind: "runner.desired_state_changed", aggregateId: input.guardrailId, payload: { guardrailId: input.guardrailId } });
+      }
     });
   }
 
@@ -1160,7 +1170,7 @@ export class ControlPlaneService {
         const [state] = await tx.update(controllerState).set({ desiredGeneration: increment(controllerState.desiredGeneration), updatedAt: new Date() })
           .where(eq(controllerState.id, "singleton")).returning();
         if (!state) throw new Error("Controller state is not initialized.");
-        await tx.update(guardrails).set({ status: remaining ? "active" : "draft", desiredGeneration: state.desiredGeneration, updatedAt: new Date() })
+        await tx.update(guardrails).set({ status: remaining ? "active" : "draft", ...(!remaining ? { ...resetProtectionMode, protectionModeGeneration: state.desiredGeneration } : {}), desiredGeneration: state.desiredGeneration, updatedAt: new Date() })
           .where(eq(guardrails.id, run.guardrailId));
         await tx.insert(outboxEvents).values({ id: randomUUID(), kind: "runner.desired_state_changed", aggregateId: run.guardrailId,
           payload: { guardrailId: run.guardrailId, version: run.guardrailVersion, generation: state.desiredGeneration, released: false } });
@@ -1814,7 +1824,7 @@ export class ControlPlaneService {
     return boundedRead(this.db, async tx => {
     const findingSummary = jsonObject(Object.fromEntries(['id','risk','verdict','confidence','taxonomyId','recommendedAction','policyId','ruleId','riskSeverity','policyVersion'].map(key => [key, jsonValue(findings.item, key)])));
     const metadata = jsonObject({
-      ...Object.fromEntries(['executionStatus','captureLevel','runtimeLogCaptured','protocol','action','timedOut','timed_out','streamFinalCheck','routeId','targetId','routerRevision','decisionId','logKind','completionInferred','failureReason','completedAt'].map(key => [key,jsonValue(runtimeEvents.metadata, key)])),
+      ...Object.fromEntries(['protectionMode','detectionDecision','detectionError','executionStatus','captureLevel','runtimeLogCaptured','protocol','action','timedOut','timed_out','streamFinalCheck','routeId','targetId','routerRevision','decisionId','logKind','completionInferred','failureReason','completedAt'].map(key => [key,jsonValue(runtimeEvents.metadata, key)])),
       executionStatus: sql`CASE WHEN ${executionError} THEN 'error' ELSE ${jsonText(runtimeEvents.metadata, 'executionStatus')} END`,
       findings: scalar(tx.select({ value: jsonAggregate(findingSummary) }).from(findings.source)),
     });
@@ -1999,7 +2009,7 @@ export class ControlPlaneService {
         .where(eq(controllerState.id, "singleton")).returning();
       if (!state) throw new Error("Controller state is not initialized.");
       const disabled = await tx.update(guardrails).set({
-        status: "disabled", deletedAt: new Date(), deletedBy: input.actorId,
+        status: "disabled", ...resetProtectionMode, protectionModeGeneration: state.desiredGeneration, deletedAt: new Date(), deletedBy: input.actorId,
         deleteReason: input.reason, desiredGeneration: state.desiredGeneration, updatedAt: new Date(),
       }).where(and(eq(guardrails.id, input.id), isNull(guardrails.deletedAt))).returning({ id: guardrails.id });
       if (!disabled[0]) throw new NotFoundError("Guardrail", input.id);
@@ -2101,6 +2111,9 @@ export class ControlPlaneService {
         labels: input.labels,
         desiredGeneration,
         appliedGeneration: input.appliedGeneration,
+        protectionGeneration: 0,
+        protectionRejectedGeneration: 0,
+        protectionError: null,
         heartbeatSequence: 0,
         status: input.appliedGeneration === desiredGeneration ? "ready" : "syncing",
         connectedAt: new Date(),
@@ -2694,11 +2707,15 @@ export class ControlPlaneService {
       hasUnpublishedChanges = !sameDraftContent(published.sourceSnapshot, { draftConfig: row.draftConfig, runtimeProfile: row.runtimeProfile,
         loggingLevel: row.loggingLevel, excludedTestCaseIds: row.excludedTestCaseIds, testCases: cases });
     }
-    const { duplicateKey: _duplicateKey, copyOrigin, ...publicRow } = row;
+    const { duplicateKey: _duplicateKey, copyOrigin,
+      protectionMode: _mode, protectionModeApplied: _appliedMode, protectionModeGeneration: _modeGeneration,
+      protectionModeUpdatedAt: _modeUpdatedAt, protectionModeUpdatedBy: _modeUpdatedBy, protectionModeReason: _modeReason,
+      ...publicRow } = row;
     const { requestDigest: _requestDigest, ...publicOrigin } = copyOrigin ?? {};
     return {
       ...publicRow,
       readiness: released > 0 && row.status !== "disabled" ? "ready" as const : "not_ready" as const,
+      protection: await this.protectionModes.summary(row, released > 0 && row.status !== "disabled"),
       versionSummary,
       baselineVersion,
       copyOrigin: copyOrigin ? publicOrigin : null,
@@ -2744,7 +2761,7 @@ export class ControlPlaneService {
       createdAt: endpoint.createdAt,
       updatedAt: endpoint.updatedAt,
       credentials: publicEndpointCredentials(endpoint.verification),
-      setup: endpointSetup(this.config.runtimePublicUrl ?? this.config.runtimeServiceUrl, endpoint.id, endpoint.adapter),
+      setup: endpointSetup(this.config.runtimePublicUrl ?? new URL(this.config.publicUrl).origin, endpoint.id, endpoint.adapter),
     };
   }
 

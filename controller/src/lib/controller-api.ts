@@ -136,6 +136,7 @@ export type GuardrailDraftConfig = {
 };
 
 export type Guardrail = {
+  protection?: import("../../shared/protection-mode").ProtectionModeSettings;
   copyOrigin?: { sourceGuardrailId: string; sourceName: string; sourceVersion: string | null; sourceDraftRevision: number | null; copiedAt: string; contentDigest: string } | null;
   id: string;
   name: string;

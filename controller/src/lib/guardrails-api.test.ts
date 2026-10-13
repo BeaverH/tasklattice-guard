@@ -52,7 +52,7 @@ describe("Guardrail resource summaries", () => {
     api.listControllerRouters.mockResolvedValue({ items: [] });
     const result = await getGuardrails();
     expect(result.items.map(item => ({ status: item.status, count: item.published_version_count, changes: item.has_unpublished_changes }))).toEqual([
-      { status: "not_ready", count: 2, changes: true }, { status: "ready", count: 3, changes: true },
+      { status: "not_ready", count: 2, changes: true }, { status: "enforce", count: 3, changes: true },
     ]);
   });
 });

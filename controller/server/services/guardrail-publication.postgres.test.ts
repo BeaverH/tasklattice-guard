@@ -373,4 +373,64 @@ describe.skipIf(!url)("Publishing the tested candidate in PostgreSQL", () => {
     expect((await database.pool.query("SELECT status FROM guardrail_version WHERE guardrail_id=$1", [guardrail.id])).rows).toEqual([{ status: "ready" }]);
   });
 
+  it("applies operating modes only after all Runner ACKs, with concurrency and readiness checks", async () => {
+    const { guardrail, version } = await releasedFixture();
+    await database.pool.query("INSERT INTO runner_pool (id, name) VALUES ('mode-test', 'Mode test')");
+    await database.pool.query(`INSERT INTO runner_instance (runner_id, boot_id, pool_id, status, runner_version, nemo_version, max_concurrency, labels)
+      SELECT name, 'boot-' || name, 'mode-test', 'ready', 'test', 'test', 4, '{"tasklattice.protection-modes":"1"}'::jsonb FROM unnest(ARRAY['mode-a', 'mode-b']) AS name`);
+    try {
+      const artifactsBefore = (await database.pool.query("SELECT * FROM guardrail_artifact WHERE guardrail_id=$1", [guardrail.id])).rows;
+      const versionsBefore = (await database.pool.query("SELECT * FROM guardrail_version WHERE guardrail_id=$1", [guardrail.id])).rows;
+      const update = (mode: "enforce" | "monitor" | "bypass", expectedGeneration = 0) => service.protectionModes.update({ id: guardrail.id, mode, expectedGeneration, reason: "upstream incident", actorId: "admin" });
+      const changed = await update("bypass");
+      expect(changed).toMatchObject({ mode: "bypass", appliedMode: "enforce", status: "applying", applied: 0, total: 2, updatedBy: "Admin" });
+      await expect(update("monitor")).rejects.toMatchObject({ code: "protection_mode_conflict" });
+      const ack = (runnerId: string, accepted = true, generation = changed.generation, bootId = `boot-${runnerId}`) => service.protectionModes.recordResult({ runnerId, bootId, generation, accepted, reason: "disk failure" });
+      await ack("mode-a", true, changed.generation, "stale-boot");
+      expect((await service.protectionModes.get(guardrail.id)).applied).toBe(0);
+      await ack("mode-a");
+      await ack("mode-b", false);
+      expect(await service.protectionModes.get(guardrail.id)).toMatchObject({ status: "partial", applied: 1, appliedMode: "enforce", runners: [{ status: "applied" }, { status: "failed" }] });
+      await ack("mode-b", true, changed.generation - 1);
+      expect((await service.protectionModes.get(guardrail.id)).applied).toBe(1);
+      await ack("mode-b");
+      expect(await service.protectionModes.get(guardrail.id)).toMatchObject({ status: "applied", appliedMode: "bypass", applied: 2 });
+      expect((await service.protectionModes.desiredState()).modes[guardrail.id]).toBe("bypass");
+      expect((await database.pool.query("SELECT * FROM guardrail_artifact WHERE guardrail_id=$1", [guardrail.id])).rows).toEqual(artifactsBefore);
+      expect((await database.pool.query("SELECT * FROM guardrail_version WHERE guardrail_id=$1", [guardrail.id])).rows).toEqual(versionsBefore);
+      // A new version test still queues the signed Artifact and frozen real cases.
+      const report = await versionReport(guardrail.id, version.version);
+      expect(report.subject).toBe("version");
+      expect((await service.protectionModes.get(guardrail.id)).mode).toBe("bypass");
+      expect(JSON.stringify(parsePackage((await service.packages.exportPackage(guardrail.id, [version.version])).bytes).manifest)).not.toContain("protectionMode");
+      const history = (await database.pool.query("SELECT detail FROM audit_event WHERE resource_id=$1 AND kind='guardrail.protection_mode_changed'", [guardrail.id])).rows;
+      expect(history).toEqual([{ detail: { previousMode: "enforce", mode: "bypass", reason: "upstream incident", generation: changed.generation } }]);
+      await update("monitor", changed.generation);
+      await service.deleteGuardrailVersion({ guardrailId: guardrail.id, version: version.version, actorId: "admin" });
+      const reset = await service.protectionModes.get(guardrail.id);
+      expect(reset).toMatchObject({ ready: false, mode: "enforce", appliedMode: "enforce" });
+      expect(reset.generation).toBeGreaterThan(changed.generation);
+      expect((await service.protectionModes.desiredState()).modes[guardrail.id]).toBeUndefined();
+      await expect(update("bypass", reset.generation)).rejects.toMatchObject({ code: "guardrail_not_ready" });
+    } finally {
+      await database.pool.query("DELETE FROM runner_instance WHERE pool_id='mode-test'");
+      await database.pool.query("DELETE FROM runner_pool WHERE id='mode-test'");
+    }
+  });
+
+  it("preserves modes across publication and resets them on last evidence removal", async () => {
+    const { guardrail, version } = await releasedFixture();
+    await service.protectionModes.update({ id: guardrail.id, mode: "monitor", expectedGeneration: 0, reason: "observe", actorId: "admin" });
+    await database.pool.query("UPDATE guardrail SET draft_revision=draft_revision+1 WHERE id=$1", [guardrail.id]);
+    const run = await service.requestValidation({ guardrailId: guardrail.id, actorId: "admin", compilerAvailable: true });
+    await expect(service.requestGuardrailPublish({ guardrailId: guardrail.id, actorId: "admin" })).rejects.toMatchObject({ code: "guardrail_validation_required" });
+    await service.completeValidation({ runId: run.id, status: "passed", metrics: emptyValidationMetrics(run.metrics.total), results: [], candidateArtifact: await runnerCandidate(run.id) });
+    await service.requestGuardrailPublish({ guardrailId: guardrail.id, actorId: "admin" });
+    expect((await service.protectionModes.get(guardrail.id)).mode).toBe("monitor");
+    await service.deleteGuardrailVersion({ guardrailId: guardrail.id, version: version.version, actorId: "admin" });
+    expect((await service.protectionModes.get(guardrail.id)).mode).toBe("monitor");
+    await service.deleteTestingReport({ runId: run.id, actorId: "admin", expectedPendingVersion: run.guardrailVersion });
+    expect(await service.protectionModes.get(guardrail.id)).toMatchObject({ ready: false, mode: "enforce" });
+  });
+
 });
