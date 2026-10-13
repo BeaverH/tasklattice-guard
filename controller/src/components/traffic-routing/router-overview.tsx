@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Cable, GitBranch, ShieldCheck } from "lucide-react";
+import { ArrowRight, Cable, GitBranch, RefreshCw, ShieldCheck } from "lucide-react";
 import type { Endpoint } from "@/lib/api";
 import type {
   RouterRevision,
@@ -20,12 +20,16 @@ export function RouterOverview({
   onEndpoints,
   onRouting,
   canEdit,
+  refreshing,
+  onRefresh,
 }: {
   router: TrafficRouter;
   endpoints: Endpoint[];
   guardrails: Names;
   revisions: RouterRevision[];
   canEdit: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
   onRule: (id: string) => void;
   onEndpoints: () => void;
   onRouting: () => void;
@@ -38,6 +42,7 @@ export function RouterOverview({
       <section className="router-overview-panel router-flow-panel" aria-label={localize("routing.trafficFlow")}>
         <header className="router-panel-heading">
           <div><h2>{localize("routing.trafficFlow")}</h2><p>{snapshot ? localize("routing.flowDescription", { revision: revisionLabel(revision) }) : localize("routing.noRevisionHasBeenPublishedDraftRulesAreNot")}</p></div>
+          <Button variant="ghost" size="lg" disabled={refreshing} aria-busy={refreshing} onClick={onRefresh}><RefreshCw aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : undefined} />{localize("resourceList.refresh")}</Button>
         </header>
         {!endpoints.length && <div className="router-endpoint-notice"><Cable aria-hidden="true" /><p>{localize("routing.noEndpointsAreAttachedToThisRouter")}</p><Button variant="ghost" onClick={onEndpoints}>{canEdit ? localize("routing.attachEndpoint") : localize("routing.viewEndpoints")}</Button></div>}
         {snapshot ? <TrafficFlow snapshot={snapshot} endpoints={endpoints} guardrails={guardrails} onRule={onRule} /> : <div className="router-flow-empty">

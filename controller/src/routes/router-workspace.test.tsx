@@ -12,7 +12,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterWorkspace } from "./router-detail";
 import type { TrafficRouter, RouterChangeRequest, RouterDraft } from "@/lib/traffic-routing-api";
-const { save, preview, publish, approve, emergencyApply, withdraw, revert, role, requestRows, changeDetail } = vi.hoisted(() => ({
+const { save, preview, publish, approve, emergencyApply, withdraw, revert, role, requestRows, changeDetail, getEndpoints } = vi.hoisted(() => ({
+  getEndpoints: vi.fn(),
   requestRows: { items: [] as RouterChangeRequest[] },
   changeDetail: vi.fn(),
   save: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock("@tanstack/react-router", async () => {
   };
 });
 vi.mock("@/lib/endpoints-api", () => ({
-  getEndpoints: async () => ({ items: [] }),
+  getEndpoints,
 }));
 vi.mock("@/lib/controller-api", async (original) => ({
   ...(await original<typeof import("@/lib/controller-api")>()),
@@ -178,6 +179,7 @@ async function edit() {
 
 describe("Router detail workflow", () => {
   beforeEach(() => {
+    getEndpoints.mockResolvedValue({ items: [] });
     role.value = "admin";
     role.id = "submitter";
     requestRows.items = [];
@@ -214,8 +216,31 @@ describe("Router detail workflow", () => {
   });
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+  it("refreshes endpoint data on demand and preserves the flow while fetching", async () => {
+    mount();
+    const refresh = await screen.findByRole("button", { name: "Refresh", exact: true });
+    const before = getEndpoints.mock.calls.length;
+    let finish!: (value: { items: [] }) => void;
+    getEndpoints.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    fireEvent.click(refresh);
+    await waitFor(() => expect(getEndpoints).toHaveBeenCalledTimes(before + 1));
+    await waitFor(() => expect(refresh.hasAttribute("disabled")).toBe(true));
+    expect(screen.getByRole("heading", { name: "Traffic Flow" })).toBeTruthy();
+    await act(async () => finish({ items: [] }));
+    await waitFor(() => expect(refresh.hasAttribute("disabled")).toBe(false));
+  });
+  it("refreshes the shared endpoints query every 30 seconds while Overview stays open", async () => {
+    vi.useFakeTimers();
+    mount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    const before = getEndpoints.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(getEndpoints).toHaveBeenCalledTimes(before + 1);
   });
   it("defaults to Overview with six tabs and read-only topology", async () => {
     mount();

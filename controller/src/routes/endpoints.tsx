@@ -1,3 +1,5 @@
+import { EndpointSetupBadge } from "@/components/endpoint-setup-badge";
+import { endpointsQueryOptions } from "@/features/endpoints-query";
 import { ResourceList } from "@/components/resource-list";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -43,7 +45,6 @@ import {
   deleteEndpoint,
   getEndpoint,
   getEndpointDeletionImpact,
-  getEndpoints,
   revokeEndpointCredential,
   rotateEndpointCredential,
   setEndpointEnabled,
@@ -54,7 +55,6 @@ import {
   type EndpointDeletionImpact,
   type EndpointProtocol,
   type EndpointRegistration,
-  type EndpointSetupStatus,
   type OneTimeEndpointCredential,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,7 @@ export function EndpointsPage({ endpointId, onEndpointChange }: {
   const { t, i18n } = useTranslation();
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: queryKeys.endpoints, queryFn: getEndpoints, refetchInterval: 30_000 });
+  const query = useQuery(endpointsQueryOptions());
   const [createOpen, setCreateOpen] = useState(false);
   const [localSelected, setLocalSelected] = useState<Endpoint | null>(null);
   const linkedEndpoint = useQuery({
@@ -207,7 +207,7 @@ function EndpointRow({ endpoint, onOpen }: { endpoint: Endpoint; onOpen: () => v
       </button>
       <span className="resource-secondary" title={`${t(`endpoints.adapters.${endpoint.adapter_id}`)} · ${endpoint.id}`}>{t(`endpoints.protocolShort.${endpoint.protocol}`)} · {shortId(endpoint.id)}</span>
     </TableCell>
-    <TableCell><SetupBadge status={endpoint.setup_status} /></TableCell>
+    <TableCell><EndpointSetupBadge status={endpoint.setup_status} /></TableCell>
     <TableCell><EndpointSuccessRate endpoint={endpoint} /></TableCell>
     <TableCell><span className="text-xs tabular-nums" title={t("endpoints.detectionP95Explanation")}>
       {endpoint.request_count > 0 && endpoint.detection_p95_ms != null ? `${endpoint.detection_p95_ms.toLocaleString(i18n.language)} ms` : "—"}
@@ -373,7 +373,7 @@ function EndpointDetailContent({
                 <p className="text-sm font-medium">{t(`endpoints.adapters.${endpoint.adapter_id}`)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{t("endpoints.createdAt", { date: formatDate(endpoint.created_at, i18n.language) })}</p>
               </div>
-              <SetupBadge status={endpoint.setup_status} />
+              <EndpointSetupBadge status={endpoint.setup_status} />
             </div>
             <Button asChild variant="testing" size="sm"><Link to="/playground" search={{ mode: "advanced", endpoint: endpoint.id }}><FlaskConical />{t("endpoints.testEndpoint")}</Link></Button>
           </div>
@@ -649,7 +649,7 @@ export function CreateEndpointSheet({
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">{t("endpoints.stepsComplete", { count: setupComplete })}</span>
-              <SetupBadge status={endpoint.setup_status} />
+              <EndpointSetupBadge status={endpoint.setup_status} />
             </div>
           </div>
           <SetupChecklist
@@ -1037,25 +1037,6 @@ function Detail({ children, copyValue, label, mono = false }: { children: ReactN
   );
 }
 
-function SetupBadge({ status }: { status: EndpointSetupStatus }) {
-  const { t } = useTranslation();
-  const verified = status === "verified";
-  const disabled = status === "disabled";
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "h-6 rounded-md px-2 text-[11px] font-medium",
-        verified && "border-emerald-200 bg-emerald-50 text-emerald-700",
-        !verified && !disabled && "border-amber-200 bg-amber-50 text-amber-700",
-        disabled && "bg-muted text-muted-foreground",
-      )}
-    >
-      <span className={cn("size-1.5 rounded-full bg-muted-foreground/50", verified && "bg-emerald-500", !verified && !disabled && "bg-amber-500")} />
-      {t(`endpoints.setupStatuses.${status}`)}
-    </Badge>
-  );
-}
 
 function AdapterOption({ adapterId }: { adapterId: EndpointAdapterId }) {
   const { t } = useTranslation();

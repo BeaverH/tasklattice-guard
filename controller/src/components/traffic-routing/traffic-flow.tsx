@@ -1,3 +1,4 @@
+import { EndpointSetupBadge } from "@/components/endpoint-setup-badge";
 import { createContext, useContext, useId, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { Handle, MarkerType, Position, ReactFlow, type NodeProps } from "@xyflow/react";
@@ -25,11 +26,10 @@ function TrafficNode({ data }: NodeProps<TrafficFlowNode>) {
   if (data.kind === "empty") return <div className="router-flow-card router-flow-card-empty"><Cable aria-hidden="true" /><span>{t("routing.noAttachedEndpoints2")}</span></div>;
   if (data.kind === "endpoint") {
     const e = data.endpoint;
-    const status = !e.enabled ? "disabled" : e.runtime_status === "healthy" ? "healthy2" : e.runtime_status === "degraded" ? "unhealthy" : "healthUnknown";
     return <>
       <Link to="/integration/endpoints" search={{ endpointId: e.id }} className="router-flow-card nodrag" title={e.name}>
         <span className="router-flow-title"><EndpointProtocolIcon protocol={e.protocol} size="sm" /><span>{e.name}</span></span>
-        <span className={`router-flow-status router-flow-status-${status}`}>● {t(`routing.${status}`)}</span>
+        <span><EndpointSetupBadge status={e.setup_status} /></span>
       </Link>
       {e.enabled && <Handle type="source" position={Position.Right} id="out" isConnectable={false} />}
     </>;
