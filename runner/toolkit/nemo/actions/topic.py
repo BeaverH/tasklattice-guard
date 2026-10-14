@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from runner.model_validation_diagnostics import record_validation_error, validation_http_hooks
 from ...runtime.contracts import RiskFinding
 from ...safety.taxonomy import taxonomy_for_evaluator
 from .contracts import ActionRequest, ActionResult, action_result
@@ -85,6 +86,7 @@ class ChatTopicEvaluator:
                     timeout=self._timeout_seconds,
                     transport=self._transport,
                     verify=not self._skip_tls_verify,
+                    event_hooks=validation_http_hooks(),
                 ) as client:
                     response = await client.post(
                         f"{self._base_url}/chat/completions",
@@ -113,6 +115,7 @@ class ChatTopicEvaluator:
             ValueError,
             json.JSONDecodeError,
         ) as error:
+            record_validation_error(error)
             return action_result(
                 request,
                 "error",
