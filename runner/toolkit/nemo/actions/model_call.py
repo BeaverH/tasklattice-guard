@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -15,6 +16,24 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from .contracts import ActionRequest, ModelCallResult, ModelCallUsage
+
+
+_COST_CALLS: ContextVar[list[ModelCallUsage] | None] = ContextVar("guard_cost_calls", default=None)
+
+
+def begin_cost_collection():
+    calls: list[ModelCallUsage] = []
+    return calls, _COST_CALLS.set(calls)
+
+
+def end_cost_collection(token):
+    _COST_CALLS.reset(token)
+
+
+def _collect_cost(usage: ModelCallUsage) -> None:
+    calls = _COST_CALLS.get()
+    if calls is not None:
+        calls.append(usage)
 
 
 _TRACER = trace.get_tracer("tasklattice.guard-runner.model")
@@ -69,9 +88,10 @@ def deactivate_native_model_observation(token: Any) -> None:
 class ObservedNeMoModel:
     """Privacy-safe metric/trace proxy for a NeMo-native LLMModel."""
 
-    def __init__(self, delegate: Any, role: str) -> None:
+    def __init__(self, delegate: Any, role: str, runtime_ref: str | None = None) -> None:
         self._delegate = delegate
         self._role = role
+        self.runtime_ref = runtime_ref
 
     @property
     def model_name(self) -> str:
@@ -117,6 +137,7 @@ class ObservedNeMoModel:
 def instrument_nemo_models(
     rails: Guardrails,
     model_roles: tuple[str, ...],
+    runtime_refs: dict[str, str] | None = None,
 ) -> None:
     """Wrap model action parameters on the pinned NeMo Guardrails runtime."""
     params = rails.runtime.registered_action_params
@@ -125,7 +146,7 @@ def instrument_nemo_models(
         model = params.get(parameter)
         if model is None or isinstance(model, ObservedNeMoModel):
             continue
-        rails.register_action_param(parameter, ObservedNeMoModel(model, role))
+        rails.register_action_param(parameter, ObservedNeMoModel(model, role, (runtime_refs or {}).get(role)))
 
 
 @dataclass(slots=True)
@@ -139,13 +160,20 @@ class _NativeModelCall:
     runtime_ref: str | None = None
     result: ModelCallResult = "success"
     error_type: str = "none"
+    call_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    usage_known: bool = False
+    cached_input_tokens: int = 0
+    unsupported_usage: bool = False
     input_tokens: int = 0
     output_tokens: int = 0
     finished: float = 0.0
 
     def complete(self, response: LLMResponse | LLMResponseChunk) -> None:
         usage = response.usage
+        self.unsupported_usage = self.unsupported_usage or (response.provider_metadata or {}).get("service_tier") not in (None, "default", "auto")
         if usage is not None:
+            self.usage_known = all(type(value) is int and value >= 0 for value in (usage.input_tokens, usage.output_tokens))
+            self.cached_input_tokens = max(0, usage.cached_tokens or 0)
             self.input_tokens = max(0, usage.input_tokens)
             self.output_tokens = max(0, usage.output_tokens)
 
@@ -173,6 +201,10 @@ class _NativeModelCall:
             runtime_ref=self.runtime_ref,
             started_offset_ms=started_offset_ms,
             finished_offset_ms=started_offset_ms + duration_ms,
+            call_id=self.call_id,
+            usage_known=self.usage_known,
+            cached_input_tokens=self.cached_input_tokens,
+            unsupported_usage=self.unsupported_usage,
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
             error_type=self.error_type,
@@ -189,6 +221,7 @@ def _observe_native_model_call(
         role=role,
         provider=str(model.provider_name or "unknown"),
         model=model.model_name,
+        runtime_ref=model.runtime_ref,
     ) as call:
         yield call
 
@@ -249,6 +282,7 @@ def observe_native_model_call(
         finally:
             call.finished = time.perf_counter()
             usage = call.usage
+            _collect_cost(usage)
             span.set_attribute("guardrail.model.result", usage.result)
             span.set_attribute("guardrail.model.duration_ms", usage.duration_ms)
             span.set_attribute("guardrail.model.error_type", usage.error_type)
@@ -276,6 +310,10 @@ class ModelCallTracker:
     runtime_ref: str | None = None
     result: ModelCallResult = "unknown_error"
     error_type: str = "none"
+    call_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    usage_known: bool = False
+    cached_input_tokens: int = 0
+    unsupported_usage: bool = False
     input_tokens: int = 0
     output_tokens: int = 0
     retries: int = 0
@@ -299,6 +337,20 @@ class ModelCallTracker:
         self.backoff_ms = max(0, backoff_ms)
         self.time_to_first_token_ms = time_to_first_token_ms
         self.input_tokens, self.output_tokens = _tokens(payload)
+        usage = payload.get("usage") if isinstance(payload, dict) else None
+        self.usage_known = isinstance(usage, dict) and all(
+            type(value) is int and value >= 0 for value in (
+                usage.get("prompt_tokens", usage.get("input_tokens")),
+                usage.get("completion_tokens", usage.get("output_tokens")),
+            )
+        )
+        if isinstance(usage, dict):
+            details = usage.get("prompt_tokens_details") or usage.get("input_tokens_details") or {}
+            self.cached_input_tokens = _non_negative_int(details.get("cached_tokens", 0)) if isinstance(details, dict) else 0
+            self.unsupported_usage = payload.get("service_tier") not in (None, "default", "auto") or bool(usage.get("cache_creation_input_tokens")) or any(
+                isinstance(usage.get(key), dict) and _non_negative_int(usage[key].get("audio_tokens", 0)) > 0
+                for key in ("prompt_tokens_details", "completion_tokens_details", "input_tokens_details", "output_tokens_details")
+            )
 
     def fail(self, error: BaseException) -> None:
         self.result, self.error_type = classify_model_error(error)
@@ -320,6 +372,10 @@ class ModelCallTracker:
             started_offset_ms=started_offset_ms,
             finished_offset_ms=started_offset_ms + duration_ms,
             time_to_first_token_ms=self.time_to_first_token_ms,
+            call_id=self.call_id,
+            usage_known=self.usage_known,
+            cached_input_tokens=self.cached_input_tokens,
+            unsupported_usage=self.unsupported_usage,
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
             retries=self.retries,
@@ -390,6 +446,7 @@ def observe_model_call(
         finally:
             tracker.finished = time.perf_counter()
             usage = tracker.usage
+            _collect_cost(usage)
             span.set_attribute("guardrail.model.result", usage.result)
             span.set_attribute("guardrail.model.duration_ms", usage.duration_ms)
             span.set_attribute("guardrail.model.error_type", usage.error_type)

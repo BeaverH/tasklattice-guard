@@ -31,7 +31,7 @@ const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: "/da
 const guardrailsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/guardrails", component: GuardrailsPage });
 const guardrailDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/guardrails/$guardrailId", validateSearch: (search: Record<string, unknown>): { tab?: string; version?: string; window?: "1h" | "24h" | "7d" | "15d" | "30d"; severity?: string } => ({
   version: typeof search.version === "string" ? search.version : undefined,
-  tab: ["runtime", "event", "immutable", "testing", "draft"].includes(String(search.tab)) ? String(search.tab) : undefined,
+  tab: ["runtime", "event", "immutable", "testing", "draft", "usage"].includes(String(search.tab)) ? String(search.tab) : undefined,
   window: ["1h", "24h", "7d", "15d", "30d"].includes(String(search.window)) ? search.window as "1h" | "24h" | "7d" | "15d" | "30d" : undefined,
   severity: selectedSeverities(search.severity).join(",") || undefined,
 }), component: GuardrailDetailPage });
@@ -87,7 +87,7 @@ const versionRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sett
 const healthRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/health", component: HealthPage });
 const runnerRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/runner", component: RunnerPage });
 const providersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/providers", component: ProvidersPage });
-const modelsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/models", component: ModelsPage });
+const modelsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/models", validateSearch: (search: Record<string, unknown>) => ({ tab: search.tab === "pricing" ? "pricing" : undefined }), component: ModelsPage });
 const guardrailCatalogRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/guardrail-catalog", component: GuardrailCatalogPage });
 const documentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/document", notFoundComponent: DocumentNotFound });
 const documentIndexRoute = createRoute({

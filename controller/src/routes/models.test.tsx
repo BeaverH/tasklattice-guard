@@ -24,6 +24,8 @@ import { GuardrailCatalogPage, ModelsPage, ProvidersPage } from "./models";
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { id: "admin-1", role: "admin" } }) }));
 vi.mock("@tanstack/react-router", () => ({
+  useSearch: () => ({}),
+  useNavigate: () => vi.fn(),
   Link: ({ to, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { to: string; children: ReactNode }) => <a href={to} {...props}>{children}</a>,
   useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => string }) => select({ location: { pathname: "/settings/guardrail-catalog" } }),
 }));

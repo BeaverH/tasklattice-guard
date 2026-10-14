@@ -82,6 +82,7 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
             else None
         ),
         compiler=compiler,
+        telemetry=telemetry,
     )
     metrics.set_control_state(synchronized=control.synchronized)
     runtime_api = RunnerAPI(

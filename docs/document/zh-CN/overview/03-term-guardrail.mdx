@@ -1,13 +1,13 @@
 ---
 id: "term-guardrail"
 title: "Guardrails"
-summary: "了解 Guardrail 由什么组成、版本如何测试和发布，以及 Decision 如何执行。"
+summary: "了解 Guardrail 由什么组成、版本如何测试和发布，Decision 如何执行，以及模型费用如何核算。"
 order: 2
 ---
 <strong>是什么：</strong>Guardrail 是一个逻辑实体，由两部分组成：
 
 - **静态部分：** 一组 Policy 和它的测试。测试包括从 Policy 继承的测试用例，以及在 Guardrail 上添加的自定义测试用例。**Guardrail Version** 冻结的就是静态部分。
-- **动态部分：** Guardrail 检测流量时产生的安全事件和运行指标。你可以在界面上的 Guardrail 页面查看。
+- **动态部分：** Guardrail 检测流量时产生的安全事件、运行指标，以及模型调用的用量与成本。你可以在界面上的 Guardrail 页面查看。
 
 Policy、Endpoint 和 Router 也都是逻辑实体。Guardrail 不是一条 Rule，也不是 Router。
 
@@ -39,7 +39,47 @@ Guardrail 的就绪状态与流量引用分开显示。同一个 Guardrail 的�
 
 ## Guardrail
 
-面向一个业务场景的逻辑实体。静态部分是一组 Policy 和它的测试，动态部分是安全事件和运行指标。测试通过后，把静态部分发布为不可变的 Guardrail Version。完整关系见[产品介绍](#term-guardrail)。
+面向一个业务场景的逻辑实体。静态部分是一组 Policy 和它的测试，动态部分是安全事件、运行指标和模型用量与成本。测试通过后，把静态部分发布为不可变的 Guardrail Version。完整关系见[产品介绍](#term-guardrail)。
+
+<a id="guardrail-usage-cost" />
+
+## 用量与成本
+
+费用用于内部成本核算，不向客户收费。未调用模型的 Policy、Routing Policy 和规则不产生模型费用。Guardrails 列表显示**本月开销（USD）**；点击金额进入详情的**用量与成本**页签，查看调用次数、输入与输出 Token、按模型的费用和每日趋势。统计覆盖这个 Guardrail 的所有版本，默认包含运行流量、草稿和版本测试、Playground 检测；可按来源及本月、近 7 天、近 30 天筛选。日期边界统一使用 UTC。
+
+<a id="guardrail-price-sources" />
+
+### 单价从哪里来
+
+系统随应用内置一份源自 LiteLLM 的美元价格表，离线部署可直接使用，不会自动联网下载。管理员在[模型 → 模型价格](/settings/models?tab=pricing)查看内置版本、匹配结果并人工更正。单价对同一供应商和模型全局生效，人工配置优先于内置表。自定义网关可以选择对应的内置价格条目；没有收录的小模型，可手动填写美元单价或明确设为免费。
+
+单价按供应商和模型精确匹配，不根据模型大小推测价格。自建模型的成本由管理员确定；没有配置价格时显示**未核算**，不会当作免费。所有单价和金额统一使用 **USD**。
+
+<a id="guardrail-cost-calculation" />
+
+### 费用如何计算
+
+Token 单价使用**美元 / 百万 Token**：
+
+```text
+费用（USD）=（未缓存输入 Token × 输入单价
+             + 缓存输入 Token × 缓存单价
+             + 输出 Token × 输出单价）÷ 1,000,000
+```
+
+缓存输入属于输入 Token 的一部分，会先扣除，避免重复计算。例如，没有缓存时，1,000 个输入 Token、100 个输出 Token，输入单价 USD 0.20/百万、输出单价 USD 0.60/百万，这次调用费用为 **USD 0.00026**。
+
+对不返回 Token 用量但按调用计价的模型，可设置**美元 / 千次调用**，费用等于调用次数乘单价再除以 1,000。管理员明确设为免费时，费用为 USD 0。
+
+<a id="guardrail-unaccounted-calls" />
+
+### 金额与未核算调用
+
+缺少价格、Token 用量、模型对应关系，或包含暂不支持的计价项时，该调用显示**未核算**。有缓存用量但未设置缓存单价时也不猜测金额。部分调用可以核算时，显示已核算金额及未核算次数；全部无法核算时显示“未核算”。没有模型调用时显示 USD 0。
+
+用量由 Runner 上报，因此存在上报延迟；调用失败但发生了模型请求也会记录，缺少用量时保留为未核算。这里统计 Guardrail 检测产生的模型调用，不包含应用自身的对话模型费用、连接探测或控制面的编写辅助。金额是按配置单价得到的估算，不自动推算折扣、税费、订阅或自建服务的硬件成本。
+
+每次调用保留调用时生效的单价与金额。修改单价只影响后续调用，不重算或补算历史记录。费用属于环境内的动态数据，**不进入 Guardrail Version，也不参与导出或导入**；目标环境使用自己的全局价格，从新产生的调用开始统计。
 
 <a id="export-a-guardrail" />
 
@@ -57,7 +97,7 @@ Guardrail 的就绪状态与流量引用分开显示。同一个 Guardrail 的�
 - 签名的 Artifact，即冻结的 Policy 实现和编译后的配置。
 - 这个版本的测试。
 
-发布包不依赖 Policy Library，也不包含测试报告。
+发布包不依赖 Policy Library，也不包含测试报告、模型价格、用量和费用记录。
 
 在另一个 Controller 中导入：
 
@@ -275,7 +315,7 @@ UI 仅显示 **Not ready、Enforce、Monitor、Bypass**。后三种状态都要�
 | --- | --- |
 | Guardrail | 资源名称与稳定 ID；点击进入详情。 |
 | 防护状态 | Not ready / Enforce / Monitor / Bypass，另行显示 Runner 生效进度。 |
-| 不可变版本 | `2/10` 表示当前保留 2 个版本，最多 10 个；同时分别列出已发布和待发布数量。点击打开版本列表。历史数据若缺少依据，会单独提示，不能计入 Ready。 |
+| 本月开销（USD） | 按 UTC 自然月汇总所有版本的模型费用，包含运行、测试与 Playground 调用。说明图标解释核算范围，点击金额进入“用量与成本”。缺少价格或用量的调用单独显示为未核算。 |
 | 流量引用版本 | 列出已发布且绑定 Endpoint 的 Router 所固定的确切版本，以及运行时基线版本。每个 Router 单独显示 Active、Distributing 或 Failed，点击可查看下发状态；点击版本号可检查该版本。未发布草稿、停用 Route、零权重 Target 和未绑定 Endpoint 的 Router 不计入。 |
 | 更新时间 | Guardrail 资源的更新时间，不是最近测试、最近请求或 Router 更新时间。 |
 

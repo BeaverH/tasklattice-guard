@@ -1,3 +1,4 @@
+import { pricingRuleSchema, costQuerySchema } from "../../shared/model-pricing.js";
 import { protectionModes } from "../../shared/protection-mode.js";
 import { formalValidationSchema } from "../../shared/formal-validation.js";
 import { testingReportsQuery } from "../services/testing-reports.js";
@@ -363,6 +364,20 @@ export function createHttpApp(input: {
       effectivePermissions: actor.permissions ? Object.fromEntries(Object.entries(actor.permissions).map(([module, access]) => [module, actor.role === "admin" ? access : "read"])) : null });
   });
 
+
+  app.get("/api/v1/model-pricing", authenticated, async context => context.json(await input.service.pricing.view()));
+  app.get("/api/v1/model-pricing/catalog", authenticated, async context => {
+    const query = z.object({ q: z.string().trim().min(2).max(256) }).parse(context.req.query());
+    return context.json(await input.service.pricing.catalog(query.q));
+  });
+  app.put("/api/v1/models/:id/pricing", authenticated, administrator, async context => {
+    const body = pricingRuleSchema.parse(await context.req.json());
+    return context.json(await input.service.pricing.configure(context.req.param("id"), body, context.get("actor").id));
+  });
+  app.get("/api/v1/guardrails/:id/usage-costs", authenticated, async context => {
+    const query = costQuerySchema.parse(context.req.query());
+    return context.json(await input.service.pricing.guardrailUsage(context.req.param("id"), query));
+  });
 
   app.get("/api/v1/model-configuration", authenticated, async (context) => {
     if (!input.models) throw new ControllerError("Model configuration is unavailable.", 503, "model_configuration_unavailable");

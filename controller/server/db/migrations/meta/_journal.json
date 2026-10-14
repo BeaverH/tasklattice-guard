@@ -281,6 +281,13 @@
       "when": 1791760000005,
       "tag": "0039_guardrail_protection_modes",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791760000006,
+      "tag": "0040_model_usage_costs",
+      "breakpoints": true
     }
   ]
 }

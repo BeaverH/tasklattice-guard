@@ -9,6 +9,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   smallint,
@@ -610,6 +611,45 @@ export const telemetryWatermarks = pgTable("telemetry_watermark", {
   lastReceivedAt: timestamp("last_received_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt,
 });
+
+// Operational cost records intentionally live outside Guardrail definitions/packages.
+export const modelPriceRevisions = pgTable("model_price_revision", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull(),
+  source: text("source").$type<"litellm" | "manual" | "automatic">().notNull(),
+  catalogKey: text("catalog_key"),
+  rates: jsonb("rates").$type<import("../../shared/model-pricing.js").ModelRates>(),
+  effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [index("model_price_revision_lookup_idx").on(table.key, table.effectiveAt.desc())]);
+
+export const modelPriceSync = pgTable("model_price_sync", {
+  id: text("id").primaryKey(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  catalogVersion: text("catalog_version"),
+  error: text("error"),
+  entries: integer("entries").notNull().default(0),
+  meteringSince: timestamp("metering_since", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const modelUsageCosts = pgTable("model_usage_cost", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  guardrailId: text("guardrail_id").notNull(),
+  guardrailVersion: text("guardrail_version"),
+  modelId: text("model_id"),
+  model: text("model").notNull(),
+  provider: text("provider").notNull(),
+  source: text("source").$type<"runtime" | "testing">().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  calls: integer("calls").notNull().default(1),
+  inputTokens: bigint("input_tokens", { mode: "number" }),
+  outputTokens: bigint("output_tokens", { mode: "number" }),
+  cachedInputTokens: bigint("cached_input_tokens", { mode: "number" }),
+  priceId: text("price_id"),
+  currency: text("currency"),
+  amount: numeric("amount", { precision: 30, scale: 12 }),
+  reason: text("reason").$type<import("../../shared/model-pricing.js").CostReason>().notNull(),
+}, table => [index("model_usage_cost_guardrail_time_idx").on(table.guardrailId, table.occurredAt), index("model_usage_cost_event_idx").on(table.eventId)]);
 
 export const auditEvents = pgTable("audit_event", {
   id: text("id").primaryKey(),
