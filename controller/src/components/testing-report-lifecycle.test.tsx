@@ -25,11 +25,19 @@ function showDelete() {
 }
 
 describe("Testing Report display and deletion", () => {
-  it.each(["local", "imported"])("keeps the %s resource registry at version level instead of using a single report", origin => {
-    const guardrail = { id: run.guardrail_id, name: "Bank assistant", status: "ready", origin, policy_bindings: [], updated_at: "2026-10-10T00:00:00Z", latest_validation_run: null, latest_testing_report: run, version_summary: { total: 2, released: 1, pending: 1, missingEvidence: 0 } } as Guardrail;
+  it.each(["local", "imported"])("shows the %s resource's traffic version instead of its latest testing report", origin => {
+    const trafficVersion = "20261009-090837.640Z";
+    const guardrail = {
+      id: run.guardrail_id, name: "Bank assistant", status: "enforce", origin, policy_bindings: [],
+      updated_at: "2026-10-10T00:00:00Z", latest_validation_run: null, latest_testing_report: run,
+      version_summary: { total: 2, released: 1, pending: 1, missingEvidence: 0 },
+      traffic_versions: [{ version: trafficVersion, baseline: true, routers: [{ id: "router-1", name: "Bank traffic", status: "active" }] }],
+    } as Guardrail;
     render(<GuardrailRegistry guardrails={[guardrail]} onOpen={vi.fn()} />);
     expect(screen.queryByText("100%")).toBeNull();
-    expect(screen.getByText("2/10")).toBeTruthy();
+    expect(screen.getByText(trafficVersion, { selector: "a" })).toBeTruthy();
+    expect(screen.getByText("Bank traffic")).toBeTruthy();
+    expect(screen.queryByText(run.guardrail_version)).toBeNull();
     expect(screen.queryByText("guardrails.notRun")).toBeNull();
   });
   it("reviews the return to Pending before permanently deleting the last Passed report", async () => {
