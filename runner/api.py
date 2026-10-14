@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import base64
 import json
+import logging
 import os
 import time
 import uuid
@@ -31,6 +32,7 @@ from .metrics import (
 )
 from .output_streaming import register_output_stream
 from .telemetry import RuntimeTelemetryExporter
+from .runtime_log_capture import RuntimeLogCapture
 
 
 LITELLM_ADAPTER_ID = "litellm-generic-guardrail"
@@ -158,6 +160,7 @@ class RunnerAPI:
         draft_previews: DraftPreviewRuntime | None = None,
         scan_max_body_bytes: int = 1_048_576,
         scan_timeout_seconds: float = 25,
+        runtime_log_capture: RuntimeLogCapture | None = None,
     ) -> None:
         self.router = APIRouter()
         self._runtime = runtime
@@ -171,6 +174,7 @@ class RunnerAPI:
         self._runner_id = runner_id
         self._controller_token = controller_token
         self._runtime_log_encryption_key = runtime_log_encryption_key
+        self._runtime_log_capture = runtime_log_capture or RuntimeLogCapture()
         self._draft_previews = draft_previews
         self._register()
         register_output_stream(self)
@@ -485,9 +489,16 @@ class RunnerAPI:
         observation: GuardrailRequestObservation | None = None,
         stream_metadata: dict[str, Any] | None = None,
     ) -> None:
-        capture_level = self._store.logging_level(
-            decision.guardrail_id if decision is not None else None
-        )
+        guardrail_id = decision.guardrail_id if decision is not None else getattr(observation, "guardrail_id", None)
+        capture_level = self._store.logging_level(guardrail_id)
+        capture_key = self._runtime_log_capture.key(endpoint_id, guardrail_id, protocol, call_id) if call_id else None
+        capture_failed = False
+        if capture_key:
+            try:
+                capture_level = await self._runtime_log_capture.level(capture_key, capture_level)
+            except Exception:
+                capture_failed = True
+                logging.getLogger(__name__).exception("Runtime log correlation unavailable; preserving audit metadata.")
         runtime_log_captured = _runtime_log_qualifies(capture_level, decision)
         event = {
             "id": request_id,
@@ -503,6 +514,7 @@ class RunnerAPI:
                 "captureLevel": capture_level,
                 "runtimeLogCaptured": runtime_log_captured,
                 "contentAvailable": False,
+                "originalContentOnly": True,
                 **(stream_metadata or {}),
             },
         }
@@ -512,20 +524,44 @@ class RunnerAPI:
             event["decision"] = "error"
         if decision is not None:
             event["metadata"].update(_telemetry_metadata(decision))
-            if runtime_log_captured and self._runtime_log_encryption_key:
-                event["metadata"]["contentCiphertext"] = _encrypt_runtime_log_content(
-                    self._runtime_log_encryption_key,
-                    phase,
-                    content_before,
-                    decision.texts or content_before,
-                    await _runtime_http_request(http_request) if http_request is not None else None,
-                )
             if decision.guardrail_id:
                 event["guardrailId"] = decision.guardrail_id
             if decision.guardrail_version:
                 event["guardrailVersion"] = decision.guardrail_version
             if decision.router_id:
                 event["routerId"] = decision.router_id
+        elif guardrail_id and guardrail_id not in {UNRESOLVED_METRIC_ID, UNMATCHED_METRIC_ID}:
+            event["guardrailId"] = guardrail_id
+            event["guardrailVersion"] = getattr(observation, "guardrail_version", None)
+
+        ciphertext = None
+        # DEBUG holds encrypted candidates briefly, so an output finding can
+        # select the original input even when it ran on another replica.
+        if capture_level in {"debug", "trace"} and self._runtime_log_encryption_key:
+            ciphertext = _encrypt_runtime_log_content(
+                self._runtime_log_encryption_key, phase, content_before,
+                await _runtime_http_request(http_request) if http_request is not None else None,
+            )
+        pending = []
+        incomplete = capture_failed
+        if capture_key and capture_level == "debug" and not capture_failed:
+            candidate = {**event, "metadata": {**event["metadata"],
+                **({"contentCiphertext": ciphertext} if ciphertext else {})}}
+            try:
+                runtime_log_captured, pending, incomplete = await self._runtime_log_capture.record(
+                    capture_key, capture_level, candidate, runtime_log_captured)
+            except Exception:
+                incomplete = True
+                logging.getLogger(__name__).exception("Runtime log body buffering unavailable; preserving audit metadata.")
+        event["metadata"]["runtimeLogCaptured"] = runtime_log_captured
+        event["metadata"]["contentCaptureStatus"] = (
+            "captured" if runtime_log_captured and ciphertext else
+            "storage_unavailable" if runtime_log_captured else
+            "disabled" if capture_level == "info" else "not_selected")
+        if incomplete:
+            event["metadata"]["callCaptureIncomplete"] = True
+        if runtime_log_captured and ciphertext:
+            event["metadata"]["contentCiphertext"] = ciphertext
         try:
             with _TRACER.start_as_current_span(
                 "guardrail.telemetry.append",
@@ -542,6 +578,20 @@ class RunnerAPI:
                 },
             ):
                 await self._telemetry.emit(event)
+                for previous in pending:
+                    if previous["id"] == event["id"]:
+                        continue
+                    previous["metadata"].update({"runtimeLogCaptured": True,
+                        "contentCaptureStatus": "captured" if previous["metadata"].get("contentCiphertext") else "storage_unavailable"})
+                    if incomplete:
+                        previous["metadata"]["callCaptureIncomplete"] = True
+                    await self._telemetry.emit(previous)
+                if pending and capture_key:
+                    try:
+                        await self._runtime_log_capture.acknowledge(capture_key, capture_level, [item["id"] for item in pending])
+                    except Exception:
+                        # WAL delivery already succeeded; replay is idempotent.
+                        logging.getLogger(__name__).exception("Runtime log candidates will be retried or expire.")
         except TimeoutError:
             self._metrics.observe_failure("telemetry", "timeout")
             if observation is None or observation.failure_stage is None:
@@ -645,28 +695,23 @@ def _runtime_log_qualifies(
     level: str,
     decision: ProtectionDecision | None,
 ) -> bool:
-    if decision is None:
-        return True
-    timed_out = any(item.timed_out for item in decision.trace)
-    fail_closed = bool(decision.usage and decision.usage.fail_closed)
     if level == "trace":
         return True
-    if decision.decision == "block" or timed_out or fail_closed:
-        return True
-    return level == "debug" and decision.decision == "transform"
+    return level == "debug" and decision is not None and any(
+        item.verdict == "matched" and item.risk_severity in {"medium", "high", "critical"}
+        for item in decision.findings
+    )
 
 
 def _encrypt_runtime_log_content(
     key: bytes,
     phase: Literal["input", "output"],
     before: tuple[str, ...],
-    after: tuple[str, ...],
     http_request: dict[str, Any] | None = None,
 ) -> str:
     role = "user_input" if phase == "input" else "model_output"
     payload = {
         "contentBefore": _runtime_log_blocks(before, role),
-        "contentAfter": _runtime_log_blocks(after, role),
         **({"httpRequest": http_request} if http_request is not None else {}),
     }
     nonce = os.urandom(12)
@@ -715,8 +760,8 @@ def _runtime_log_blocks(values: tuple[str, ...], role: str) -> list[dict[str, An
             "id": f"content-{index}",
             "role": role,
             "source": role,
-            "text": value[:8_000],
-            "truncated": len(value) > 8_000,
+            "text": value,
+            "truncated": False,
         })
     return result
 

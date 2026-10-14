@@ -85,6 +85,9 @@ class ResolvedFailureRuntime:
 
 
 class Store:
+    def __init__(self, level="info"):
+        self.level = level
+
     def authenticate_endpoint(self, endpoint_id, credential):
         return endpoint_id in {"endpoint-1", "endpoint-secondary", "endpoint-scan"} and credential == "valid-secret"
 
@@ -96,7 +99,7 @@ class Store:
         }.get(endpoint_id)
 
     def logging_level(self, _guardrail_id):
-        return "info"
+        return self.level
 
 
 class Metrics:
@@ -333,7 +336,7 @@ async def test_controller_can_evaluate_an_explicit_guardrail_version_without_an_
     telemetry = Telemetry()
     app = FastAPI()
     encryption_key = b"runtime-log-encryption-key-32b!!"
-    app.include_router(RunnerAPI(runtime, Store(), Metrics(), telemetry, "runner-1", "controller-token", encryption_key).router)  # type: ignore[arg-type]
+    app.include_router(RunnerAPI(runtime, Store("trace"), Metrics(), telemetry, "runner-1", "controller-token", encryption_key).router)  # type: ignore[arg-type]
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://runner") as client:
         unauthorized = await client.post(
             "/internal/v1/guardrails/guardrail-1/evaluate",
@@ -572,7 +575,7 @@ async def test_runtime_encrypts_complete_http_request_without_truncating_body(pa
     telemetry = Telemetry()
     app = FastAPI()
     key = b"runtime-log-encryption-key-32b!!"
-    app.include_router(RunnerAPI(Runtime(), Store(), Metrics(), telemetry, "runner", "controller-token", key).router)
+    app.include_router(RunnerAPI(Runtime(), Store("trace"), Metrics(), telemetry, "runner", "controller-token", key).router)
     body = (json.dumps(payload, ensure_ascii=False, indent=3) + "\n").encode("utf-8")
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://runner") as client:
         response = await client.post(path + "?test=one%20two", content=body,

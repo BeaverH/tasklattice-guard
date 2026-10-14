@@ -77,7 +77,7 @@ export function RuntimeCheckpoint({ entry, requestId, admin, loadContent }: { en
         const content = await loadContent(signal);
         return { blocks: content.content_before, httpRequest: content.phase === "input" ? content.http_request : null, available: content.content_available };
       } : undefined} /> : null}
-      {admin && entry.outcome === "transform" ? <RuntimeContentPanel title={t("logs.transformedContent")} description={t("logs.transformedDescription")} blocks={entry.content_after} available={entry.content_available} transformed collapsible={Boolean(loadContent)} loadContent={loadContent ? async signal => {
+      {admin && entry.outcome === "transform" && !entry.original_content_only ? <RuntimeContentPanel title={t("logs.transformedContent")} description={t("logs.transformedDescription")} blocks={entry.content_after} available={entry.content_available} transformed collapsible={Boolean(loadContent)} loadContent={loadContent ? async signal => {
         const content = await loadContent(signal);
         return { blocks: content.content_after, available: content.content_available };
       } : undefined} /> : null}

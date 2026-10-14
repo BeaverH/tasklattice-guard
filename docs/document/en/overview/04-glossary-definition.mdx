@@ -179,6 +179,8 @@ A production-credential Rule rated High keeps High with each action:
 
 A competitor-name Rule can be Low even when it blocks. Stricter handling does not increase the risk level.
 
+**Rule risk and Guardrail logging level jointly select original bodies.** Every level retains existing audit records and execution traces. INFO stores no bodies; DEBUG retains original request / response bodies when either phase of the correlated call matches a Medium-or-higher Rule; TRACE retains originals for all calls. Actions neither change the capture threshold nor promote risk. Rule informational and log INFO have different meanings. [See the Enforce-mode table](/document/admin/concept-logs#concept-event-log-levels).
+
 **Confidence is independent.** It describes how certain the detector is about this evaluation. A missing score shows as Not provided. Scores from different detectors can be impossible to compare. A score of 99% does not mean Critical.
 
 A safe result does not create a Low security event. Matches and uncertain detection evidence show as security events. Errors, timeouts and unavailable models are operational failures. They are not Critical security events by default. [See security events and runtime logs](/document/admin/concept-logs#concept-security-events).

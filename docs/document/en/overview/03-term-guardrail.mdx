@@ -41,6 +41,20 @@ A production call goes from an Endpoint, through a Router, to one pinned Guardra
 
 A logical entity for one business scenario. Its static part is a set of Policies and its tests. Its dynamic part is its security events and runtime metrics. After its tests pass, you publish its static part as an immutable Guardrail Version. The [product introduction](#term-guardrail) shows the full relationship.
 
+<a id="guardrail-logging-level" />
+
+## Logging levels and body capture
+
+Administrators choose INFO, DEBUG, or TRACE under **Guardrail → Actions → Edit log level**. Once distributed to the Runner, changes apply to new calls without republishing. Each correlated call keeps the level selected at its first check.
+
+- **INFO (default):** retains audit records, findings, and execution traces for all checks, without bodies, including blocks and errors.
+- **DEBUG:** a Medium, High, or Critical Rule match in either phase selects the original request / response bodies received for the whole correlated call.
+- **TRACE:** retains originals received for every call, without requiring a Rule match.
+
+Only originals are retained; rewritten copies are not additionally captured. Action does not change selection: a High match that only records and allows qualifies at DEBUG; a Low block does not. Input and Output share a call ID, allowing an output match to enrich the earlier input record. A nonexistent response is never manufactured.
+
+[Enforce-mode Rule and Log Level table](/document/admin/concept-logs#runtime-log-capture) · [Whole-call capture conditions and boundaries](/document/admin/concept-logs#runtime-log-request-response)
+
 <a id="export-a-guardrail" />
 
 ## Export a Guardrail
