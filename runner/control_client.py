@@ -7,6 +7,10 @@ import importlib.metadata
 import logging
 import time
 import uuid
+from dataclasses import asdict
+from datetime import UTC, datetime
+from .telemetry import RuntimeTelemetryExporter
+from .toolkit.nemo.actions.model_call import begin_cost_collection, end_cost_collection
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -53,7 +57,9 @@ class RunnerControlClient:
         providers: ActionProviders | None = None,
         provider_observer: Callable[[ActionProviders], Awaitable[None]] | None = None,
         compiler: DefaultRunnerCompiler | None = None,
+        telemetry: RuntimeTelemetryExporter | None = None,
     ) -> None:
+        self._telemetry = telemetry
         self._settings = settings
         self._store = store
         self._metrics = metrics
@@ -439,6 +445,8 @@ class RunnerControlClient:
                 ),
             ))
         self._metrics.job("validation", True)
+        cost_calls, cost_token = begin_cost_collection()
+        cost_event_id = str(uuid.uuid4())
         try:
             with diagnostic_phase("guardrail.validation", run_id=request.run_id,
                                   guardrail_id=request.guardrail_id, cases=len(request.test_cases)):
@@ -477,7 +485,19 @@ class RunnerControlClient:
                 status=protocol.VALIDATION_STATUS_FAILED,
             )
         finally:
+            end_cost_collection(cost_token)
             self._metrics.job("validation", False)
+            if self._telemetry is not None and cost_calls:
+                await self._telemetry.emit({
+                    "id": cost_event_id, "requestId": request.run_id,
+                    "runnerId": self._settings.runner_id, "guardrailId": request.guardrail_id,
+                    "occurredAt": datetime.now(UTC).isoformat(), "direction": "incoming",
+                    "decision": "testing", "durationMs": 0,
+                    "metadata": {"costOnly": True, "costSource": "testing", "usage": {
+                        "model_calls": [asdict(call) for call in cost_calls],
+                        "model_invocations": len(cost_calls),
+                    }},
+                })
         encoded = result.SerializeToString()
         while self._validation_results and (len(self._validation_results) >= 64
                 or self._validation_result_bytes + len(encoded) > self._validation_result_budget):

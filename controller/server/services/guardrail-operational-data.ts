@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { ControllerDatabase } from "../db/client.js";
-import { guardrails, guardrailVersions, outboxEvents, routeAssignments, runtimeEvents, validationRuns } from "../db/schema.js";
+import { modelUsageCosts, guardrails, guardrailVersions, outboxEvents, routeAssignments, runtimeEvents, validationRuns } from "../db/schema.js";
 
 type Transaction = Parameters<Parameters<ControllerDatabase["transaction"]>[0]>[0];
 
@@ -10,6 +10,7 @@ export async function clearGuardrailOperationalData(tx: Transaction, guardrailId
   const requests = await tx.delete(outboxEvents).where(and(
     eq(outboxEvents.aggregateId, guardrailId), eq(outboxEvents.kind, "guardrail.validation_requested"),
   ));
+  await tx.delete(modelUsageCosts).where(eq(modelUsageCosts.guardrailId, guardrailId));
   const events = await tx.delete(runtimeEvents).where(eq(runtimeEvents.guardrailId, guardrailId));
   const calls = await tx.delete(routeAssignments).where(eq(routeAssignments.guardrailId, guardrailId));
   await tx.update(guardrailVersions).set({

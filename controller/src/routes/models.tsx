@@ -1,3 +1,5 @@
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { ModelPricingPanel } from "@/components/model-pricing";
 import { FormalValidationSheet } from "@/components/formal-validation-sheet";
 import type { FormalValidation } from "../../shared/formal-validation";
 import { Checkbox as CarbonCheckbox } from "@/components/ui/checkbox";
@@ -93,6 +95,8 @@ export function ProvidersPage() {
 }
 
 export function ModelsPage() {
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -112,7 +116,11 @@ export function ModelsPage() {
       {!administrator ? (
         <Alert className="mt-6"><CircleAlert /><AlertTitle>{t("modelSettings.readOnly")}</AlertTitle><AlertDescription>{t("modelSettings.readOnlyDescription")}</AlertDescription></Alert>
       ) : null}
-      <ResourceManagement resource="model" view={query.data} administrator={administrator} onChanged={refresh} />
+      <Tabs value={search.tab === "pricing" ? "pricing" : "models"} onValueChange={tab => void navigate({ to: "/settings/models", search: { tab } })} className="mt-6">
+        <TabsList aria-label={t("modelPricing.models")}><TabsTrigger value="models">{t("modelPricing.models")}</TabsTrigger><TabsTrigger value="pricing">{t("modelPricing.prices")}</TabsTrigger></TabsList>
+        <TabsContent value="models"><ResourceManagement resource="model" view={query.data} administrator={administrator} onChanged={refresh} /></TabsContent>
+        <TabsContent value="pricing" className="pt-5"><ModelPricingPanel administrator={administrator} /></TabsContent>
+      </Tabs>
     </section>
   );
 }

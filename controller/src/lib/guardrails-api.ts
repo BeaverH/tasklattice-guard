@@ -132,6 +132,7 @@ function mapGuardrail(
     status: published ? value.protection?.appliedMode ?? "enforce" : "not_ready",
     protection: value.protection,
     version_summary: value.versionSummary,
+    monthly_cost: value.monthlyCost,
     traffic_versions: trafficVersions,
     latest_validation_run: latestValidation,
     latest_testing_report: value.latestTestingReport ? mapValidationRun(value.latestTestingReport) : null,

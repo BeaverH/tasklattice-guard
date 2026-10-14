@@ -5,6 +5,7 @@ from typing import Any, Literal, Protocol, TYPE_CHECKING
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 if TYPE_CHECKING:
+    from ..nemo.evaluators.contracts import ModelCallUsage
     from .streaming import OutputStreamContract, OutputStreamResult
 
 from .enforcement_action_generated import (
@@ -595,6 +596,7 @@ class RuntimeUsage:
     provider_latency_ms: int = 0
     provider_work_latency_ms: int = 0
     model_wait_latency_ms: int = 0
+    model_calls: tuple[ModelCallUsage, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,13 +1,13 @@
 ---
 id: "term-guardrail"
 title: "Guardrails"
-summary: "Understand what a Guardrail contains, how its versions are tested and released, and how it applies Decisions."
+summary: "Understand what a Guardrail contains, how its versions are tested and released, how it applies Decisions, and how model costs are calculated."
 order: 2
 ---
 <strong>What:</strong> A Guardrail is a logical entity. It has two parts:
 
 - **Static part:** a set of Policies and its tests. The tests include the Test Cases that the Guardrail inherits from its Policies, and the custom Test Cases that you add to the Guardrail. A **Guardrail Version** freezes the static part.
-- **Dynamic part:** the security events that the Guardrail records when it inspects traffic, and its runtime metrics. You see them on the Guardrail pages in the UI.
+- **Dynamic part:** the security events that the Guardrail records when it inspects traffic, its runtime metrics, and model usage and cost. You see them on the Guardrail pages in the UI.
 
 Policy, Endpoint and Router are also logical entities. A Guardrail is not a Rule, and it is not a Router.
 
@@ -40,6 +40,46 @@ A production call goes from an Endpoint, through a Router, to one pinned Guardra
 ## Guardrail
 
 A logical entity for one business scenario. Its static part is a set of Policies and its tests. Its dynamic part is its security events and runtime metrics. After its tests pass, you publish its static part as an immutable Guardrail Version. The [product introduction](#term-guardrail) shows the full relationship.
+
+<a id="guardrail-usage-cost" />
+
+## Usage & cost
+
+Costs are for internal accounting, not customer billing. Policies, Routing Policies and rules that do not call a model incur no model cost. The Guardrails list shows **Month cost (USD)**. Click the amount to open **Usage & cost**, with calls, input/output tokens, model breakdowns and daily trends. It covers all versions of the Guardrail, including runtime traffic, draft/version tests and Playground inspection. Filter by source and this month, last 7 days or last 30 days. Period boundaries use UTC.
+
+<a id="guardrail-price-sources" />
+
+### Where prices come from
+
+A USD catalog derived from LiteLLM ships with the application, so offline deployments work without downloads. Administrators can inspect the bundled version and correct prices in [Models → Model prices](/settings/models?tab=pricing). Prices apply globally to the same provider/model; manual prices override the bundled catalog. Custom gateways can select an exact catalog entry. Unlisted small models require a manual price or an explicit free setting.
+
+Matching uses the actual provider and model, not model size or a different provider's price. Operators supply their own prices for self-hosted models. Missing prices remain **Unaccounted**. All prices and costs use **USD**.
+
+<a id="guardrail-cost-calculation" />
+
+### Calculation
+
+Token rates are **USD per million tokens**:
+
+```text
+Cost (USD) = (uncached input tokens × input rate
+              + cached input tokens × cache rate
+              + output tokens × output rate) / 1,000,000
+```
+
+Cached input is subtracted from total input before calculating the uncached portion. With no caching, 1,000 input tokens at USD 0.20/M and 100 output tokens at USD 0.60/M cost **USD 0.00026**.
+
+For models billed by request, configure **USD per thousand calls**: cost equals calls × rate / 1,000. Explicitly free models cost USD 0, even if token usage is unavailable.
+
+<a id="guardrail-unaccounted-calls" />
+
+### Accounted and unaccounted calls
+
+Missing prices, token usage, model identity or unsupported billing details leave a call **Unaccounted**. Cached usage without a cache rate is also unaccounted. Partial totals show the accounted amount alongside the unaccounted count; entirely unknown totals show Unaccounted. No model calls means USD 0.
+
+Runner telemetry can arrive with a delay. Failed model requests are recorded too; without usage they remain unaccounted. These totals cover Guardrail inspection calls, excluding the application's own chat model, connection probes and control-plane authoring. Amounts are estimates; discounts, taxes, subscriptions and self-hosted hardware costs are not inferred.
+
+Each call retains its effective price and amount. Price changes only affect subsequent calls; old calls are not recalculated or backfilled. Costs are environment-specific dynamic data: **they are excluded from Guardrail Versions, imports and exports**. The destination uses its own global prices for new calls.
 
 <a id="export-a-guardrail" />
 
@@ -275,7 +315,7 @@ Draft tests, version tests and explicit Playground evaluation always execute rea
 | --- | --- |
 | Guardrail | Name and stable ID; opens the detail page. |
 | Protection | Not ready / Enforce / Monitor / Bypass, with Runner application progress shown separately. |
-| Versions | `2/10` means two retained versions out of ten available slots, with separate Released and Pending counts. Opens the version list. Missing evidence in historical data is shown separately and never counted as Ready. |
+| Month cost (USD) | Costs across all versions in the current UTC month, including runtime, testing and Playground calls. The info icon explains the scope; click the amount to open Usage & cost. Missing prices or usage are shown as unaccounted calls. |
 | Traffic versions | Exact versions pinned by published Routers with bound Endpoints, plus the runtime baseline. Each Router shows its own Active, Distributing or Failed rollout status and links to its detail page. Version links open that exact version. Unpublished drafts, disabled Routes, zero-weight Targets and Routers without Endpoints are excluded. |
 | Updated | The Guardrail resource update time, not the latest test, request or Router update. |
 

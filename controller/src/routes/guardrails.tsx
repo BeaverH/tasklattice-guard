@@ -1,3 +1,4 @@
+import { GuardrailUsageCosts } from "@/components/guardrail-usage-costs";
 import { GuardrailProtectionMode, useGuardrailProtectionActions } from "@/components/guardrail-protection-mode";
 import { MAX_GUARDRAIL_VERSIONS } from "../../shared/guardrail-version-limit";
 import { ImmutableVersionView } from "@/components/guardrail-immutable-versions";
@@ -348,6 +349,7 @@ export function GuardrailDetailPage() {
           <TabsList className="min-w-max" aria-label={t("guardrails.detailViews")}>
             <TabsTrigger value="runtime"><Activity aria-hidden="true" />{t("guardrails.runtimeTab")}</TabsTrigger>
             <TabsTrigger value="event"><ShieldAlert aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.eventTab")}{metricsQuery.data?.findings_summary?.total ? <Badge variant="outline" className={metricsQuery.data?.findings_summary?.critical ? "border-red-200 bg-red-50 font-mono text-[10px] text-red-700" : "font-mono text-[10px]"}>{metricsQuery.data?.findings_summary?.total}</Badge> : null}</span></TabsTrigger>
+            <TabsTrigger value="usage">{t("modelPricing.tab")}</TabsTrigger>
             <TabsTrigger value="immutable"><History aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.versions")}{versionsQuery.data ? <Badge variant="outline" className="font-mono text-[10px]">{guardrailVersions.length}/{MAX_GUARDRAIL_VERSIONS}</Badge> : null}</span></TabsTrigger>
             <TabsTrigger value="testing"><FileText aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.validationHistoryTab")}{validationRunsQuery.data?.count ? <Badge variant="outline" className="font-mono text-[10px]">{validationRunsQuery.data.count}</Badge> : null}</span></TabsTrigger>
           </TabsList>
@@ -393,6 +395,7 @@ export function GuardrailDetailPage() {
             onCloseCompare={() => setCompareBaseVersionNumber(null)}
           />
         </TabsContent>
+        <TabsContent value="usage" className="pt-5"><GuardrailUsageCosts guardrailId={guardrail.id} /></TabsContent>
         <TabsContent value="testing" className="pt-5">
           <GuardrailValidationHistory
             pagination={<EventPagination page={reportPagination.page} busy={validationRunsQuery.isFetching} nextCursor={validationRunsQuery.data?.nextCursor} onNext={reportPagination.next} onPrevious={reportPagination.previous} onLatest={reportPagination.latest} />}

@@ -425,6 +425,7 @@ export type PolicyIntentDetails = {
 };
 
 export type Guardrail = {
+  monthly_cost?: import("../../shared/model-pricing").GuardrailMonthlyCost;
   copy_origin?: import("./controller-api").Guardrail["copyOrigin"];
   id: string;
   name: string;

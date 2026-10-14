@@ -23,6 +23,7 @@ const service = new ControlPlaneService(db, config);
 const resealed = await service.resealArtifacts();
 if (resealed) process.stdout.write(`Re-sealed ${resealed} Artifact(s) under the current content digest contract.\n`);
 await service.initialize();
+await service.pricing.start();
 if (config.baselinePackagePath) {
   const baseline = await service.importBaselinePackage(readFileSync(config.baselinePackagePath));
   process.stdout.write(`Baseline package: Default Guardrail ${baseline.version}${baseline.adopted ? " adopted as the runtime baseline" : " present; the existing baseline is unchanged"}.\n`);
@@ -79,6 +80,7 @@ async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   process.stdout.write(`Guard Controller received ${signal}; shutting down.\n`);
+  await service.pricing.stop();
   await runnerControl.stop();
   await new Promise<void>((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
   await pool.end();

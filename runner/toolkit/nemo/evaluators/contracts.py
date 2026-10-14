@@ -82,6 +82,10 @@ class ModelCallUsage:
     retries: int = 0
     backoff_ms: int = 0
     error_type: str = "none"
+    call_id: str = ""
+    usage_known: bool = False
+    cached_input_tokens: int = 0
+    unsupported_usage: bool = False
 
 
 @dataclass(frozen=True, slots=True)

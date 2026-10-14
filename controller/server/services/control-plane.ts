@@ -1,3 +1,4 @@
+import { ModelPricingService, recordModelUsageCosts } from "./model-pricing.js";
 import { pruneTestingReports, reportCompletionTime, testEvidenceColumns, toTestEvidence } from "./testing-report-retention.js";
 import { latestTestEvidence, matchesTestEvidence } from "../../shared/testing-report-retention.js";
 import { queryTestingReports, validationSummaryColumns, validationDetailColumns, testingReportsQuery } from "./testing-reports.js";
@@ -115,6 +116,7 @@ type RunnerRegistration = {
 };
 
 export class ControlPlaneService {
+  readonly pricing: ModelPricingService;
   private resources: PolicyResourceService | null = null;
   get policyResources(): PolicyResourceService {
     return this.resources ??= new PolicyResourceService(this.db, this.config.policyCatalogDir, () => this.policyCatalog().list());
@@ -129,6 +131,7 @@ export class ControlPlaneService {
     private readonly db: ControllerDatabase,
     private readonly config: ControllerConfig,
   ) {
+    this.pricing = new ModelPricingService(db);
     this.trafficRouting = new TrafficRoutingService(db);
     this.protectionModes = new ProtectionModeService(db, config.offlineAfterSeconds);
     this.packages = new GuardrailPackageService(db, config, () => this.policyCatalog().list());
@@ -586,7 +589,8 @@ export class ControlPlaneService {
 
   async listGuardrails() {
     const rows = await this.db.select().from(guardrails).where(isNull(guardrails.deletedAt)).orderBy(desc(guardrails.updatedAt));
-    return Promise.all(rows.map((row) => this.guardrailSummary(row)));
+    const monthly = await this.pricing.monthlyCosts(rows.map(row => row.id));
+    return Promise.all(rows.map(async row => ({ ...await this.guardrailSummary(row), monthlyCost: monthly.get(row.id)! })));
   }
 
   async defaultGuardrailReadiness(): Promise<BasicProtectionSnapshot> {
@@ -2044,7 +2048,7 @@ export class ControlPlaneService {
       const accepts = await guardrailTelemetryFilter(tx, events.map(event => event.guardrailId));
       for (const event of events) {
         if (!accepts(event.guardrailId, event.occurredAt)) continue;
-        await tx.insert(runtimeEvents).values({
+        if (event.metadata.costOnly !== true) await tx.insert(runtimeEvents).values({
           id: event.id,
           occurredAt: event.occurredAt,
           requestId: event.requestId,
@@ -2058,6 +2062,7 @@ export class ControlPlaneService {
           durationMs: event.durationMs,
           metadata: event.metadata,
         }).onConflictDoNothing();
+        await recordModelUsageCosts(tx, event);
         await tx.insert(telemetryWatermarks).values({
           runnerId: event.runnerId, lastEventOccurredAt: event.occurredAt, lastReceivedAt: new Date(), updatedAt: new Date(),
         }).onConflictDoUpdate({
