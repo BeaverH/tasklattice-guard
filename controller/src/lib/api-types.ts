@@ -915,6 +915,7 @@ export type RuntimeLogEntry = {
   detail: string;
   content_before: RuntimeLogContentBlock[] | null;
   content_after: RuntimeLogContentBlock[] | null;
+  original_content_only?: boolean;
   content_available: boolean;
   findings: RouterTraceFinding[];
   steps: RouterTraceStep[];

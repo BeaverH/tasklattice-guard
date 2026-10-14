@@ -42,7 +42,7 @@ def released(events):
 
 
 @asynccontextmanager
-async def runner(tmp_path, fixture_name="local-secrets-v1", *, providers=None, contexts=None):
+async def runner(tmp_path, fixture_name="local-secrets-v1", *, providers=None, contexts=None, log_level=None, log_key=None):
     from pathlib import Path
     from fastapi import FastAPI
     from runner.api import RunnerAPI
@@ -52,10 +52,12 @@ async def runner(tmp_path, fixture_name="local-secrets-v1", *, providers=None, c
     from tests.tcp import tcp_server
     fixture = Path(__file__).parent / "fixtures" / "artifacts" / fixture_name
     store, registry, engine = _runtime(tmp_path, fixture, providers=providers)
+    if log_level is not None:
+        store.logging_level = lambda _: log_level
     telemetry = Telemetry()
     service = GuardrailRuntimeService(engine, store, contexts=contexts)
     app = FastAPI()
-    app.include_router(RunnerAPI(service, store, RunnerMetrics(4), telemetry, "stream-test", "internal-test").router)
+    app.include_router(RunnerAPI(service, store, RunnerMetrics(4), telemetry, "stream-test", "internal-test", log_key).router)
     try:
         async with tcp_server(app) as url:
             yield url, engine, registry, telemetry, store

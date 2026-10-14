@@ -79,6 +79,7 @@ def register_output_stream(api) -> None:
         output_sequence = 0
         checks = 0
         source_ended = False
+        original_parts: list[str] = []
         lock = asyncio.Lock()
         queue: asyncio.Queue[StreamFrame] = asyncio.Queue(INPUT_CREDITS)
 
@@ -103,6 +104,8 @@ def register_output_stream(api) -> None:
                     queue.put_nowait(frame)
                 except asyncio.QueueFull:
                     raise StreamProtocolError("Output stream exceeded its input credits.") from None
+                if frame.type == "delta":
+                    original_parts.append(frame.text)
 
         async def source():
             nonlocal source_ended
@@ -157,14 +160,17 @@ def register_output_stream(api) -> None:
                 async def observe(decision):
                     nonlocal checks, check_started
                     checks += decision.protection_mode != "bypass"
+                    original_count = len(original_parts)
                     await api._emit_telemetry(
                         request_id=str(uuid.uuid4()), call_id=protection.call_id, endpoint_id=endpoint_id,
                         phase="output", protocol=f"{protocol}-stream", mode=protection.mode,
                         started=check_started, decision=decision,
+                        content_before=("".join(original_parts[:original_count]),),
                         stream_metadata={"streamId": stream_id, "streamCheck": checks,
                                          "streamFinalCheck": source_ended,
                                          "effectiveOutputDelivery": effective_mode},
                     )
+                    del original_parts[:original_count]
                     check_started = time.perf_counter()
 
                 iterator = source()

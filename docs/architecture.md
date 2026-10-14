@@ -341,9 +341,16 @@ See [revision lifecycles](revision-lifecycle.md) for the exact constraints.
 - Endpoint credentials are shown once; Controller stores SHA-256 verifiers and
   projects them to Runners for local authentication. Controller holds the artifact
   signing private key; Runners receive the verification public key.
-- Runtime events contain bounded metadata by default. When the Guardrail logging
-  level qualifies and an encryption key is configured, Runner encrypts captured
-  before/after content with AES-GCM before writing the WAL or exporting it.
+- Runtime events retain audit metadata, findings, versions, and execution traces
+  at every logging level. INFO never captures bodies. DEBUG selects an entire
+  correlated call when any finding has `verdict=matched` and Rule risk Medium,
+  High, or Critical. TRACE selects every call. Actions, errors, confidence, and
+  encryption availability do not change this selection. Only original received
+  content is retained; new events set `originalContentOnly=true` and do not store
+  `contentAfter`. Existing transformed-content history remains readable.
+  Runner encrypts selected originals with AES-GCM before writing the WAL or
+  exporting them. A missing storage key reports `storage_unavailable` rather
+  than changing the capture decision or exporting plaintext.
   The same encrypted payload includes the HTTP request received at the Runner:
   method, target, HTTP version, ordered headers (including duplicates), and the
   complete body bytes. Authentication header values are replaced with
@@ -358,9 +365,43 @@ See [revision lifecycles](revision-lifecycle.md) for the exact constraints.
   without changing numeric precision. HTTP downloads retain the captured body
   bytes and headers. Older records without an HTTP envelope offer retained-text
   downloads only; missing headers and original bodies cannot be reconstructed.
+
 - Runtime logs and routing events are batched from the local Runner WAL to
   Controller over authenticated HTTP outside the synchronous protection path.
   Redis call/stream content has the separate retention boundary described above.
+
+### Whole-call runtime body capture
+
+`runner/runtime_log_capture.py` pins the logging level at the first checkpoint,
+scoped by Endpoint, Guardrail, protocol family, and call ID. LiteLLM HTTP Input
+and streaming Output share the same protocol scope. Existing request IDs,
+checkpoint IDs, traces, and version evidence are reused without a new audit
+schema. Calls without an ID are selected independently; Scan remains standalone.
+
+DEBUG encrypts candidate originals before buffering them. The default correlation
+window is 300 seconds, matching the call-context window. Configuring the existing
+call-context Redis URL also shares capture state across Runner replicas. Without
+Redis, state is local to the Runner. Pending candidates are bounded to 8 MiB per
+call; the local fallback additionally caps memory at 64 MiB and 10,000 calls.
+Expiry removes unselected bodies without sending them to Controller storage.
+Buffer failures or overflow preserve audit delivery and mark incomplete capture
+on affected events. No content is fabricated for absent output.
+
+An Input or Output match selects the call and releases pending encrypted bodies.
+Later checkpoints in that call inherit selection. Audit metadata is emitted
+immediately, even while bodies are pending. Candidates are acknowledged only
+after enriched events reach the disk-backed telemetry WAL, allowing idempotent
+replay after delivery failures. `runtime-event-write.ts` enriches an existing
+event by ID and validates its call, Runner, Endpoint, and Guardrail identity.
+It merges capture fields only: decisions, timestamps, findings, traces, and
+already retained ciphertext are not replaced. Out-of-order delivery creates one
+event without duplicating audit evidence.
+
+HTTP bodies retain their original bytes; text-only and streaming capture retains
+original received text instead of the transformed decision text. Streaming
+checkpoints carry successive received text segments under the same call ID.
+INFO retains the existing execution trace without body capture; DEBUG and TRACE
+do not filter or remove audit evidence.
 
 ## Capacity and verification
 

@@ -1,3 +1,4 @@
+import { writeRuntimeEvent } from "./runtime-event-write.js";
 import { ModelPricingService, recordModelUsageCosts } from "./model-pricing.js";
 import { pruneTestingReports, reportCompletionTime, testEvidenceColumns, toTestEvidence } from "./testing-report-retention.js";
 import { latestTestEvidence, matchesTestEvidence } from "../../shared/testing-report-retention.js";
@@ -2048,26 +2049,13 @@ export class ControlPlaneService {
       const accepts = await guardrailTelemetryFilter(tx, events.map(event => event.guardrailId));
       for (const event of events) {
         if (!accepts(event.guardrailId, event.occurredAt)) continue;
-        if (event.metadata.costOnly !== true) await tx.insert(runtimeEvents).values({
-          id: event.id,
-          occurredAt: event.occurredAt,
-          requestId: event.requestId,
-          runnerId: event.runnerId,
-          guardrailId: event.guardrailId ?? null,
-          guardrailVersion: event.guardrailVersion ?? null,
-          endpointId: event.endpointId ?? null,
-          routerId: event.routerId ?? null,
-          direction: event.direction,
-          decision: event.decision,
-          durationMs: event.durationMs,
-          metadata: event.metadata,
-        }).onConflictDoNothing();
+        if (event.metadata.costOnly !== true) await writeRuntimeEvent(tx, event);
         await recordModelUsageCosts(tx, event);
         await tx.insert(telemetryWatermarks).values({
           runnerId: event.runnerId, lastEventOccurredAt: event.occurredAt, lastReceivedAt: new Date(), updatedAt: new Date(),
         }).onConflictDoUpdate({
           target: telemetryWatermarks.runnerId,
-          set: { lastEventOccurredAt: event.occurredAt, lastReceivedAt: new Date(), updatedAt: new Date() },
+          set: { lastEventOccurredAt: sql`greatest(${telemetryWatermarks.lastEventOccurredAt}, ${event.occurredAt})`, lastReceivedAt: new Date(), updatedAt: new Date() },
         });
       }
     });

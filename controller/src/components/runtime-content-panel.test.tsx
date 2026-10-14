@@ -18,6 +18,16 @@ const request: RuntimeHttpRequest = {
 const props = { title: "Original request", description: "Description", blocks: null, available: true, downloadId: "event-1", collapsible: true };
 
 describe("HTTP log body and download", () => {
+  it.each([true, false])("shows transformed-history panels only for older captures: original-only=%s", originalOnly => {
+    const event = { id: "event", requestId: "request", guardrailId: "guard", occurredAt: "2026-10-14",
+      direction: "incoming", decision: "transform", metadata: { runtimeLogCaptured: true,
+        contentAvailable: true, originalContentOnly: originalOnly } } as unknown as RuntimeEvent;
+    const entry = runtimeLogInteractions([event])[0]!.entries[0]!;
+    render(<RuntimeCheckpoint entry={entry} admin loadContent={async () => entry} />);
+    expect(Boolean(screen.queryByRole("button", { name: "logs.transformedContent" }))).toBe(!originalOnly);
+    expect(screen.getByRole("button", { name: "logs.requestContent" })).toBeTruthy();
+  });
+
   it("formats JSON and highlights tokens without rounding numbers or changing the downloaded request", async () => {
     const download = vi.spyOn(downloads, "downloadLogFile").mockImplementation(() => {});
     const { container } = render(<RuntimeContentPanel {...props} httpRequest={request} />);

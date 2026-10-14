@@ -81,6 +81,20 @@ Runner telemetry can arrive with a delay. Failed model requests are recorded too
 
 Each call retains its effective price and amount. Price changes only affect subsequent calls; old calls are not recalculated or backfilled. Costs are environment-specific dynamic data: **they are excluded from Guardrail Versions, imports and exports**. The destination uses its own global prices for new calls.
 
+<a id="guardrail-logging-level" />
+
+## Logging levels and body capture
+
+Administrators choose INFO, DEBUG, or TRACE under **Guardrail → Actions → Edit log level**. Once distributed to the Runner, changes apply to new calls without republishing. Each correlated call keeps the level selected at its first check.
+
+- **INFO (default):** retains audit records, findings, and execution traces for all checks, without bodies, including blocks and errors.
+- **DEBUG:** a Medium, High, or Critical Rule match in either phase selects the original request / response bodies received for the whole correlated call.
+- **TRACE:** retains originals received for every call, without requiring a Rule match.
+
+Only originals are retained; rewritten copies are not additionally captured. Action does not change selection: a High match that only records and allows qualifies at DEBUG; a Low block does not. Input and Output share a call ID, allowing an output match to enrich the earlier input record. A nonexistent response is never manufactured.
+
+[Enforce-mode Rule and Log Level table](/document/admin/concept-logs#runtime-log-capture) · [Whole-call capture conditions and boundaries](/document/admin/concept-logs#runtime-log-request-response)
+
 <a id="export-a-guardrail" />
 
 ## Export a Guardrail

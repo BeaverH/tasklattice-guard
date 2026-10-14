@@ -81,6 +81,7 @@ function runtimeLogEntry(event: controllerApi.RuntimeEvent): RuntimeLogInteracti
     http_request: httpRequest,
     content_before: before,
     content_after: after,
+    original_content_only: event.metadata.originalContentOnly === true,
     content_available: Boolean(event.metadata.contentAvailable),
     findings: runtimeFindings(event),
     steps: runtimeTraceSteps(event),

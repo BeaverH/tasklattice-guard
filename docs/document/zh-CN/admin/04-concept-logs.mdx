@@ -1,7 +1,7 @@
 ---
 id: "concept-logs"
 title: "运行日志：核对保护是否执行"
-summary: "用交互、检查点和系统事件核对真实请求的结果、版本与执行证据。"
+summary: "了解 INFO、DEBUG、TRACE 与 Rule 风险级别的关系，以及 request、response 正文的采集条件。"
 order: 3
 ---
 运行日志回答“请求实际经过了哪套保护，得到了什么结果”。例如，客服应用报告正常的订单问题被阻断：
@@ -31,17 +31,76 @@ Router 的发布状态说明配置是否已下发。运行记录才说明某次�
 
 <a id="runtime-log-capture" />
 
-## 为什么找不到某次请求
+## Enforce 模式：Rule 等级与 Log Level 如何一起工作
 
-日志等级决定保留哪些检测点：
+日志等级按 **Guardrail** 设置，默认 **INFO**，对这个 Guardrail 的各个版本生效。管理员在 **Guardrail → 操作 → 编辑日志等级** 中选择等级并保存；DEBUG、TRACE 需要确认正文采集成本。设置下发到 Runner 后用于新调用，无需重新发布版本。同一次关联调用沿用首次检查时的日志等级，提高等级不会补录历史正文。
 
-- 生产默认的 **Info** 主要记录阻断或失败。
-- **Debug** 还记录转换。
-- **Trace** 记录全部输入和输出检测点。
+**所有等级都保留已有审计记录、Rule 发现、处理结果、版本和执行 trace。** 正文是否保存，由日志等级与整次调用中实际命中的最高 Rule 风险级别共同决定。正常放行也保留运行记录，但不会因此生成安全事件。
 
-因此，查不到某次正常请求的详细日志，不能单独证明它没有经过保护。先核对时间范围、Guardrail 与方向，再看 Router Monitoring 和接入方的请求 ID。
+| Enforce 模式下的记录内容 | INFO（默认） | DEBUG | TRACE |
+| --- | --- | --- | --- |
+| 每次检查的审计记录、关联 ID 与版本 | 保留 | 保留 | 保留 |
+| Rule 命中、风险级别、实际 Action 与执行 trace | 保留 | 保留 | 保留 |
+| 整次调用的原始 request / response 正文 | 不保存 | 任一阶段命中 Medium、High 或 Critical 时保存 | 全部保存，无需命中 Rule |
+| 改写或转换后的正文副本 | 不另存 | 不另存 | 不另存 |
 
-请求和响应正文默认不保存。启用内容采集后，保留的正文会加密，只有管理员能在日志详情中解密查看。系统事件视图始终不展示正文。
+<a id="concept-event-log-levels" />
+
+### 按命中的 Rule 风险级别查看正文采集
+
+| 整次关联调用中命中的最高 Rule 等级 | INFO | DEBUG | TRACE |
+| --- | --- | --- | --- |
+| Critical / 严重 | 仅审计与 trace | 审计、trace 与原始正文 | 审计、trace 与原始正文 |
+| High / 高 | 仅审计与 trace | 审计、trace 与原始正文 | 审计、trace 与原始正文 |
+| Medium / 中 | 仅审计与 trace | 审计、trace 与原始正文 | 审计、trace 与原始正文 |
+| Low / 低 | 仅审计与 trace | 仅审计与 trace | 审计、trace 与原始正文 |
+| Informational / 信息 | 仅审计与 trace | 仅审计与 trace | 审计、trace 与原始正文 |
+| 没有命中，或没有已知风险级别的命中 | 仅审计与 trace | 仅审计与 trace | 审计、trace 与原始正文 |
+
+只有实际命中的 Rule 参与正文选择；未命中、结果不确定或执行错误不按高风险命中处理。**Action 不改变这个表格**：High Rule 即使仅记录并放行，在 DEBUG 下也会选择正文；Low Rule 即使阻断或转换，也不会自动升级为 High 或触发 DEBUG 正文采集。INFO 在阻断、超时、失败关闭时仍然不保存正文，错误和执行证据照常保留。
+
+Rule 的 `informational` 描述风险，日志 INFO 描述采集策略，两者不是同一个等级。日志设置不改变保护模式、Rule 风险级别或处理指令。
+
+<a id="runtime-log-request-response" />
+
+## 什么情况下 request 和 response 都会记录
+
+采集以**整次关联调用**为单位。接入方使用同一个调用 ID 提交 Input 与 Output：Input 是输入请求，Output 中包含模型响应。两个方向可以由不同 Runner 检查。
+
+- **INFO**：两个方向都有审计与执行 trace，但都不保存正文。
+- **DEBUG**：Input 或 Output 任一阶段命中 Medium 及以上 Rule，选择整次调用；保存已收到的输入原文与输出原文。出站才命中时，会补充此前入站检查的原始正文。
+- **TRACE**：保存实际收到的两个方向原始正文，包括完全正常的调用。
+
+| Enforce 模式下的一次调用 | 正文保留结果 |
+| --- | --- |
+| INFO：Input 放行，Output 命中 High 并阻断 | 两个方向均无正文；审计、命中与 trace 保留 |
+| DEBUG：Input 放行，Output 命中 High 并阻断 | 保存关联 Input 和 Output 原文 |
+| DEBUG：Input 命中 Medium 后放行，Output 正常通过 | 保存关联 Input 和 Output 原文 |
+| DEBUG：只命中 Low，即使执行了阻断或转换 | 不保存正文；审计、命中与 trace 保留 |
+| TRACE：Input、Output 都正常放行 | 两个方向原文都保存 |
+| DEBUG 命中 High 或使用 TRACE：Input 被阻断，调用方不再调用模型 | 只有实际收到的 Input 原文；不存在模型 response |
+
+关联要求接入方实际提交对应内容，并复用调用 ID。例如 LiteLLM 的两个方向使用相同的 `litellm_call_id`。没有提交 Output、缺少关联 ID，或只使用独立 Scan 时，系统无法补出另一个方向的内容；Scan 的 `requestPromptId` 不用于关联。
+
+<a id="runtime-log-content-boundary" />
+
+### 原始内容的范围
+
+只保存 **Runner 实际收到的原文**，不额外保存改写后的 request 或 response。已有 Decision、Action 和执行 trace 仍能说明采取了什么处理。
+
+支持的 HTTP 检查入口保留收到的原始 HTTP body，以及方法、目标和脱敏后的请求头；鉴权与 Cookie 等传输凭证不保留。Output 检查收到的 body 包含接入方提交的模型响应，它不等于模型服务完整的 HTTP 响应封装。没有转交给 Guardrail 的数据不会出现在日志中。
+
+流式输出保留检查期间实际收到的原始文本，按同一调用的检查点关联；它不包含未收到的后续文本，也不是完整的原始 HTTP 流封装。见[流式输出检测](/document/developer/gateway-connect#gateway-stream-protocol)。
+
+<a id="runtime-log-missing-content" />
+
+### 为什么有日志却没有正文
+
+先核对调用首次检查时的日志等级、命中的 Rule 等级、关联 ID 和接入方是否提交了内容。正文仅供管理员查看。独立的系统事件视图不展示正文。
+
+DEBUG 为等待后续命中短暂保留待选正文，关联窗口为首次检查起 5 分钟。关联超时、缓存容量不足或存储与上报异常可能导致正文不完整；已有审计记录不会因此被删除。提高日志等级不能恢复已经过期或未采集的内容。
+
+Monitor 模式也按实际检测到的 Rule 风险选择正文，最终放行不会取消选择；Bypass 不执行检测，因此 DEBUG 不会凭空产生风险命中，TRACE 仍可保存收到的原文。
 
 [打开运行日志](/logs)
 
@@ -66,9 +125,3 @@ Router 的发布状态说明配置是否已下发。运行记录才说明某次�
 ### 老版本为什么显示“未分级”
 
 旧事件或旧 Guardrail 产物可能没有保存 Rule 级别。系统不会读取今天的 Policy 配置去猜测过去的风险，也不会把旧的置信度分级当作新级别。使用已定义风险级别的 Policy，测试并发布新的 Guardrail Version 后，新事件才会带上对应的级别。历史记录保留原样。
-
-<a id="concept-event-log-levels" />
-
-### 与 INFO／DEBUG／TRACE 的区别
-
-**风险级别决定如何理解事件。日志采集等级决定保留多少检测点详情。** 管理员可在 **Guardrail → 操作 → 编辑日志等级** 中选择 INFO、DEBUG 或 TRACE，再点击“保存修改”。切换到 DEBUG 或 TRACE 前需要确认采集成本；取消则保留原等级。即使保持 INFO，观察模式下产生的安全事件元数据仍然可见。没有详细正文，不等于没有安全事件。

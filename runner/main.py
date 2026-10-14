@@ -26,6 +26,7 @@ from .metrics import RunnerMetrics
 from .observability import configure_observability
 from .providers import runtime_action_providers
 from .telemetry import RuntimeTelemetryExporter
+from .runtime_log_capture import RuntimeLogCapture
 
 
 def create_app(settings: RunnerSettings | None = None) -> FastAPI:
@@ -85,6 +86,7 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
         telemetry=telemetry,
     )
     metrics.set_control_state(synchronized=control.synchronized)
+    log_capture = RuntimeLogCapture(configured.call_context_redis_url)
     runtime_api = RunnerAPI(
         runtime,
         store,
@@ -96,6 +98,7 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
         draft_previews,
         scan_max_body_bytes=configured.scan_max_body_bytes,
         scan_timeout_seconds=configured.scan_timeout_seconds,
+        runtime_log_capture=log_capture,
     )
 
     @asynccontextmanager
@@ -103,6 +106,7 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
         async def retire_runtimes():
             while True:
                 await asyncio.sleep(30)
+                log_capture.prune()
                 await registry.collect_retired()
 
         watchdog.start()
@@ -119,6 +123,7 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
             telemetry_task.cancel()
             retirement_task.cancel()
             await asyncio.gather(control_task, telemetry_task, retirement_task, return_exceptions=True)
+            await log_capture.close()
             if draft_previews is not None:
                 await draft_previews.shutdown()
             try:

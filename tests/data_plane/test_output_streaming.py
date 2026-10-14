@@ -161,3 +161,14 @@ async def test_unicode_delta_limit_counts_text_not_json_escaping(tmp_path):
     async with runner(tmp_path, "configured-phrases-v1") as (url, _, _, _, _), connection(url) as (socket, _):
         events = await exchange(socket, [text])
         assert events[-1]["type"] == "completed" and released(events) == text
+
+
+async def test_stream_capture_retains_original_model_output_without_rewritten_copy(tmp_path):
+    from tests.data_plane.test_runtime_log_capture import KEY, decode
+    async with runner(tmp_path, "configured-phrases-v1", log_level="trace", log_key=KEY) as (url, _, _, telemetry, _):
+        async with connection(url) as (socket, _):
+            events = await exchange(socket, ["internal-", "name"])
+            assert released(events) == "public-name"
+        payload = decode(telemetry.events[0])
+        assert payload["contentBefore"][0]["text"] == "internal-name"
+        assert "contentAfter" not in payload and "public-name" not in json.dumps(payload)

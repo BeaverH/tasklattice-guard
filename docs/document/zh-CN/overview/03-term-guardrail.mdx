@@ -81,6 +81,20 @@ Token 单价使用**美元 / 百万 Token**：
 
 每次调用保留调用时生效的单价与金额。修改单价只影响后续调用，不重算或补算历史记录。费用属于环境内的动态数据，**不进入 Guardrail Version，也不参与导出或导入**；目标环境使用自己的全局价格，从新产生的调用开始统计。
 
+<a id="guardrail-logging-level" />
+
+## 日志等级与正文采集
+
+管理员在 **Guardrail → 操作 → 编辑日志等级** 设置 INFO、DEBUG 或 TRACE。设置下发到 Runner 后用于新调用，无需重新发布版本；同一次关联调用沿用首次检查时的等级。
+
+- **INFO（默认）**：保留所有检查的审计、Rule 发现与执行 trace，不保存正文，包括阻断和异常请求。
+- **DEBUG**：任一阶段命中 Medium、High 或 Critical Rule 时，保存整次关联调用实际收到的原始 request / response 正文。
+- **TRACE**：保存全部调用实际收到的原始正文，无需命中 Rule。
+
+只保存原文，不额外保存改写后的副本。Action 不改变正文选择：High 仅记录并放行也符合 DEBUG；Low 阻断不符合 DEBUG。入出站使用同一调用 ID，出站命中可补充此前入站原文；不存在的 response 不会被补造。
+
+[Enforce 模式下的 Rule 与 Log Level 对照表](/document/admin/concept-logs#runtime-log-capture) · [整次调用的采集条件与边界](/document/admin/concept-logs#runtime-log-request-response)
+
 <a id="export-a-guardrail" />
 
 ## 导出 Guardrail

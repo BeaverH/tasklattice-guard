@@ -18,7 +18,7 @@ logger = logging.getLogger("tasklattice.guard.runner.telemetry")
 
 
 class RuntimeTelemetryExporter:
-    """Disk-backed, non-hot-path delivery of immutable Runtime events."""
+    """Disk-backed delivery of Runtime evidence and idempotent body enrichment."""
 
     def __init__(
         self,
