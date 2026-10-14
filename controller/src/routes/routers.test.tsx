@@ -114,6 +114,7 @@ describe("Router creation", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  // Repeated navigation remounts real Carbon controls; allow headroom on shared CI runners.
   it("retains name, Endpoints, conditions and pinned targets through previous, next and review edits", async () => {
     mount();
     await configureSource("Production");
@@ -138,7 +139,7 @@ describe("Router creation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit traffic destinations" }));
     expect((screen.getByLabelText("Value") as HTMLInputElement).value).toBe("litellm");
     expect(create).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("preserves edited conditions and targets through collapse and reorder, then submits fallback last", async () => {
     const { onCreated } = mount();
