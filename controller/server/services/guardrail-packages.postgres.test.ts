@@ -143,6 +143,16 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     expect(JSON.stringify(parsed)).not.toMatch(/uat-runner-0|resultsDigest/);
   });
 
+  it("keeps model costs and global prices out of exported resource files", async () => {
+    const before = readZip((await uat.packages.exportPackage(guardrailId, published)).bytes, { maxEntries: 1024, maxEntryBytes: 1 << 24, maxTotalBytes: 1 << 26 });
+    await uatDb.pool.query("INSERT INTO model_usage_cost(id,event_id,guardrail_id,model,provider,source,occurred_at,currency,amount,reason) VALUES ('export-cost','export-cost',$1,'cost-model-marker','cost-provider-marker','runtime',now(),'USD',0.123456,'priced')", [guardrailId]);
+    await uatDb.pool.query("INSERT INTO model_price_revision(id,key,source,rates) VALUES ('export-price','price-marker','manual',$1)", [JSON.stringify({ unit: "free", currency: "USD" })]);
+    const after = readZip((await uat.packages.exportPackage(guardrailId, published)).bytes, { maxEntries: 1024, maxEntryBytes: 1 << 24, maxTotalBytes: 1 << 26 });
+    const resources = (files: typeof before) => [...files].filter(([path]) => path.startsWith("guardrails/") || path.startsWith("policies/"));
+    expect(resources(after)).toEqual(resources(before));
+    expect([...after.values()].map(bytes => bytes.toString("utf8")).join("\n")).not.toMatch(/cost-model-marker|cost-provider-marker|price-marker/);
+  });
+
   it("exports immutable content without local test evidence or release prerequisites", async () => {
     const { rows: [before] } = await uatDb.pool.query("SELECT status, validation_run_id, released_at FROM guardrail_version WHERE guardrail_id=$1 AND version=$2", [guardrailId, published[0]]);
     await uatDb.pool.query("UPDATE guardrail_version SET status='pending', validation_run_id=NULL, released_at=NULL WHERE guardrail_id=$1 AND version=$2", [guardrailId, published[0]]);

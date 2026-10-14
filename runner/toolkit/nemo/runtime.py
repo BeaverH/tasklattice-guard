@@ -1419,6 +1419,10 @@ def _model_call_usage_from_payload(
             _non_negative_int(payload["time_to_first_token_ms"])
             if payload.get("time_to_first_token_ms") is not None else None
         ),
+        call_id=str(payload.get("call_id", "")),
+        usage_known=payload.get("usage_known") is True,
+        cached_input_tokens=_non_negative_int(payload.get("cached_input_tokens", 0)),
+        unsupported_usage=payload.get("unsupported_usage") is True,
         input_tokens=_non_negative_int(payload.get("input_tokens", 0)),
         output_tokens=_non_negative_int(payload.get("output_tokens", 0)),
         retries=_non_negative_int(payload.get("retries", 0)),
@@ -1823,6 +1827,9 @@ def _decision(
             # Count versioned policy Actions only. NeMo's internal bot/stop
             # actions are implementation details, not billable evaluators.
             action_invocations=len(runtime_results),
+            model_calls=tuple({call.call_id or str(index): call for index, call in enumerate(
+                (*native_model_calls, *(call for item in runtime_results for call in item.result.usage.model_calls))
+            )}.values()),
             model_invocations=len(native_model_calls) + sum(
                 item.result.usage.model_invocations for item in runtime_results
             ),
@@ -2663,6 +2670,7 @@ def _failed_decision(
             config_checksum=checksum,
             fail_closed=True,
             active_concurrency=active_concurrency,
+            model_calls=native_model_calls,
             model_invocations=len(native_model_calls),
             provider_latency_ms=sum(
                 call.duration_ms for call in native_model_calls

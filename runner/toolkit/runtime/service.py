@@ -508,6 +508,7 @@ def _usage(items: list[RuntimeUsage]) -> RuntimeUsage | None:
     if not items:
         return None
     return RuntimeUsage(
+        model_calls=tuple(call for item in items for call in item.model_calls),
         module_invocations=sum(item.module_invocations for item in items),
         evaluator_invocations=sum(item.evaluator_invocations for item in items),
         text_characters=sum(item.text_characters for item in items),

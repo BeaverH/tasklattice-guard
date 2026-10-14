@@ -456,7 +456,15 @@ class RunnerAPI:
                         runtime_profile=payload.runtime_profile,
                     )
                     observation.complete(decision)
-                    # Draft previews are deliberately excluded from Runtime Evidence telemetry.
+                    # Meter drafts separately without adding them to Runtime Evidence.
+                    if decision.usage is not None and decision.usage.model_calls:
+                        await self._telemetry.emit({
+                            "id": str(uuid.uuid4()), "requestId": payload.call_id or str(uuid.uuid4()),
+                            "runnerId": self._runner_id, "guardrailId": payload.plan.get("guardrail_id", ""),
+                            "occurredAt": _iso_now(), "direction": "incoming" if payload.resolved_phase == "input" else "outgoing",
+                            "decision": "testing", "durationMs": 0,
+                            "metadata": {"costOnly": True, "costSource": "testing", "usage": asdict(decision.usage)},
+                        })
                     return jsonable_encoder(asdict(decision))
                 except LookupError as error:
                     raise HTTPException(status_code=404, detail=str(error)) from error

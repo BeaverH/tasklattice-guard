@@ -485,7 +485,7 @@ class _RuntimeBuilder:
         )
         try:
             if not use_iorails:
-                instrument_nemo_models(rails, config.required_models)
+                instrument_nemo_models(rails, config.required_models, {item.type: item.runtime_id for item in self._native_models})
             bridge = NeMoActionBridge(
                 plan,
                 config,

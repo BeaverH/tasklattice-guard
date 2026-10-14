@@ -218,3 +218,81 @@ This changes validation scheduling only, not live traffic admission or detector
 timeouts. Report sequential classification results separately from concurrent
 availability failures. A blocked request alone is not detection evidence: inspect
 the successful model call, detector verdict, and matched Policy/Rule together.
+
+## Global prices and Guardrail usage costs
+
+**Settings → Models → Model prices** manages estimated model costs globally for
+one Provider/model pair, shared across all its registered profiles and Guardrails.
+This is internal cost accounting, not customer billing.
+
+The bundled catalog derives from LiteLLM's public
+[`model_prices_and_context_window.json`](https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json)
+and is stored in the repository as `controller/server/catalog/model-prices.json`. The initial
+snapshot is version `2026-10-14` with 2,440 supported USD prices. Controller loads
+this local snapshot before accepting telemetry, and the production build includes
+it. Startup, price lookup and accounting require no external network connection;
+there is no scheduled download. The UI shows the loaded version and entry count.
+An invalid snapshot retains the last successfully loaded prices. Removed entries
+stop applying to new calls; historical revisions remain available.
+
+Administrators can correct an individual model price in **Models → Model prices**
+without editing files or restarting. To update the initial catalog for a release,
+edit `controller/server/catalog/model-prices.json` (all token rates are USD per million,
+request rates USD per thousand), change its `version`, review the diff, and rebuild
+or restart Controller. Manual overrides always take precedence. Alternatively,
+a maintainer can download the upstream JSON on a connected machine, transfer it,
+and run this local-only conversion from `controller/`:
+
+```sh
+node --import tsx scripts/update-model-prices.mjs /path/to/model_prices_and_context_window.json 2026-10-14.revision1
+```
+
+The generator records the source URL, original file SHA-256 and MIT notice. It
+replaces the bundled catalog; review and preserve any intended local corrections.
+Never fetch the catalog as part of offline deployment.
+
+Automatic matching requires the provider's actual service hostname and an exact
+catalog model key. A custom gateway can explicitly select a LiteLLM catalog entry.
+There is no fuzzy match or fallback to another provider's rate. Only supported
+standard text token rates are imported; context-length tiers and unsupported
+surcharges require manual pricing. Batch, priority and flex rates do not replace
+standard synchronous rates.
+
+For unlisted models, administrators can set USD prices per million input,
+output and cached input tokens, per thousand calls, or explicitly mark the model
+free. Manual rates override LiteLLM and survive catalog updates. Returning to LiteLLM
+removes the manual override prospectively. Local deployment costs must be supplied
+by the operator; the product does not invent a token price from model size.
+
+The Guardrails list shows **Month cost (USD)** for the current UTC calendar month,
+across all versions and runtime/testing calls, with an unaccounted count beside
+partial totals. No model calls means USD 0; only unknown calls means Unaccounted.
+Click the amount to open **Guardrail → Usage & cost**, which shows call counts, reported token totals, accounted
+amounts, unaccounted calls, model breakdowns and daily cost trends. Periods use UTC;
+all prices and amounts use USD, with no currency conversion. Runtime
+traffic and Guardrail validation/Playground calls can be filtered separately.
+Model connection probes and control-plane authoring calls are not attributed to a
+Guardrail and are outside these totals. Rules without model calls incur no model
+cost. Cost metering is independent of Runtime log capture level.
+
+Token cost = (uncached input tokens × input rate + cached input tokens × cache rate
++ output tokens × output rate) / 1,000,000. Cached tokens are a subset of input;
+they are subtracted before pricing the uncached portion. For request pricing,
+cost = calls × request rate / 1,000. Missing cache prices do not silently fall
+back to an ordinary input price. For example, 1,000 input tokens at USD 0.20/M
+and 100 output tokens at USD 0.60/M cost USD 0.00026, without caching.
+
+Each call stores its effective price revision and calculated amount at ingestion.
+Pricing changes affect future calls; they do not backfill or reprice history. Missing
+prices, missing token usage, unmatched model identity, nonstandard service tiers
+or unsupported usage remain **Unaccounted**, never silently zero. Request rates
+can account for models that do not report tokens. Failed calls are recorded too;
+a token-priced failure without usage remains unaccounted. Amounts are estimates,
+not a provider invoice (credits, taxes, discounts and subscription costs are not
+inferred). Metering starts with this feature's migration; older Runners without
+per-call details report unaccounted usage until upgraded.
+
+Prices and cost records are separate operational tables. They are excluded from
+Guardrail version snapshots, release packages and exports, and are never sent to
+Runners as Guardrail configuration. Deletion/restoration clears Guardrail cost
+records alongside its other operational data; model price revisions remain global.

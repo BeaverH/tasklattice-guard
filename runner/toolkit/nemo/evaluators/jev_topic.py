@@ -8,6 +8,7 @@ import time
 
 import httpx
 
+from runner.model_validation_diagnostics import record_validation_error, validation_http_hooks
 from ...runtime.contracts import ProviderEvidence, RiskFinding, RuntimeTraceStep
 from ...safety.taxonomy import taxonomy_for_evaluator
 from ..actions.model_call import action_usage, observe_model_call
@@ -112,7 +113,7 @@ class JevTopicEvaluator:
                 with observe_model_call(request, provider=self._provider_id, model=self._model,
                                         operation="topic_classification", profile_ref=JEV_TOPIC_PROFILE,
                                         runtime_ref=self._provider_id) as call:
-                    async with asyncio.timeout(remaining), httpx.AsyncClient(timeout=remaining, transport=self._transport, verify=not self._skip_tls_verify) as client:
+                    async with asyncio.timeout(remaining), httpx.AsyncClient(timeout=remaining, transport=self._transport, verify=not self._skip_tls_verify, event_hooks=validation_http_hooks()) as client:
                         response = await client.post(self._url, headers={"authorization": f"Bearer {self._api_key}"}, json={
                             "model": self._model,
                             "state": {"current_input": request.content, "context_messages": context},
@@ -123,6 +124,7 @@ class JevTopicEvaluator:
                         actual_model, probabilities = parse_answers(payload, set(questions))
                         call.complete(payload=payload)
         except (httpx.HTTPError, TimeoutError, ValueError, TypeError, KeyError) as error:
+            record_validation_error(error)
             return evaluation_result(request, "error", request.content,
                                      reason=f"Jev topic evaluation failed: {type(error).__name__}.",
                                      usage=action_usage(call, len(request.content)) if call is not None else EvaluationUsage())

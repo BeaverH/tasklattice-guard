@@ -76,6 +76,27 @@ bypass-denominator boundary.
 If any Runner pool has more than one replica, Redis is required for shared
 input/output call-version pinning.
 
+### Topic Control Rail validation diagnostics
+
+When **Guardrail Catalog → Topic Control → Validate** fails, Runner emits
+`rail_validation_case_failed` and `rail_validation_model_exchange` JSON events
+at WARNING level. Filter Runner container logs by `validation_id` or `case_id`.
+The latter events contain the model/profile, method, URL, actual request body
+(including the system prompt and generation parameters), final HTTP status,
+response body, and any captured call or parsing error. NVIDIA native NeMo Rails,
+OpenAI-compatible Topic Control classifiers, and TypeSafe JEV are covered.
+An HTTP 200 response with an incorrect verdict also produces these diagnostics.
+A failed case's **Runner output** includes the same `model_exchanges` for copying
+from the existing validation failure details.
+
+Capture is scoped to Topic Control validation samples. Successful cases emit no
+payload diagnostics; live Guardrail traffic keeps its existing content logging
+policy. Authorization/Cookie headers, credential fields, URL userinfo, and known
+Provider credentials are redacted. Request and response bodies are limited to
+32,768 characters each with an explicit `body_truncated` flag, and each case
+retains at most 16 observed HTTP exchanges. Native NeMo retries expose the final
+HTTP response. A transport failure before a response leaves `response` null.
+
 ## Availability and retained state
 
 Production checks go directly from the application or gateway to a ready Runner

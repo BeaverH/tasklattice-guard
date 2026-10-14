@@ -1,3 +1,4 @@
+import { modelPricingEn, modelPricingZh } from "./model-pricing-i18n";
 import { protectionModeEn, protectionModeZh } from "./protection-mode-i18n";
 import { declarativePolicyEn, declarativePolicyZh } from "./declarative-policy-i18n";
 import { immutableVersionsEn, immutableVersionsZh } from "./immutable-versions-i18n";
@@ -18,6 +19,7 @@ export type SupportedLanguage = "en" | "zh-CN";
 const resources = {
   en: {
     translation: {
+      modelPricing: modelPricingEn,
       protectionMode: protectionModeEn,
       declarativePolicy: declarativePolicyEn,
       routing: routingEn,
@@ -3027,6 +3029,7 @@ const resources = {
   },
   "zh-CN": {
     translation: {
+      modelPricing: modelPricingZh,
       protectionMode: protectionModeZh,
       declarativePolicy: declarativePolicyZh,
       routing: routingZh,
