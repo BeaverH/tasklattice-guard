@@ -90,6 +90,7 @@ import {
 import { CreateGuardrailWizard } from "@/routes/create-guardrail-wizard";
 import { TrafficScopeBadges } from "@/routes/routers";
 import { GuardrailValidationHistory, ValidationDetailSheet } from "@/routes/validation";
+import "./guardrails.scss";
 
 export { AddTestCaseSheet };
 
@@ -511,7 +512,72 @@ function RuntimeStat({ label, value, detail }: { label: string; value: string; d
 
 function CallerDistribution({ metrics, routers, versions }: { metrics: Metrics; routers: Awaited<ReturnType<typeof getRouters>>["items"]; versions: GuardrailVersion[] }) {
   const { t, i18n } = useTranslation();
-  return <Card size="sm" className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b px-4 py-3"><CardTitle className="text-sm">{t("guardrails.callersTitle")}</CardTitle><CardDescription className="text-xs leading-5">{t("guardrails.callersDescription")}</CardDescription></CardHeader>{metrics.caller_distribution.length ? <Table className="text-xs"><TableHeader><TableRow className="hover:bg-transparent"><TableHead className="h-9 pl-4">{t("guardrails.caller")}</TableHead><TableHead className="h-9">{t("guardrails.trafficScope")}</TableHead><TableHead className="h-9">{t("guardrails.volumeShare")}</TableHead><TableHead className="h-9">{t("guardrails.servedVersion")}</TableHead><TableHead className="h-9">{t("guardrails.outcome")}</TableHead><TableHead className="h-9">{t("dashboard.p95Latency")}</TableHead></TableRow></TableHeader><TableBody>{metrics.caller_distribution.map((item) => { const router = routers.find((candidate) => candidate.id === item.router_id); return <TableRow key={`${item.endpoint_id}:${item.router_id}:${item.protocol}`}><TableCell className="py-2.5 pl-4 align-top"><strong className="text-sm font-medium">{item.endpoint_name}</strong><p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.protocol}</p></TableCell><TableCell className="max-w-80 py-2.5 align-top"><p className="mb-1 text-xs font-medium">{item.router_name}</p>{router ? <TrafficScopeBadges router={router} /> : <span className="text-xs text-muted-foreground">{t("guardrails.unassignedTraffic")}</span>}</TableCell><TableCell className="py-2.5 align-top"><strong className="text-sm tabular-nums">{item.requests.toLocaleString(i18n.language)}</strong><div className="mt-1.5 flex items-center gap-2"><Progress className="h-1 w-16" value={item.share} /><span className="text-xs text-muted-foreground">{item.share}%</span></div></TableCell><TableCell className="py-2.5 align-top"><div className="flex flex-wrap gap-1">{item.guardrail_versions.map((version) => <Badge key={version} variant="outline" className="font-mono text-[10px]">{version}</Badge>)}</div></TableCell><TableCell className="py-2.5 align-top"><p className="text-xs">{t("guardrails.interventionSummary", { rate: item.intervention_rate })}</p><p className="mt-0.5 text-xs text-muted-foreground">{t("guardrails.errorSummary", { rate: item.error_rate })}</p></TableCell><TableCell className="py-2.5 align-top font-mono text-xs">{item.p95_latency_ms} ms</TableCell></TableRow>; })}</TableBody></Table> : <div className="px-4 pb-4"><EmptyState title={t("guardrails.noRuntimeCalls")} description={t("guardrails.noRuntimeCallsDescription")} /></div>}</Card>;
+  return (
+    <Card size="sm" className="gap-0 overflow-hidden py-0 shadow-none">
+      <CardHeader className="border-b px-4 py-3">
+        <CardTitle className="text-sm">{t("guardrails.callersTitle")}</CardTitle>
+        <CardDescription className="text-xs leading-5">{t("guardrails.callersDescription")}</CardDescription>
+      </CardHeader>
+      {metrics.caller_distribution.length ? (
+        <Table className="caller-distribution-table text-xs">
+          <colgroup>
+            <col className="caller-endpoint-column" />
+            <col className="caller-scope-column" />
+            <col className="caller-volume-column" />
+            <col className="caller-version-column" />
+            <col className="caller-outcome-column" />
+            <col className="caller-latency-column" />
+          </colgroup>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-9 pl-4">{t("guardrails.caller")}</TableHead>
+              <TableHead className="h-9">{t("guardrails.trafficScope")}</TableHead>
+              <TableHead className="h-9">{t("guardrails.volumeShare")}</TableHead>
+              <TableHead className="h-9">{t("guardrails.servedVersion")}</TableHead>
+              <TableHead className="h-9">{t("guardrails.outcome")}</TableHead>
+              <TableHead className="h-9">{t("dashboard.p95Latency")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {metrics.caller_distribution.map((item) => {
+              const router = routers.find((candidate) => candidate.id === item.router_id);
+              return (
+                <TableRow key={`${item.endpoint_id}:${item.router_id}:${item.protocol}`}>
+                  <TableCell className="py-2.5 pl-4 align-top">
+                    <strong className="text-sm font-medium">{item.endpoint_name}</strong>
+                    <p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.protocol}</p>
+                  </TableCell>
+                  <TableCell className="caller-traffic-scope py-2.5 align-top">
+                    <p className="mb-1 text-xs font-medium">{item.router_name}</p>
+                    {router ? <TrafficScopeBadges router={router} /> : <span className="text-xs text-muted-foreground">{t("guardrails.unassignedTraffic")}</span>}
+                  </TableCell>
+                  <TableCell className="py-2.5 align-top">
+                    <strong className="text-sm tabular-nums">{item.requests.toLocaleString(i18n.language)}</strong>
+                    <div className="caller-volume-share mt-1.5 flex items-center gap-2">
+                      <Progress className="h-1 w-16" value={item.share} />
+                      <span className="text-xs text-muted-foreground">{item.share}%</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2.5 align-top">
+                    <div className="flex flex-wrap gap-1">
+                      {item.guardrail_versions.map((version) => <Badge key={version} variant="outline" className="font-mono text-[10px]">{version}</Badge>)}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2.5 align-top">
+                    <p className="text-xs">{t("guardrails.interventionSummary", { rate: item.intervention_rate })}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{t("guardrails.errorSummary", { rate: item.error_rate })}</p>
+                  </TableCell>
+                  <TableCell className="py-2.5 align-top font-mono text-xs">{item.p95_latency_ms} ms</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="px-4 pb-4"><EmptyState title={t("guardrails.noRuntimeCalls")} description={t("guardrails.noRuntimeCallsDescription")} /></div>
+      )}
+    </Card>
+  );
 }
 
 export function EditGuardrailTestCasesSheet({ guardrail, policies, cases, casesLoading, casesError, onChanged, onRetryCases, onClose }: {
