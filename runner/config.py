@@ -70,6 +70,7 @@ class RunnerSettings:
     pyroscope_sample_rate: int = 100
     scan_max_body_bytes: int = 1_048_576
     scan_timeout_seconds: int = 25
+    validation_max_concurrency: int = 8
 
     @classmethod
     def from_env(cls) -> "RunnerSettings":
@@ -174,6 +175,7 @@ class RunnerSettings:
             ),
             compiler_capable=_boolean("GUARD_RUNNER_COMPILER_CAPABLE", pool_id == "default"),
             max_concurrency=_positive_int("GUARD_RUNNER_MAX_CONCURRENCY", 64),
+            validation_max_concurrency=_positive_int("GUARD_VALIDATION_MAX_CONCURRENCY", 8),
             controller_ca_path=Path(controller_ca) if controller_ca else None,
             client_certificate_path=(Path(client_certificate) if client_certificate else None),
             client_key_path=Path(client_key) if client_key else None,

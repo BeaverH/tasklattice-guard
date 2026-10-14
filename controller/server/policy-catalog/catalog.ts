@@ -1,3 +1,4 @@
+import { policyTestContextSchema } from "../../shared/policy-definition.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -90,6 +91,7 @@ const testCaseSchema = z.object({
   kind: z.enum(["rule_acceptance", "scenario"]).default("scenario"),
   required: z.boolean().default(true),
   parameter_names: z.array(z.string()).default([]),
+  context: policyTestContextSchema.optional(),
 });
 export const policyAssetSchema = z.object({
   id: z.string().min(1),

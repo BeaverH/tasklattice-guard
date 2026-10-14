@@ -97,3 +97,13 @@ describe("capability bindings", () => {
     ]);
   });
 });
+
+it("isolates Company Policy from Topic Control and permits generic PII judges on both Rails", () => {
+  expect(capabilityBindingContracts("topic_control.input", "tali.taxonomy-judge.v1")).toEqual(["tali.guard.topic-control.semantic.v1"]);
+  expect(capabilityBindingContracts("company_policy.input", "tali.taxonomy-judge.v1")).toEqual(["tali.guard.company-policy.v1"]);
+  expect(assignmentTargetAcceptsModel("company_policy.input", "tali.typesafe-jev-topic.v1", "typesafe")).toBe(false);
+  for (const target of ["pii_semantic.input", "pii_semantic.output"] as const) {
+    expect(assignmentTargetAcceptsModel(target, "tali.openai-compatible-pii.v1", "custom-openai-compatible")).toBe(true);
+    expect(capabilityBindingContracts(target, "tali.openai-compatible-pii.v1")).toEqual(["tali.guard.pii.semantic.v1"]);
+  }
+});

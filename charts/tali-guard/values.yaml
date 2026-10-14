@@ -33,7 +33,8 @@ imagePullSecrets: []
 # Maps to CONTROLLER_PUBLIC_URL and, unless runner.publicUrl overrides it,
 # CONTROLLER_RUNTIME_PUBLIC_URL in the Controller ConfigMap.
 # Empty preserves legacy Controller URLs; without runner.publicUrl, Endpoint
-# addresses derive from the incoming Controller request origin.
+# addresses derive from the incoming Controller request origin. Local HTTP
+# loopback + Runtime LoadBalancer derives its separate public port instead.
 # Internal requests always use Service DNS, independently of this setting.
 publicUrl: ""
 

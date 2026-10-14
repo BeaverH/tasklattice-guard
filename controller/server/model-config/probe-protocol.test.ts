@@ -70,3 +70,12 @@ describe("replaceable model probe protocols", () => {
     expect(request.messages[0]?.content).toMatch(/You must respond with "on-topic" or "off-topic"\.$/);
   });
 });
+
+it("requires a typed PII verdict instead of accepting arbitrary JSON", () => {
+  for (const verdict of ["safe", "pii", "unknown"]) {
+    expect(() => validateProbeContent("tali.openai-compatible-pii.v1", JSON.stringify({ verdict }))).not.toThrow();
+  }
+  for (const content of ['{}', '{"verdict":true}', '{"verdict":"pii","replacement":"raw text"}', 'SAFE']) {
+    expect(() => validateProbeContent("tali.openai-compatible-pii.v1", content)).toThrow();
+  }
+});

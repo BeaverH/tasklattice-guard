@@ -1,5 +1,50 @@
 {
   "$defs": {
+    "TestContext": {
+      "additionalProperties": false,
+      "properties": {
+        "trusted_instruction": {
+          "default": "",
+          "title": "Trusted Instruction",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "title": "Query",
+          "type": "string"
+        },
+        "grounding_sources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Grounding Sources",
+          "type": "array"
+        },
+        "expected_reasoning_result": {
+          "anyOf": [
+            {
+              "enum": [
+                "valid",
+                "invalid",
+                "satisfiable",
+                "impossible",
+                "translation_ambiguous",
+                "too_complex",
+                "no_translations"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Reasoning Result"
+        }
+      },
+      "title": "TestContext",
+      "type": "object"
+    },
     "TestDefinition": {
       "additionalProperties": false,
       "properties": {
@@ -141,6 +186,17 @@
           ],
           "title": "Scope",
           "type": "string"
+        },
+        "context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TestContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

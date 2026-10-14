@@ -1395,6 +1395,7 @@ function probeMessages(profile: ModelProfile, jailbreakInput: string): Array<{ r
     ];
   }
   const prompt = {
+    "tali.openai-compatible-pii.v1": '/no_think\nClassify personal information in the target. Names and personal identifiers are PII; general questions without personal values are safe. Return JSON only with one verdict field: "pii", "safe", or "unknown". Target: How do passports work?',
     "generic-chat": "Reply with exactly OK.",
     "tali.qwen3guard.v1": "Hello, how are you?",
     "tali.llama-guard-3.v1": "Hello, how are you?",
@@ -1429,6 +1430,9 @@ export function validateProbeContent(profile: ModelProfile, content: string): vo
   }
   if (profile === "tali.openai-compatible-jailbreak.v1" && !/^(safe|jailbreak)$/i.test(content.trim())) {
     throw new Error("OpenAI-compatible jailbreak judge did not return SAFE or JAILBREAK.");
+  }
+  if (profile === "tali.openai-compatible-pii.v1") {
+    z.object({ verdict: z.enum(["pii", "safe", "unknown"]) }).strict().parse(JSON.parse(stripFence(content)));
   }
   if (profile === "tali.taxonomy-judge.v1") {
     const normalized = content.trim().toLowerCase();

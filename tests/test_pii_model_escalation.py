@@ -97,7 +97,7 @@ async def test_nemo_pii_flow_short_circuits_local_hits_and_escalates_to_qwen() -
     )
 
     assert status == "passed"
-    assert model_inputs == ["Passport identifier X1234567"]
+    assert model_inputs == ["Passport identifier X1234567", "A normal sentence."]
     assert results[0]["outputContent"] == "Contact [PII_REDACTED]"
     assert results[1]["outputContent"] == "[PII_REDACTED]"
     assert results[2]["outputContent"] == "A normal sentence."
@@ -128,7 +128,7 @@ async def test_nemo_pii_flow_short_circuits_local_hits_and_escalates_to_qwen() -
         )
     )
     assert strict_status == "passed"
-    assert model_inputs == ["Passport identifier X1234567", "A normal sentence."]
+    assert model_inputs == ["Passport identifier X1234567", "A normal sentence.", "A normal sentence."]
     assert strict_results[0]["escalated"] is True
     assert strict_results[0]["modelInvocations"] == 1
 

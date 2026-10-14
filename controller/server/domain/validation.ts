@@ -87,11 +87,11 @@ export function generatedTestCases(
         content: policy.id === PHRASE_POLICY_ID ? item.content : materialize(item.content, binding.parameterValues),
         expectedDecision: item.expected_decision,
         origin: "generated" as const,
-        trustedInstruction: "",
+        trustedInstruction: materialize(item.context?.trusted_instruction ?? "", binding.parameterValues),
         targetSource: item.phase === "output" ? "model_output" as const : "user_input" as const,
-        query: "",
-        groundingSources: [],
-        expectedReasoningResult: null,
+        query: materialize(item.context?.query ?? "", binding.parameterValues),
+        groundingSources: (item.context?.grounding_sources ?? []).map(source => materialize(source, binding.parameterValues)),
+        expectedReasoningResult: item.context?.expected_reasoning_result ?? null,
         caseType: item.kind,
         required: item.required,
         expectedFailure: null,
@@ -213,8 +213,12 @@ export function emptyValidationMetrics(total = 0): ValidationMetrics {
 
 export function validationMetrics(results: readonly ValidationCaseResult[]): ValidationMetrics {
   const passed = results.filter((item) => item.passed).length;
-  const falsePositive = results.filter((item) => item.expectedDecision === "allow" && item.actualDecision !== "allow").length;
-  const falseNegative = results.filter((item) => item.expectedDecision !== "allow" && item.actualDecision === "allow").length;
+  // Infrastructure failures and unknown verdicts describe availability, not
+  // classifier accuracy. They still count toward total, pass rate and latency.
+  const evaluated = results.filter((item) => !item.actualFailure
+    && ![...item.findings, ...item.trace].some((entry) => entry.verdict === "unknown"));
+  const falsePositive = evaluated.filter((item) => item.expectedDecision === "allow" && item.actualDecision !== "allow").length;
+  const falseNegative = evaluated.filter((item) => item.expectedDecision !== "allow" && item.actualDecision === "allow").length;
   const escalated = results.filter((item) => item.escalated).length;
   const latencies = results.map((item) => item.latencyMs).sort((left, right) => left - right);
   return {

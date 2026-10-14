@@ -168,7 +168,7 @@ describe("Controller Guardrail plan", () => {
     expect(plan.steps).toEqual(expect.arrayContaining([
       expect.objectContaining({ capability: "secrets", contract_ref: "tali.guard.secrets.exact.v1", on_unsafe: "block", trigger: { type: "always" } }),
       expect.objectContaining({ capability: "pii", contract_ref: "tali.guard.pii.exact.v1", trigger: { type: "always" } }),
-      expect.objectContaining({ capability: "pii", contract_ref: "tali.guard.pii.semantic.v1", trigger: { type: "on_result", step_ref: "pii:builtin-pii:exact", verdicts: ["not_matched", "unknown"] } }),
+      expect.objectContaining({ capability: "pii", contract_ref: "tali.guard.pii.semantic.v1", trigger: { type: "always" } }),
       expect.objectContaining({ capability: "prompt_injection", contract_ref: "tali.guard.prompt-injection.v1", on_unsafe: "block" }),
     ]));
     expect(plan.modules).toEqual(expect.arrayContaining([
@@ -188,7 +188,7 @@ describe("Controller Guardrail plan", () => {
     expect(balanced.steps).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contract_ref: "tali.guard.pii.semantic.v1",
-        trigger: { type: "on_result", step_ref: "pii:builtin-pii:exact", verdicts: ["unknown"] },
+        trigger: { type: "always" },
       }),
     ]));
   });

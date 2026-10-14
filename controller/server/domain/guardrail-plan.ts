@@ -95,7 +95,7 @@ const afterUnknown = (idSuffix: string, contractRef: string, previous: string, p
 
 const capabilities: RuntimeCapability[] = [
   capability("secrets", "builtin-secrets", ["input", "output"], "block", [always("exact", contracts.secretsExact)], "data_protection"),
-  capability("pii", "builtin-pii", ["input", "output"], "transform", [always("exact", contracts.piiExact), afterUnknown("semantic", contracts.piiSemantic, "exact")], "data_protection"),
+  capability("pii", "builtin-pii", ["input", "output"], "transform", [always("exact", contracts.piiExact), always("semantic", contracts.piiSemantic, true)], "data_protection"),
   capability("prompt_injection", "builtin-prompt-injection", ["input"], "block", [always("primary", contracts.promptInjection)], "interaction_safety"),
   capability("indirect_prompt_injection", "builtin-indirect-prompt-injection", ["input"], "block", [always("exact", contracts.indirectPromptInjection)], "interaction_safety"),
   capability("jailbreak", "builtin-jailbreak", ["input"], "block", [always("primary", contracts.jailbreak, true)], "interaction_safety"),
@@ -104,7 +104,7 @@ const capabilities: RuntimeCapability[] = [
   capability("topic_control", "builtin-topic-safety", ["input"], "block", [always("rules", contracts.topicRules), afterUnknown("semantic", contracts.topicSemantic, "rules")], "business_assurance"),
   capability("company_policy", "builtin-company-policy", ["input"], "block", [always("primary", contracts.companyPolicy, true)], "business_assurance"),
   capability("contextual_grounding", "builtin-contextual-grounding", ["output"], "block", [always("primary", contracts.contextualGrounding, true)], "business_assurance"),
-  capability("automated_reasoning", "builtin-automated-reasoning", ["output"], "transform", [always("primary", contracts.automatedReasoning, true)], "business_assurance"),
+  capability("automated_reasoning", "builtin-automated-reasoning", ["output"], "block", [always("primary", contracts.automatedReasoning, true)], "business_assurance"),
 ];
 
 const capabilityByPolicyId = new Map(capabilities.map((item) => [item.policyId, item]));

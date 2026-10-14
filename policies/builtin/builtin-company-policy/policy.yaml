@@ -4,10 +4,10 @@ kind: Policy
 metadata:
   id: builtin-company-policy
   name: Company Policy
-  description: Evaluates user input against configured company boundaries using the validated Topic Control
-    binding.
+  description: Evaluates user input against configured company boundaries using the
+    independent Company Policy model binding.
   source: built_in
-  version: 1.0.0
+  version: 1.1.0
   tags:
   - namespace: protection
     value: business_rules

@@ -1298,6 +1298,7 @@ def test_development_uat_keeps_local_service_names_and_needs_no_package_configur
     services = {doc["metadata"]["name"]: doc for doc in documents if doc["kind"] == "Service"}
     assert services["tali-guard-controller-public"]["spec"]["ports"][0]["port"] == 38081
     assert services["tali-guard-runtime-public"]["spec"]["ports"][0]["port"] == 38082
+    assert controller_config(documents)["data"]["CONTROLLER_RUNTIME_PUBLIC_URL"] == "http://localhost:38082"
     assert controller_config(documents)["data"]["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://tali-guard-runtime.tali.svc.cluster.local:8091"
 
 
@@ -1312,3 +1313,22 @@ def test_legacy_package_export_keys_and_source_identity_are_ignored():
     assert "package-signing" not in {volume["name"] for volume in spec["volumes"]}
     assert "package-signing" not in {mount["name"] for mount in spec["containers"][0]["volumeMounts"]}
     render("--set", "controller.promotion.export.existingSecret=guard-package-signing")
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "[::1]"])
+def test_local_endpoint_address_uses_runtime_load_balancer_port(host):
+    documents = render_dev("--set-json", f'controller.publicUrl=["http://{host}:38081"]',
+                           "--set", "runner.service.public.port=39082")
+    config = controller_config(documents)["data"]
+    assert config["CONTROLLER_PUBLIC_URL"] == f"http://{host}:38081"
+    assert config["CONTROLLER_RUNTIME_PUBLIC_URL"] == f"http://{host}:39082"
+    assert config["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://tali-guard-runtime.tali.svc.cluster.local:8091"
+
+
+@pytest.mark.parametrize("overrides", [
+    ("--set", "runner.service.public.enabled=false"),
+    ("--set", "runner.service.public.type=NodePort"),
+    ("--set-json", 'controller.publicUrl=["https://console.example.com"]'),
+])
+def test_runtime_address_is_not_inferred_without_local_load_balancer(overrides):
+    assert controller_config(render_dev(*overrides))["data"]["CONTROLLER_RUNTIME_PUBLIC_URL"] == ""

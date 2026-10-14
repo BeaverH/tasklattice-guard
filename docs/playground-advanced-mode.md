@@ -8,6 +8,10 @@ Normal chat mode requires a validated Chat model assignment in **Settings → Mo
 
 Advanced Router / Endpoint tests do not require a chat model. The mode switch and advanced deep links stay available while model discovery is loading, empty, or failing. Published execution requires a synchronized Router revision and a bound Endpoint; Endpoint execution additionally requires that Endpoint's credential.
 
+In the local development profile, Endpoint setup advertises Runtime port `38082`, while the UI remains on `38081`. Shared `publicUrl` and explicit `runner.publicUrl` still take precedence; internal Playground traffic continues using the Runtime Service.
+
+For a LiteLLM input/output pair, send the input first and reuse its `litellm_call_id` for the output. The Runner pins the Router revision and Guardrail version to that call. An output with an unknown or expired call ID fails closed instead of being silently reassigned.
+
 ## Usage
 
 1. Switch to Advanced mode at the top of the page, or enter through the test action on a Router / Endpoint detail page.

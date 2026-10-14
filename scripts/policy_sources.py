@@ -91,6 +91,9 @@ def build() -> dict[Path, str]:
             authoring = definition.model_dump()
             authoring["metadata"].pop("source", None)
             authoring["metadata"].pop("compliance", None)
+            for test in authoring["tests"]:
+                if test["context"] is None:
+                    test.pop("context")
             if package.manifest.testing.parameters:
                 authoring["testing"] = {"parameters": package.manifest.testing.parameters}
             for rule in authoring["rules"]:

@@ -50,7 +50,19 @@
 
 {{/* Public advertising only. Internal calls never use this URL. */}}
 {{- define "tali-guard.runtimePublicUrl" -}}
-{{- .Values.runner.publicUrl | default (include "tali-guard.sharedPublicUrl" .) -}}
+{{- if .Values.runner.publicUrl -}}
+{{- .Values.runner.publicUrl -}}
+{{- else if .Values.publicUrl -}}
+{{- include "tali-guard.sharedPublicUrl" . -}}
+{{- else -}}
+{{- $ui := urlParse (include "tali-guard.primaryPublicUrl" .) -}}
+{{- $host := regexReplaceAll ":[0-9]+$" $ui.host "" -}}
+{{/* Local LoadBalancer ports are separate; there is no shared ingress. Do not
+     infer a public runtime address for non-local or NodePort installations. */}}
+{{- if and .Values.runner.service.public.enabled (eq .Values.runner.service.public.type "LoadBalancer") (eq $ui.scheme "http") (has $host (list "localhost" "127.0.0.1" "[::1]")) -}}
+{{- printf "http://%s:%v" $host .Values.runner.service.public.port -}}
+{{- end -}}
+{{- end -}}
 {{- end }}
 
 {{- define "tali-guard.ingressHosts" -}}

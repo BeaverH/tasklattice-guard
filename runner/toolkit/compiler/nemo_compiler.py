@@ -711,6 +711,12 @@ def _timeout_for(
         candidate
         for candidate in serial_steps
         if any(item.trigger.step_ref == candidate.id for item in serial_steps)
+        # PII's semantic pass always reviews the locally redacted text. Its
+        # unconditional trigger must not reserve half the remote deadline for
+        # the fast exact check merely because it has no conditional edge.
+        or (candidate.contract_ref == "tali.guard.pii.exact.v1" and any(
+            item.contract_ref == "tali.guard.pii.semantic.v1" for item in serial_steps
+        ))
     )
     terminals = tuple(candidate for candidate in serial_steps if candidate not in prerequisites)
     prerequisite_budget = min(

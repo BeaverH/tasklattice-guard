@@ -465,6 +465,7 @@ const resources = {
         detectors: {
           content_safety: { title: "Content safety classifier", description: "Classify unsafe content using the selected safety-model contract." },
           jailbreak_detection: { title: "Jailbreak detector", description: "Run a detector specialized for jailbreak and prompt-bypass attempts." },
+          company_policy: { title: "Company policy judge", description: "Evaluate company boundaries with an independently assigned model." },
           topic_control: { title: "Topic boundary judge", description: "Evaluate allowed and denied business topics against the configured taxonomy." },
           pii_detection: { title: "Semantic PII detector", description: "Find contextual PII beyond deterministic local patterns." },
           contextual_grounding: { title: "Contextual grounding", description: "Score whether a response is supported by the supplied source context." },
@@ -729,6 +730,7 @@ const resources = {
         },
         profiles: {
           "generic-chat": "Generic chat",
+          "tali.openai-compatible-pii.v1": "OpenAI-compatible PII judge",
           "tali.qwen3guard.v1": "Qwen3Guard",
           "tali.llama-guard-3.v1": "Llama Guard 3",
           "tali.nemotron-content-safety.v1": "NVIDIA Nemotron Content Safety",
@@ -3471,6 +3473,7 @@ const resources = {
         detectors: {
           content_safety: { title: "内容安全分类器", description: "使用所选安全模型契约识别不安全内容。" },
           jailbreak_detection: { title: "越狱检测器", description: "使用专门模型检测越狱与绕过指令的尝试。" },
+          company_policy: { title: "公司策略判定", description: "使用独立绑定的模型判断公司业务边界。" },
           topic_control: { title: "主题边界判定", description: "根据配置的分类体系判断允许与禁止的业务主题。" },
           pii_detection: { title: "语义 PII 检测", description: "在本地确定性规则之外识别上下文中的 PII。" },
           contextual_grounding: { title: "上下文依据性", description: "评估回复是否得到给定来源上下文的支持。" },
@@ -3735,6 +3738,7 @@ const resources = {
         },
         profiles: {
           "generic-chat": "通用对话",
+          "tali.openai-compatible-pii.v1": "OpenAI 兼容 PII 判定",
           "tali.qwen3guard.v1": "Qwen3Guard",
           "tali.llama-guard-3.v1": "Llama Guard 3",
           "tali.nemotron-content-safety.v1": "NVIDIA Nemotron 内容安全",

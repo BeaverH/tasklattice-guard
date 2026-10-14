@@ -520,6 +520,7 @@ function capabilityTitle(t: ReturnType<typeof useTranslation>["t"], binding: Cap
     content_safety: "content_safety",
     jailbreak: "jailbreak_detection",
     topic_control: "topic_control",
+    company_policy: "company_policy",
     pii_semantic: "pii_detection",
     contextual_grounding: "contextual_grounding",
     automated_reasoning: "automated_reasoning",

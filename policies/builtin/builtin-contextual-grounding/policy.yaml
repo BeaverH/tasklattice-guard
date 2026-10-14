@@ -6,7 +6,7 @@ metadata:
   name: Contextual Grounding
   description: Checks model output against supplied context before it is released.
   source: built_in
-  version: 1.0.0
+  version: 1.1.0
   tags:
   - namespace: protection
     value: answer_reliability

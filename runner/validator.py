@@ -58,7 +58,11 @@ class DefaultRunnerValidator:
         compiler: DefaultRunnerCompiler,
         providers: ActionProviders | None = None,
         verify_artifact: Callable[[protocol.Artifact], Any] | None = None,
+        *, max_concurrency: int = 8,
     ) -> None:
+        if max_concurrency < 1:
+            raise ValueError("Validation concurrency must be positive.")
+        self._max_concurrency = max_concurrency
         self._compiler = compiler.snapshot()
         self._providers = providers or _local_validation_providers()
         # Verifies a released Artifact's checksum and signature exactly as
@@ -97,7 +101,7 @@ class DefaultRunnerValidator:
             await report("executing")
             completed = passed = 0
             last_report = time.monotonic()
-            slots = asyncio.Semaphore(8)
+            slots = asyncio.Semaphore(self._max_concurrency)
 
             async def evaluate(case):
                 nonlocal completed, passed, last_report
@@ -151,7 +155,7 @@ class DefaultRunnerValidator:
             store,
             self._providers,
             max_entries=1,
-            max_concurrency_per_guardrail=8,
+            max_concurrency_per_guardrail=self._max_concurrency,
             native_models=self._compiler.native_models,
         )
         return registry, plan, artifact
@@ -194,7 +198,7 @@ class DefaultRunnerValidator:
             for item in findings
             if isinstance(item, dict)
             and item.get("rule_id")
-            and item.get("verdict") in {"matched", "unknown"}
+            and item.get("verdict") == "matched"
             and (source_policy_id is None or item.get("policy_id") == source_policy_id)
         })
         expected_failure = _optional_string(case.get("expectedFailure"))
@@ -224,7 +228,7 @@ class DefaultRunnerValidator:
         if override:
             actual_matches = {
                 (item.get("policy_id"), item.get("rule_id")) for item in findings
-                if item.get("verdict") in {"matched", "unknown"}
+                if item.get("verdict") == "matched"
             }
             expected_matches = {
                 (_record(item).get("policyId"), _record(item).get("ruleId"))
@@ -461,8 +465,14 @@ def _test_content_view(case: dict[str, Any], phase: str, content: str) -> Conten
 def _metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(results)
     passed = sum(bool(item["passed"]) for item in results)
-    false_positive = sum(item["expectedDecision"] == "allow" and item["actualDecision"] != "allow" for item in results)
-    false_negative = sum(item["expectedDecision"] != "allow" and item["actualDecision"] == "allow" for item in results)
+    # Fail-open/closed decisions on unavailable or indeterminate evaluations are
+    # operational outcomes, not evidence of a classifier false positive/negative.
+    evaluated = [item for item in results if not item.get("actualFailure") and not any(
+        entry.get("verdict") == "unknown"
+        for entry in [*item.get("findings", []), *item.get("trace", [])]
+    )]
+    false_positive = sum(item["expectedDecision"] == "allow" and item["actualDecision"] != "allow" for item in evaluated)
+    false_negative = sum(item["expectedDecision"] != "allow" and item["actualDecision"] == "allow" for item in evaluated)
     escalated = sum(bool(item["escalated"]) for item in results)
     latencies = sorted(int(item["latencyMs"]) for item in results) or [0]
     return {

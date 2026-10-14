@@ -106,6 +106,13 @@ class ParameterDefinition(StrictModel):
     default: str | None = None
 
 
+class TestContext(StrictModel):
+    trusted_instruction: str = ""
+    query: str = ""
+    grounding_sources: list[str] = Field(default_factory=list)
+    expected_reasoning_result: Literal["valid", "invalid", "satisfiable", "impossible", "translation_ambiguous", "too_complex", "no_translations"] | None = None
+
+
 class TestDefinition(StrictModel):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -121,6 +128,7 @@ class TestDefinition(StrictModel):
     expected_text: str | None = None
     expected_matched_rules: list[str] | None = None
     scope: Literal["rule", "policy"] = "policy"
+    context: TestContext | None = None
 
 
 class ExecutionDefinition(StrictModel):
@@ -208,7 +216,7 @@ def compile_policy(definition: PolicyDefinition, registry: dict[str, Any]) -> di
             raise ValueError("Custom Policies cannot claim a platform-native Policy ID")
     result = definition.metadata.model_dump(exclude_unset=bundled, exclude={"compliance"} if definition.metadata.compliance is None else set())
     result["parameters"] = [item.model_dump(exclude_unset=bundled) for item in definition.parameters]
-    result["test_cases"] = [item.model_dump(exclude_unset=bundled, exclude={"expected_text", "expected_matched_rules", "scope"}) for item in definition.tests]
+    result["test_cases"] = [item.model_dump(exclude_unset=bundled, exclude={"expected_text", "expected_matched_rules", "scope"} | ({"context"} if item.context is None else set())) for item in definition.tests]
     result["rules"] = []
     for rule in definition.rules:
         detector = registry["detectors"].get(rule.detector.ref)

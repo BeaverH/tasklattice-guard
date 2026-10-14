@@ -12,7 +12,7 @@ from runner.toolkit.runtime.contracts import ProtectionDecision, RiskFinding, Ru
 from runner.validator import DefaultRunnerValidator
 
 
-@pytest.mark.parametrize("change", ["none", "missing_finding", "reject_binding", "changed_output", "wrong_rule", "stale"])
+@pytest.mark.parametrize("change", ["none", "missing_finding", "reject_binding", "changed_output", "wrong_rule", "stale", "unknown"])
 async def test_observation_only_override_preserves_detection_and_pass_action(change):
     text = "You should report any failure honestly."
     case = {
@@ -24,7 +24,7 @@ async def test_observation_only_override_preserves_detection_and_pass_action(cha
             "expectedOutputContent": text, "expectedMatches": [{"policyId": "insults", "ruleId": "insults-rule"}]},
     }
     findings = () if change == "missing_finding" else (RiskFinding(
-        risk="builtin_content_filter", taxonomy_id="TALI-SOCIAL-HARM-HARASSMENT", verdict="matched", confidence=1,
+        risk="builtin_content_filter", taxonomy_id="TALI-SOCIAL-HARM-HARASSMENT", verdict="unknown" if change == "unknown" else "matched", confidence=1,
         evidence="Synthetic insults match", recommended_action="allow", policy_id="insults",
         rule_id="wrong" if change == "wrong_rule" else "insults-rule",
     ),)
@@ -105,7 +105,7 @@ async def test_composition_assertions_require_reviewed_evidence_and_complete_out
 @pytest.mark.parametrize("scenario,passed", [
     ("earlier_policy", True), ("earlier_rule", True), ("later_policy", False),
     ("later_rule", False), ("disabled_rule", False), ("wrong_phase", False),
-    ("stale_target", False), ("unknown_policy", False), ("no_evidence", False),
+    ("stale_target", False), ("unknown_policy", False), ("no_evidence", False), ("unknown_verdict", False),
     ("fail_closed", False), ("redaction", False), ("expected_allow", False),
     ("target_already_ran", False), ("reviewed_override", False),
 ])
@@ -135,7 +135,7 @@ async def test_ordered_terminal_preemption(scenario, passed):
         blocker = "unknown"
     action = "transform" if scenario == "redaction" else "block"
     findings = () if scenario == "no_evidence" else (RiskFinding(
-        risk="builtin_content_filter", taxonomy_id="test", verdict="matched", confidence=1,
+        risk="builtin_content_filter", taxonomy_id="test", verdict="unknown" if scenario == "unknown_verdict" else "matched", confidence=1,
         evidence="Ordered terminal detector", recommended_action=action,
         policy_id=blocker, rule_id="blocker",
     ),)
@@ -176,3 +176,37 @@ def test_custom_policy_preemption_uses_pinned_flow_order(reverse):
     result = _ordered_preemption(plan, {"sourcePolicyId": "custom", "sourcePolicyVersion": "7", "coveredRuleIds": ["flow/input/target"]}, "input",
         [{"policy_id": "custom", "rule_id": "flow/input/first", "verdict": "matched", "recommended_action": "block"}], [])
     assert bool(result) is (not reverse)
+
+
+@pytest.mark.parametrize("verdict", ["matched", "unknown", "error"])
+@pytest.mark.parametrize("override", [False, True])
+async def test_inconclusive_result_is_not_detection_evidence(verdict, override):
+    runtime = AsyncMock()
+    runtime.evaluate.return_value = ProtectionDecision(decision="block", action="block", findings=(
+        RiskFinding(risk="contextual_grounding", taxonomy_id="test", verdict=verdict,
+            confidence=0, evidence="Synthetic detector result", recommended_action="block",
+            policy_id="grounding", rule_id="judge"),))
+    plan = plan_from_dict({"guardrail_id": "test", "guardrail_version": "20260904-010000.001Z"})
+    case = {"id": "unsupported", "content": "A response", "phase": "output", "expectedDecision": "block",
+        "caseType": "rule_acceptance", "sourcePolicyId": "grounding", "sourcePolicyVersion": "1",
+        "coveredRuleIds": ["judge"]}
+    if override:
+        case["expectationOverride"] = {"sourcePolicyVersion": "1", "reason": "Require detector evidence",
+            "expectedDecision": "block", "expectedMatches": [{"policyId": "grounding", "ruleId": "judge"}]}
+    result = await DefaultRunnerValidator(DefaultRunnerCompiler())._evaluate(runtime, plan, case)
+    assert result["passed"] is (verdict == "matched")
+    assert result["matchedRuleIds"] == (["judge"] if verdict == "matched" else [])
+    if verdict != "matched":
+        assert "Expected Policy/Rule evidence was not observed." in result["assertionFailures"]
+
+
+async def test_missing_context_can_be_tested_as_a_boundary_without_claiming_a_match():
+    runtime = AsyncMock()
+    runtime.evaluate.return_value = ProtectionDecision(decision="block", action="block", findings=(
+        RiskFinding(risk="contextual_grounding", taxonomy_id="test", verdict="unknown", confidence=0,
+            evidence="Missing query", recommended_action="block", policy_id="grounding", rule_id="judge"),))
+    plan = plan_from_dict({"guardrail_id": "test", "guardrail_version": "20260904-010000.001Z"})
+    result = await DefaultRunnerValidator(DefaultRunnerCompiler())._evaluate(runtime, plan,
+        {"id": "missing-query", "content": "A response", "phase": "output", "expectedDecision": "block", "caseType": "scenario"})
+    assert result["passed"]
+    assert result["matchedRuleIds"] == []

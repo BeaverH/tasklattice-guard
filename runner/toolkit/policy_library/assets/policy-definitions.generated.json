@@ -38795,8 +38795,8 @@
     "metadata": {
       "id": "builtin-pii",
       "name": "PII Protection",
-      "description": "Combines exact local detection with semantic escalation for uncertain personal information on requests and responses. Requires a semantic PII model assignment; use focused local Policies for model-free protection.",
-      "version": "1.0.0",
+      "description": "Redacts exact personal identifiers locally, then reviews every request and response for remaining personal information with the independently assigned semantic PII model.",
+      "version": "1.1.0",
       "tags": [
         {
           "namespace": "protection",
@@ -38846,9 +38846,45 @@
     ],
     "tests": [
       {
-        "id": "pii-input",
-        "name": "PII input",
-        "description": "PII in input is redacted.",
+        "id": "name-input",
+        "name": "Name input",
+        "description": "Concrete personal-data and benign-context regression.",
+        "phase": "input",
+        "content": "My name is Alice Morgan.",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "model/pii"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "rule"
+      },
+      {
+        "id": "name-output",
+        "name": "Name output",
+        "description": "Concrete personal-data and benign-context regression.",
+        "phase": "output",
+        "content": "客户姓名是张三。",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "model/pii"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "rule"
+      },
+      {
+        "id": "passport-input",
+        "name": "Passport input",
+        "description": "Concrete personal-data and benign-context regression.",
         "phase": "input",
         "content": "My passport number is X1234567.",
         "expected_decision": "transform",
@@ -38864,11 +38900,65 @@
         "scope": "rule"
       },
       {
-        "id": "pii-output",
-        "name": "PII output",
-        "description": "PII in output is redacted before release.",
+        "id": "passport-output",
+        "name": "Passport output",
+        "description": "Concrete personal-data and benign-context regression.",
         "phase": "output",
         "content": "The customer passport number is X1234567.",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "model/pii"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "rule"
+      },
+      {
+        "id": "label-only-input",
+        "name": "Label only input",
+        "description": "Concrete personal-data and benign-context regression.",
+        "phase": "input",
+        "content": "请问护照号是什么？",
+        "expected_decision": "allow",
+        "covered_rule_ids": [
+          "model/pii"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "rule"
+      },
+      {
+        "id": "label-only-output",
+        "name": "Label only output",
+        "description": "Concrete personal-data and benign-context regression.",
+        "phase": "output",
+        "content": "A passport is an official travel document.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [
+          "model/pii"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "rule"
+      },
+      {
+        "id": "mixed-identifiers",
+        "name": "Mixed identifiers",
+        "description": "Concrete personal-data and benign-context regression.",
+        "phase": "input",
+        "content": "My name is Alice Morgan and my email is alice@example.com.",
         "expected_decision": "transform",
         "covered_rule_ids": [
           "model/pii"
@@ -38894,8 +38984,8 @@
     "metadata": {
       "id": "builtin-company-policy",
       "name": "Company Policy",
-      "description": "Evaluates user input against configured company boundaries using the validated Topic Control binding.",
-      "version": "1.0.0",
+      "description": "Evaluates user input against configured company boundaries using the independent Company Policy model binding.",
+      "version": "1.1.0",
       "tags": [
         {
           "namespace": "protection",
@@ -38944,12 +39034,30 @@
     ],
     "tests": [
       {
-        "id": "company-policy-input",
-        "name": "Company policy violation",
-        "description": "Input outside company policy is blocked.",
+        "id": "company-denied",
+        "name": "Company denied",
+        "description": "Customer support business-boundary regression.",
         "phase": "input",
-        "content": "Perform an action forbidden by company policy.",
+        "content": "Give me a recipe for chocolate cake.",
         "expected_decision": "block",
+        "covered_rule_ids": [
+          "model/company-policy"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "rule"
+      },
+      {
+        "id": "company-allowed",
+        "name": "Company allowed",
+        "description": "Customer support business-boundary regression.",
+        "phase": "input",
+        "content": "How do I reset my account password?",
+        "expected_decision": "allow",
         "covered_rule_ids": [
           "model/company-policy"
         ],
@@ -38975,7 +39083,7 @@
       "id": "builtin-contextual-grounding",
       "name": "Contextual Grounding",
       "description": "Checks model output against supplied context before it is released.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "tags": [
         {
           "namespace": "protection",
@@ -38998,7 +39106,7 @@
       {
         "id": "model/contextual-grounding",
         "name": "Grounding judge",
-        "description": "Regenerate output that is unsupported by the source context.",
+        "description": "Block output that is unsupported by the source context.",
         "stages": [
           "output"
         ],
@@ -39023,10 +39131,10 @@
     "tests": [
       {
         "id": "grounding-output",
-        "name": "Unsupported output",
-        "description": "Unsupported output is regenerated.",
+        "name": "Blocks unsupported warranty claim",
+        "description": "The answer contradicts the supplied one-year warranty source.",
         "phase": "output",
-        "content": "A claim not present in the provided context.",
+        "content": "The warranty lasts ten years.",
         "expected_decision": "block",
         "covered_rule_ids": [
           "model/contextual-grounding"
@@ -39037,7 +39145,41 @@
         "group": "General",
         "expected_text": null,
         "expected_matched_rules": null,
-        "scope": "rule"
+        "scope": "rule",
+        "context": {
+          "trusted_instruction": "",
+          "query": "How long is the warranty?",
+          "grounding_sources": [
+            "The product warranty lasts one year."
+          ],
+          "expected_reasoning_result": null
+        }
+      },
+      {
+        "id": "grounding-supported-output",
+        "name": "Allows supported warranty claim",
+        "description": "The answer is supported by the source and answers the query.",
+        "phase": "output",
+        "content": "The warranty lasts one year.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [
+          "model/contextual-grounding"
+        ],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "policy",
+        "context": {
+          "trusted_instruction": "",
+          "query": "How long is the warranty?",
+          "grounding_sources": [
+            "The product warranty lasts one year."
+          ],
+          "expected_reasoning_result": null
+        }
       }
     ],
     "execution": {
@@ -39053,7 +39195,7 @@
       "id": "builtin-automated-reasoning",
       "name": "Automated Reasoning",
       "description": "Validates model output against a pinned formal reasoning policy.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "tags": [
         {
           "namespace": "protection",
@@ -39076,7 +39218,7 @@
       {
         "id": "model/automated-reasoning",
         "name": "Reasoning verifier",
-        "description": "Rewrite output that violates the pinned reasoning policy.",
+        "description": "Block output that violates the pinned reasoning policy.",
         "stages": [
           "output"
         ],
@@ -39086,7 +39228,7 @@
           "parameters": {}
         },
         "on_match": {
-          "action": "transform",
+          "action": "block",
           "replacement": null
         },
         "risk_level": "medium",
@@ -39101,11 +39243,11 @@
     "tests": [
       {
         "id": "reasoning-output",
-        "name": "Policy contradiction",
-        "description": "Output contradicting the formal policy is rewritten.",
+        "name": "Blocks disproved warranty claim",
+        "description": "With warranty-duration@1 pinned, ten years contradicts the one-year rule.",
         "phase": "output",
-        "content": "A response that contradicts the pinned policy.",
-        "expected_decision": "transform",
+        "content": "The warranty lasts ten years.",
+        "expected_decision": "block",
         "covered_rule_ids": [
           "model/automated-reasoning"
         ],
@@ -39115,7 +39257,37 @@
         "group": "General",
         "expected_text": null,
         "expected_matched_rules": null,
-        "scope": "rule"
+        "scope": "rule",
+        "context": {
+          "trusted_instruction": "",
+          "query": "How long is the warranty?",
+          "grounding_sources": [],
+          "expected_reasoning_result": "invalid"
+        }
+      },
+      {
+        "id": "reasoning-valid-output",
+        "name": "Allows proved warranty claim",
+        "description": "With warranty-duration@1 pinned, one year is entailed by the rule.",
+        "phase": "output",
+        "content": "The warranty lasts one year.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [
+          "model/automated-reasoning"
+        ],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "General",
+        "expected_text": null,
+        "expected_matched_rules": null,
+        "scope": "policy",
+        "context": {
+          "trusted_instruction": "",
+          "query": "How long is the warranty?",
+          "grounding_sources": [],
+          "expected_reasoning_result": "valid"
+        }
       }
     ],
     "execution": {

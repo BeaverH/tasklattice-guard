@@ -25,7 +25,8 @@ def policy_payload(item: PolicySpec) -> dict[str, object]:
         "effects": item.effects,
         "detectors": item.detectors,
         "rules": tuple(asdict(rule) for rule in item.rules),
-        "test_cases": tuple(asdict(test_case) for test_case in item.test_cases),
+        "test_cases": tuple({key: value for key, value in asdict(test_case).items()
+                             if key != "context" or value is not None} for test_case in item.test_cases),
         "test_count": item.test_count,
         "safety_level": item.safety_level,
         "output_delivery": item.output_delivery,
