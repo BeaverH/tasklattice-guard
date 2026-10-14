@@ -9,6 +9,7 @@ import time
 import httpx
 
 from . import generated as protocol
+from .model_validation_diagnostics import ValidationDiagnostics, capture_validation_case
 from .providers import dynamic_runtime_action_providers
 from .toolkit.compiler.nemo_compiler import NeMoConfigCompiler
 from .toolkit.nemo.action_registry import action_providers
@@ -39,6 +40,7 @@ async def validate_capability(
     started = time.perf_counter()
     result = protocol.CapabilityValidationResult(request_id=request.request_id)
     runtime = None
+    diagnostic_session = ValidationDiagnostics({}, ())
     try:
         config = request.configuration
         if len(config.bindings) != 1 or len(config.runtimes) != 1:
@@ -102,7 +104,11 @@ async def validate_capability(
                         GuardContentBlock(id="answer", text=text, role="model_output", trust="untrusted", source="model_output"),
                         GuardContentBlock(id="question", text=formal.query, role="query", trust="untrusted", source="request", qualifiers=("query",)),
                     ), "answer")
-                decision = await runtime.evaluate(EngineRequest(phase=phase, text=text, plan=plan,
+                case_id = f"{contract}:{phase}:{name}"
+                with capture_validation_case(enabled=binding.capability_ref == "topic_control", secrets=tuple(credentials.values()), session=diagnostic_session,
+                                             validation_id=request.request_id, binding_id=binding.binding_id, case_id=case_id,
+                                             model=model.model, profile=model.profile_ref, provider_id=model.provider_id, expected_decision=expected) as diagnostics:
+                    decision = await runtime.evaluate(EngineRequest(phase=phase, text=text, plan=plan,
                                                   content_view=view, evidence_scope="full" if formal else "interventions",
                                                   target_source="assistant_output" if phase == "output" else "user_input",
                                                   context_messages=({"role": "user", "content": "Please answer my question."},) if phase == "output" else ()))
@@ -112,12 +118,15 @@ async def validate_capability(
                 if formal:
                     proof = [finding.result for item in decision.findings for finding in item.reasoning]
                     passed = passed and bool(proof) and all(value == ("valid" if expected == "allow" else "invalid") for value in proof)
-                result.cases.add(id=f"{contract}:{phase}:{name}", expected_decision=expected,
+                if not passed and diagnostics is not None:
+                    diagnostics.failure(expected=expected, actual=decision.decision, reason=decision.reason or "")
+                result.cases.add(id=case_id, expected_decision=expected,
                                  actual_decision=decision.decision, passed=passed,
                                  input_content=text, output_content=json.dumps({
                                      "decision": decision.decision, "action": decision.action,
                                      "texts": decision.texts, "reason": decision.reason,
                                      "findings": [asdict(item) for item in decision.findings],
+                                     **({"model_exchanges": diagnostics.exchanges, "dropped_model_exchanges": diagnostics.dropped_exchanges} if not passed and diagnostics is not None else {}),
                                      **({"formal_policy": asdict(plan.reasoning_policies[0]), "query": formal.query} if formal else {}),
                                  }, ensure_ascii=False, indent=2),
                                  reason=decision.reason or "")
