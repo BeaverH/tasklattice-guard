@@ -16,9 +16,11 @@ import type { Guardrail } from "@/lib/api";
 import { updateGuardrailProtectionMode } from "@/lib/guardrails-api";
 import { protectionModes, type ProtectionMode, type ProtectionModeSettings } from "../../shared/protection-mode";
 
-function CurrentModeMarker() {
-  return <strong className="text-base font-bold" aria-hidden="true">*</strong>;
-}
+const modeTextClasses: Record<ProtectionMode, string> = {
+  enforce: "text-[var(--success)]",
+  monitor: "text-[var(--warning)]",
+  bypass: "text-destructive",
+};
 
 // Keep mutation controls at the detail-page level so Actions works from every tab.
 export function useGuardrailProtectionActions(guardrail: Guardrail | undefined, onChanged: () => Promise<unknown>) {
@@ -37,41 +39,29 @@ export function useGuardrailProtectionActions(guardrail: Guardrail | undefined, 
     },
     onSuccess: async () => { setEditing(null); toast.success(t("protectionMode.submitted")); await onChanged(); },
   });
-  const open = (next: ProtectionMode) => { if (settings?.ready && canEdit && !mutation.isPending) { returnFocusRef.current = menuRef.current?.querySelector("button") ?? null; mutation.reset(); setEditing(settings); setMode(next); setReason(""); } };
-  const submit = (next: ProtectionMode) => { if (settings?.ready && canEdit && !mutation.isPending) mutation.mutate({ mode: next, expectedGeneration: settings.generation, reason: "" }); };
-  const pending = settings && settings.status !== "applied";
+  const open = () => { if (settings?.ready && canEdit && !mutation.isPending) { returnFocusRef.current = menuRef.current?.querySelector("button") ?? null; mutation.reset(); setEditing(settings); setMode(settings.mode); setReason(""); } };
   const editable = Boolean(settings?.ready && canEdit);
+  const retrying = editing?.status !== "applied" && mode === editing?.mode;
 
   return {
     menuRef,
     menuItems: canEdit ? [
-      <MenuItem key="change-mode" label={t("protectionMode.change")} aria-label={t("protectionMode.change")} renderIcon={ShieldCheck} disabled={!editable || mutation.isPending}>
-        {editable && !mutation.isPending && settings ? <>
-          {protectionModes.map(value => {
-            const current = value === settings.appliedMode;
-            const requested = pending && value === settings.mode && !current;
-            const label = `${t(`states.${value}`)}${requested ? ` · ${t("protectionMode.requested")}` : ""}`;
-            return <MenuItem key={value} label={label} renderIcon={current ? CurrentModeMarker : undefined} aria-current={current ? "true" : undefined} onClick={() => open(value)} />;
-          })}
-          {pending ? <><MenuItemDivider /><MenuItem label={t("protectionMode.retry")} renderIcon={RefreshCw} onClick={() => submit(settings.mode)} /></> : null}
-        </> : null}
-      </MenuItem>,
+      <MenuItem key="change-mode" label={t("protectionMode.change")} aria-label={t("protectionMode.change")} renderIcon={ShieldCheck} disabled={!editable || mutation.isPending} onClick={open} />,
       <MenuItemDivider key="mode-divider" />,
     ] : null,
     feedback: canEdit ? <>
-    {!editing && mutation.error ? <div className="mt-4"><ErrorNotice error={mutation.error} /><Button variant="outline" onClick={() => void onChanged()}>{t("resourceList.refresh")}</Button></div> : null}
     {editing && guardrail ? <EntitySheet open width="md" returnFocusRef={returnFocusRef} closeDisabled={mutation.isPending} onOpenChange={value => { if (!value) setEditing(null); }}
       eyebrow={guardrail.name} title={t("protectionMode.change")} description={t("protectionMode.scope")}
       footer={<><Button variant="outline" disabled={mutation.isPending} onClick={() => setEditing(null)}>{t("common.cancel")}</Button>
-        <Button disabled={mutation.isPending || mode === editing.mode || !editable} onClick={() => mutation.mutate({ mode, expectedGeneration: editing.generation, reason })}>
-          {mutation.isPending ? <LoaderCircle className="animate-spin motion-reduce:animate-none" /> : null}
-          {t(mutation.isPending ? "common.saving" : mode === "bypass" ? "protectionMode.enableBypass" : "protectionMode.apply")}
+        <Button disabled={mutation.isPending || (mode === editing.mode && !retrying) || !editable} onClick={() => mutation.mutate({ mode, expectedGeneration: editing.generation, reason })}>
+          {mutation.isPending ? <LoaderCircle className="animate-spin motion-reduce:animate-none" /> : retrying ? <RefreshCw /> : null}
+          {t(mutation.isPending ? "common.saving" : retrying ? "protectionMode.retry" : mode === "bypass" ? "protectionMode.enableBypass" : "protectionMode.apply")}
         </Button></>}>
       <div className="space-y-6">
         <RadioGroup value={mode} onValueChange={value => { setMode(value as ProtectionMode); mutation.reset(); }} orientation="vertical" disabled={mutation.isPending} legendText={t("protectionMode.title")}>
           {protectionModes.map(value => <div key={value} className="flex min-h-11 items-start gap-3 py-3">
             <RadioGroupItem id={`protection-${value}`} value={value} aria-label={t(`states.${value}`)} />
-            <div><Label htmlFor={`protection-${value}`}>{t(`states.${value}`)}</Label><p className="mt-1 text-sm leading-6 text-muted-foreground">{t(`protectionMode.descriptions.${value}`)}</p></div>
+            <div><Label htmlFor={`protection-${value}`}><span className={`font-sans text-sm font-semibold ${modeTextClasses[value]}`}>{t(`states.${value}`)}</span></Label><p className="mt-1 text-sm leading-6 text-muted-foreground">{t(`protectionMode.descriptions.${value}`)}</p></div>
           </div>)}
         </RadioGroup>
         <div className="space-y-2"><Label htmlFor="protection-reason">{t("protectionMode.reason")}</Label><Textarea id="protection-reason" value={reason} maxLength={500} disabled={mutation.isPending} onChange={event => setReason(event.target.value)} /></div>

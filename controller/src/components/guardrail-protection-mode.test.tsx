@@ -21,12 +21,12 @@ function ModeControls({ guardrail, onChanged }: { guardrail: Guardrail; onChange
   </>;
 }
 function openActions() { fireEvent.click(screen.getByRole("button", { name: "Actions" })); }
-function openModeMenu() {
+function openModeDrawer() {
   openActions();
   fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.change" }));
 }
 function chooseMode(mode: string) {
-  fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(`^states.${mode}( · |$)`) }));
+  fireEvent.click(screen.getByRole("radio", { name: `states.${mode}` }));
 }
 function show(overrides: Partial<ProtectionModeSettings> = {}) {
   const onChanged = vi.fn().mockResolvedValue(undefined);
@@ -50,7 +50,7 @@ describe("protection-mode interaction", () => {
   });
   it("stages selection until Apply with the reviewed generation and reason", async () => {
     const onChanged = show();
-    openModeMenu();
+    openModeDrawer();
     chooseMode("bypass");
     expect((screen.getByRole("radio", { name: "states.bypass" }) as HTMLInputElement).checked).toBe(true);
     fireEvent.change(screen.getByLabelText("protectionMode.reason"), { target: { value: "upstream outage" } });
@@ -59,29 +59,35 @@ describe("protection-mode interaction", () => {
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith("g", { mode: "bypass", expectedGeneration: 7, reason: "upstream outage" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
   });
-  it("uses a single top-level action, marks the current mode and leaves it unchanged on cancel", async () => {
+  it("opens the drawer directly with the configured mode and leaves it unchanged on cancel", async () => {
     show({ mode: "bypass", appliedMode: "bypass" });
     openActions();
     const rootMenu = screen.getByRole("menu", { name: "Actions" });
     expect(screen.getAllByRole("menuitem").filter(item => item.parentElement === rootMenu)).toHaveLength(1);
-    fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.change" }));
-    const current = screen.getByRole("menuitem", { name: "states.bypass" });
-    expect(current.getAttribute("aria-current")).toBe("true");
-    fireEvent.click(current);
+    const changeMode = screen.getByRole("menuitem", { name: "protectionMode.change" });
+    expect(changeMode.getAttribute("aria-haspopup")).toBe("false");
+    fireEvent.click(changeMode);
+    expect(screen.getByRole("dialog", { name: "protectionMode.change" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    expect((screen.getByRole("radio", { name: "states.bypass" }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole("button", { name: "protectionMode.enableBypass" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
-    openModeMenu();
+    openModeDrawer();
     chooseMode("monitor");
     fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Actions" })));
+    openModeDrawer();
+    expect((screen.getByRole("radio", { name: "states.bypass" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("protectionMode.reason") as HTMLTextAreaElement).value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
     expect(screen.getByText("bypass")).toBeTruthy();
     expect(mocks.update).not.toHaveBeenCalled();
   });
   it("keeps selection and reason after a conflict", async () => {
     mocks.update.mockRejectedValue(new Error("Protection mode changed; refresh"));
     show();
-    openModeMenu();
+    openModeDrawer();
     chooseMode("monitor");
     fireEvent.change(screen.getByLabelText("protectionMode.reason"), { target: { value: "observe" } });
     fireEvent.click(screen.getByRole("button", { name: "protectionMode.apply" }));
@@ -96,11 +102,9 @@ describe("protection-mode interaction", () => {
     fireEvent.click(screen.getByRole("button", { name: "protectionMode.details" }));
     expect(screen.getByText("protectionMode.runners.offline")).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: "common.close" }).at(-1)!);
-    openModeMenu();
-    const current = screen.getByRole("menuitem", { name: "states.enforce" });
-    expect(current.getAttribute("aria-current")).toBe("true");
-    expect(current.getAttribute("aria-disabled")).not.toBe("true");
-    expect(screen.getByRole("menuitem", { name: "states.bypass · protectionMode.requested" }).getAttribute("aria-current")).toBeNull();
+    openModeDrawer();
+    expect((screen.getByRole("radio", { name: "states.bypass" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: "protectionMode.retry" })).toBeTruthy();
     chooseMode("enforce");
     expect(mocks.update).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "protectionMode.apply" }));
@@ -111,24 +115,28 @@ describe("protection-mode interaction", () => {
     openActions();
     expect(screen.getByRole("menuitem", { name: "protectionMode.change" }).getAttribute("aria-disabled")).toBe("true");
   });
-  it("keeps rollout details on demand and retries rollout from Actions", async () => {
+  it("keeps rollout details on demand and retries the requested mode from the drawer", async () => {
     show({ mode: "monitor", status: "failed", applied: 0 });
     expect(screen.queryByRole("region", { name: "protectionMode.title" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "protectionMode.details" }));
     const panel = screen.getByRole("dialog", { name: "protectionMode.details" });
     expect(within(panel).queryByRole("radio")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "common.close" }).at(-1)!);
-    openModeMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.retry" }));
+    openModeDrawer();
+    expect((screen.getByRole("radio", { name: "states.monitor" }) as HTMLInputElement).checked).toBe(true);
+    expect(mocks.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "protectionMode.retry" }));
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith("g", { mode: "monitor", expectedGeneration: 7, reason: "" }));
   });
-  it("shows retry failures outside the menu", async () => {
+  it("keeps retry failures and recovery inside the drawer", async () => {
     mocks.update.mockRejectedValue(new Error("Runner mode conflict"));
     show({ mode: "bypass", appliedMode: "enforce", status: "failed" });
-    openModeMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.retry" }));
+    openModeDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "protectionMode.retry" }));
     await screen.findByText("Runner mode conflict");
-    expect(screen.getByRole("button", { name: "resourceList.refresh" })).toBeTruthy();
+    const panel = screen.getByRole("dialog", { name: "protectionMode.change" });
+    expect(within(panel).getByText("Runner mode conflict")).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "resourceList.refresh" })).toBeTruthy();
   });
   it("lets viewers inspect but not change the mode", () => {
     mocks.role = "viewer"; show({ mode: "bypass", appliedMode: "bypass" });

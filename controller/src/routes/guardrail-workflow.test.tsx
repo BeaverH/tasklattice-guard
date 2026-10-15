@@ -134,8 +134,9 @@ describe("Guardrail edit, test and publish workflow", () => {
     expect(screen.getByRole("tab", { name: /guardrails.validationHistoryTab/ }).getAttribute("data-state")).toBe("active");
     fireEvent.click(screen.getByRole("button", { name: "routing.actions" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "protectionMode.change" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "states.monitor" }));
     expect(await screen.findByRole("dialog", { name: "protectionMode.change" })).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "states.enforce" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: "states.monitor" }));
     expect((screen.getByRole("radio", { name: "states.monitor" }) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole("radio", { name: "states.bypass" })).toBeTruthy();
   });
