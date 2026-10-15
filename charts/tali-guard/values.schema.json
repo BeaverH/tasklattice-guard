@@ -476,7 +476,11 @@
               "pattern": "^[0-9]+(ms|s|m|h)$"
             },
             "labels": {
-              "type": "object"
+              "description": "Extra metadata labels shared by Controller and Runner ServiceMonitors. Values must be strings; chart-generated label keys are reserved.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           }
         },

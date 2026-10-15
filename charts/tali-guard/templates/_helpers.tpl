@@ -199,6 +199,19 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: tasklattice-guard
 {{- end }}
 
+{{/* Build one label map so custom ServiceMonitor labels cannot replace chart identity. */}}
+{{- define "tali-guard.serviceMonitorLabels" -}}
+{{- $labels := include "tali-guard.commonLabels" .root | fromYaml -}}
+{{- $_ := set $labels "app.kubernetes.io/component" .component -}}
+{{- range $key, $value := .root.Values.observability.serviceMonitor.labels -}}
+{{- if hasKey $labels $key -}}
+{{- fail (printf "observability.serviceMonitor.labels: label %q is reserved by the chart and cannot be overridden" $key) -}}
+{{- end -}}
+{{- $_ := set $labels $key $value -}}
+{{- end -}}
+{{- toYaml $labels -}}
+{{- end }}
+
 {{- define "tali-guard.controlSecretName" -}}
 {{- default (printf "%s-control" (include "tali-guard.fullname" .)) .Values.security.controlSecret.existingSecret }}
 {{- end }}

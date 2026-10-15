@@ -453,7 +453,47 @@ Full request tracing and continuous profiling remain disabled, so normal
 production operation does not pay full-sampling or profiler overhead. A
 Prometheus Operator and Grafana dashboard sidecar are therefore part of the
 production platform contract; set their selector labels under
-`serviceMonitor.labels` and `prometheusRule.labels` when required.
+`observability.serviceMonitor.labels` and `observability.prometheusRule.labels`
+when required.
+
+Use `observability.serviceMonitor.labels` to add the same metadata labels to
+both the Controller and Runner ServiceMonitors:
+
+```yaml
+observability:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: "monitoring"
+      team: "platform"
+```
+
+Set `release` to the value expected by your Prometheus ServiceMonitor selector.
+These labels only extend each ServiceMonitor's `metadata.labels`; they do not
+change its Service selector, target labels, or scraped metric labels. The
+default is `{}`, which adds no custom labels. The same configuration applies
+when `observability.performanceDebug.enabled` forces ServiceMonitors on.
+
+All label values must be strings. Quote numeric or boolean-looking YAML values
+(for example, `build: "123"` and `enabled: "true"`), and use `--set-string` for
+CLI overrides. Helm schema validation rejects non-string values.
+Helm's standard `null` override removes a label before schema validation; for
+example, `--set observability.serviceMonitor.labels.team=null` removes `team`
+inherited from a values file.
+
+When rendering ServiceMonitors, Helm rejects any custom entry using one of
+these chart-generated label keys, even if the supplied value matches:
+
+- `helm.sh/chart`
+- `app.kubernetes.io/name`
+- `app.kubernetes.io/instance`
+- `app.kubernetes.io/version`
+- `app.kubernetes.io/managed-by`
+- `app.kubernetes.io/part-of`
+- `app.kubernetes.io/component`
+
+The error identifies `observability.serviceMonitor.labels` and the reserved
+key so it can be removed from your overrides.
 
 For an on-demand, full Runner performance-debug deployment, override the
 telemetry settings on your environment values:

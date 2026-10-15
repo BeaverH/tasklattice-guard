@@ -251,8 +251,12 @@ observability:
   serviceMonitor:
     # Disable this and prometheusRule if Prometheus Operator CRDs are absent.
     enabled: true
+    # Extra metadata.labels shared by Controller and Runner ServiceMonitors.
+    # Values must be strings; chart-generated label keys cannot be overridden.
+    # These do not add labels to scraped metrics or change Service selectors.
     labels: {}
-    # Example labels: { release: monitoring } to match Prometheus selectors.
+    # Example labels: { release: "monitoring", team: "platform" }.
+    # Quote numeric/boolean-looking values, e.g. { build: "123", enabled: "true" }.
     # interval: 15s
     # scrapeTimeout: 10s
   prometheusRule:

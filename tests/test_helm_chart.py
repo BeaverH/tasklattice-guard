@@ -784,6 +784,110 @@ def test_multiple_runner_replicas_require_shared_call_context():
     assert "shared Redis is required" in result.stderr
 
 
+@pytest.fixture(params=[False, True], ids=["enabled", "performance-debug"])
+def service_monitor_flags(request) -> tuple[str, ...]:
+    if request.param:
+        return (
+            "--set", "observability.serviceMonitor.enabled=false",
+            "--set", "observability.performanceDebug.enabled=true",
+            "--set-string", "observability.tracing.otlpEndpoint=http://tempo.monitoring:4318",
+            "--set-string", "observability.profiling.serverAddress=http://pyroscope.monitoring:4040",
+        )
+    return ("--set", "observability.serviceMonitor.enabled=true")
+
+
+@pytest.mark.parametrize("labels", [
+    pytest.param({}, id="empty"),
+    pytest.param({
+        "release": "monitoring",
+        "team": "platform",
+        "example.com/build": "123",
+        "example.com/enabled": "true",
+        "example.com/optional": "",
+    }, id="custom"),
+])
+def test_service_monitor_labels_only_extend_both_resource_metadata(tmp_path, service_monitor_flags, labels):
+    baseline = {
+        item["metadata"]["name"]: item
+        for item in render(*service_monitor_flags)
+        if item.get("kind") == "ServiceMonitor"
+    }
+    values = tmp_path / "monitoring-labels.yaml"
+    values.write_text(yaml.safe_dump({"observability": {"serviceMonitor": {"labels": labels}}}))
+    monitors = [
+        item for item in render(*service_monitor_flags, "--values", str(values))
+        if item.get("kind") == "ServiceMonitor"
+    ]
+
+    assert len(monitors) == 2
+    assert {item["metadata"]["labels"]["app.kubernetes.io/component"] for item in monitors} == {"controller", "runner"}
+    for monitor in monitors:
+        original = baseline[monitor["metadata"]["name"]]
+        assert monitor["metadata"] == {
+            **original["metadata"],
+            "labels": original["metadata"]["labels"] | labels,
+        }
+        # Resource labels must not leak into selectors, target labels or endpoints.
+        assert monitor["spec"] == original["spec"]
+
+
+@pytest.mark.parametrize("value", [
+    pytest.param(123, id="integer"),
+    pytest.param(1.5, id="number"),
+    pytest.param(True, id="true"),
+    pytest.param(False, id="false"),
+    pytest.param(["platform"], id="array"),
+    pytest.param({"name": "platform"}, id="object"),
+])
+def test_service_monitor_label_values_must_be_strings(value):
+    error = render_error(
+        "--set-json", "observability.serviceMonitor.labels=" + json.dumps({"team": value}),
+    )
+
+    # Helm versions report schema locations as dotted paths or JSON pointers.
+    assert "observability.serviceMonitor.labels.team" in error.replace("/", ".")
+    assert "string" in error
+
+
+def test_service_monitor_null_label_override_removes_label(tmp_path):
+    values = tmp_path / "monitoring-labels.yaml"
+    values.write_text(yaml.safe_dump({"observability": {"serviceMonitor": {
+        "labels": {"release": "monitoring", "team": "platform"},
+    }}}))
+    monitors = [
+        item for item in render(
+            "--values", str(values),
+            "--set-json", "observability.serviceMonitor.labels.team=null",
+        )
+        if item.get("kind") == "ServiceMonitor"
+    ]
+
+    assert len(monitors) == 2
+    for monitor in monitors:
+        assert monitor["metadata"]["labels"]["release"] == "monitoring"
+        assert "team" not in monitor["metadata"]["labels"]
+
+
+@pytest.mark.parametrize(("key", "value"), [
+    ("helm.sh/chart", "custom-chart"),
+    # Even supplying the chart's current value must not duplicate its label key.
+    ("app.kubernetes.io/name", "tali-guard"),
+    ("app.kubernetes.io/instance", "other-release"),
+    ("app.kubernetes.io/version", "custom-version"),
+    ("app.kubernetes.io/managed-by", "custom-manager"),
+    ("app.kubernetes.io/part-of", "custom-platform"),
+    ("app.kubernetes.io/component", "custom-component"),
+])
+def test_service_monitor_chart_label_keys_are_reserved(service_monitor_flags, key, value):
+    error = render_error(
+        *service_monitor_flags,
+        "--set-json", "observability.serviceMonitor.labels=" + json.dumps({key: value}),
+    )
+
+    assert "observability.serviceMonitor.labels" in error
+    assert f'label "{key}" is reserved by the chart' in error
+
+
 def test_runner_service_monitor_maps_pod_identity_to_runner_id():
     documents = render("--set", "observability.serviceMonitor.enabled=true")
     runner_monitor = next(
