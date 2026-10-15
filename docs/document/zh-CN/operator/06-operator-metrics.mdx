@@ -10,11 +10,17 @@ Controller 和 Runner 都有指标。业务统计 API 与 Prometheus 采集接�
 
 当前 Controller 的 GET `/api/v1/telemetry/metrics`，使用个人 Token 的 `runtime:read` 权限或浏览器 Session。支持 window、`guardrailId`、`routerId`，业务数据来自上报事件。
 
+**Security Events**
+
+GET `/api/v1/telemetry/security-events` 要求 User 角色及 `runtime:read`。必须指定 `guardrailId`，可按 `window` 和逗号分隔的 `severity` 筛选。每个条目对应一个 finding，默认每页 25 条，也支持 `limit=50`。翻页时携带 `nextCursor`，保持筛选条件及每页条数不变；游标固定时间范围与接收时间边界。不带游标重新查询可查看最新范围。列表和统计独立加载，统计失败不会隐藏事件或阻止翻页。
+
 **Router 流量统计**
 
 GET `/api/v1/routers/{id}/traffic-distribution`，可以按 Route 查询。使用 `routers:read`。它是历史流量，不是配置下发状态。
 
 **Controller /metrics**
+
+数据库指标使用 10 秒快照缓存，同时到达的抓取共享一次采集与渲染。计数器和进程指标仍实时读取，失败结果不缓存。
 
 在 Controller HTTP 地址上采集，配置了 `CONTROLLER_METRICS_TOKEN` 时使用对应 Bearer Token。不要填写个人 Access Token。
 

@@ -196,7 +196,23 @@ export class ControllerMetrics {
     );
   }
 
+  private snapshotValidUntil = 0;
+  private renderJob: Promise<string> | undefined;
+
   async render(service: ControlPlaneService): Promise<string> {
+    if (this.renderJob) return this.renderJob;
+    const job = this.renderCurrent(service);
+    this.renderJob = job;
+    try { return await job; } finally { this.renderJob = undefined; }
+  }
+
+  private async renderCurrent(service: ControlPlaneService): Promise<string> {
+    if (Date.now() >= this.snapshotValidUntil) await this.refreshSnapshot(service);
+    // Database gauges are cached; counters and process measurements remain live.
+    return this.registry.metrics();
+  }
+
+  private async refreshSnapshot(service: ControlPlaneService): Promise<void> {
     try {
       const [generation, pools, snapshot] = await Promise.all([
         service.desiredGeneration(),
@@ -312,7 +328,7 @@ export class ControllerMetrics {
           router.routerId,
         ).set(Number(ready));
       }
-      return this.registry.metrics();
+      this.snapshotValidUntil = Date.now() + 10_000;
     } catch (error) {
       this.collectionFailures.labels("snapshot").inc();
       throw error;

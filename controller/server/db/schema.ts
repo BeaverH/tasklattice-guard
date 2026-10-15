@@ -595,7 +595,7 @@ export const runtimeEvents = pgTable("runtime_event", {
   durationMs: integer("duration_ms").notNull(),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
 }, (table) => [
-  index("runtime_event_guardrail_time_idx").on(table.guardrailId, table.occurredAt),
+  index("runtime_event_guardrail_time_id_idx").on(table.guardrailId, table.occurredAt, table.id),
   index("runtime_event_endpoint_time_idx").on(table.endpointId, table.occurredAt),
   index("runtime_event_router_time_idx").on(table.routerId, table.occurredAt, table.id),
   index("runtime_event_time_id_idx").on(table.occurredAt, table.id),

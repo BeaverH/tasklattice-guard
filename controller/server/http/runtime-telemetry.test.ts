@@ -97,6 +97,38 @@ describe("Security Event multi-select filter", () => {
   });
 });
 
+describe("Security Event item pagination API", () => {
+  function setup(role = "user") {
+    const querySecurityEvents = vi.fn().mockResolvedValue({ items: [], count: 0, nextCursor: null });
+    const app = createHttpApp({ config,
+      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "reader", role } }) } } as unknown as ControllerAuth,
+      service: { querySecurityEvents } as unknown as ControlPlaneService,
+      runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics,
+    });
+    return { app, querySecurityEvents };
+  }
+  it("defaults to 25 and validates the 50-item page and complete filter", async () => {
+    const { app, querySecurityEvents } = setup();
+    expect((await app.request("/api/v1/telemetry/security-events?guardrailId=guard")).status).toBe(200);
+    expect(querySecurityEvents).toHaveBeenLastCalledWith({ guardrailId: "guard", window: "24h", limit: 25 });
+    expect((await app.request("/api/v1/telemetry/security-events?guardrailId=guard&limit=50&window=7d&severity=high,critical&until=2026-10-15T08:00:00Z&cursor=older")).status).toBe(200);
+    expect(querySecurityEvents).toHaveBeenLastCalledWith({ guardrailId: "guard", window: "7d", limit: 50, severity: ["critical", "high"], until: "2026-10-15T08:00:00Z", cursor: "older" });
+  });
+  it.each(["limit=100", "limit=0", "limit=26", "limit=25.5", "severity=bad", "severity=", "until=invalid", "window=bad"])("rejects invalid %s before querying", async query => {
+    const { app, querySecurityEvents } = setup();
+    expect((await app.request(`/api/v1/telemetry/security-events?guardrailId=guard&${query}`)).status).toBe(400);
+    expect(querySecurityEvents).not.toHaveBeenCalled();
+  });
+  it("requires a Guardrail scope and denies platform administrators", async () => {
+    const { app, querySecurityEvents } = setup();
+    expect((await app.request("/api/v1/telemetry/security-events")).status).toBe(400);
+    const admin = setup("admin");
+    expect((await admin.app.request("/api/v1/telemetry/security-events?guardrailId=guard")).status).toBe(403);
+    expect(querySecurityEvents).not.toHaveBeenCalled();
+    expect(admin.querySecurityEvents).not.toHaveBeenCalled();
+  });
+});
+
 describe("runtime log outcome filter", () => {
   it.each([["allow", 200], ["block", 200], ["transform", 200], ["error", 200], ["timeout", 400]])("accepts enforcement outcomes and the error log filter: %s", async (outcome, status) => {
     const queryRuntimeEvents = vi.fn().mockResolvedValue({ items: [], count: 0 });

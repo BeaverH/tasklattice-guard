@@ -56,6 +56,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { queryKeys } from "@/features/query-keys";
 import { guardrailQueries } from "@/features/guardrail-queries";
 import { useAuth } from "@/lib/auth";
+import { ControllerRequestError } from "@/lib/controller-api";
 import { policyRequiresTopicAllowlist, policyRequiresTopicModel } from "@/lib/protection-requirements";
 import {
   createValidationRun,
@@ -205,13 +206,23 @@ export function GuardrailDetailPage() {
   const metricsQuery = useQuery({
     queryKey: queryKeys.metricsScope({ guardrailId, window }),
     queryFn: ({ signal }) => getMetrics({ guardrailId, window }, signal),
+    enabled: section === "runtime" || section === "event",
+    retry: (attempt, error) => !(error instanceof ControllerRequestError && error.status === 429) && attempt < 1,
   });
   const findingSeverities = selectedSeverities(search.severity);
   const setFindingSeverities = (levels: EventSeverity[]) => void navigate({ to: "/guardrails/$guardrailId", params: { guardrailId }, search: previous => ({ ...previous, severity: selectedSeverities(levels).join(",") || undefined }) });
-  const findingsPaging = useEventCursor(JSON.stringify([guardrailId, window, findingSeverities]));
+  const findingsPageSize = search.pageSize ?? 25;
+  const setFindingsPageSize = (pageSize: 25 | 50) => void navigate({ search: previous => ({ ...previous, pageSize: pageSize === 50 ? 50 : undefined }) });
+  const [findingsRefresh, setFindingsRefresh] = useState(0);
+  const findingsScope = JSON.stringify([guardrailId, window, findingSeverities, findingsPageSize]);
+  const findingsActive = section === "event";
+  const findingsUntil = useMemo(() => new Date().toISOString(), [findingsScope, findingsRefresh, findingsActive]);
+  const findingsPaging = useEventCursor(JSON.stringify([findingsScope, findingsUntil]));
   const findingsQuery = useQuery({
-    queryKey: [...queryKeys.guardrailFindings(guardrailId, window), findingSeverities, findingsPaging.cursor ?? null],
-    queryFn: ({ signal }) => getGuardrailFindings(guardrailId, window, 100, findingsPaging.cursor, signal, findingSeverities),
+    queryKey: [...queryKeys.guardrailFindings(guardrailId, window), findingSeverities, findingsPageSize, findingsUntil, findingsPaging.cursor ?? null],
+    queryFn: ({ signal }) => getGuardrailFindings(guardrailId, window, findingsPageSize, findingsPaging.cursor, signal, findingSeverities, findingsUntil),
+    enabled: findingsActive,
+    retry: (attempt, error) => !(error instanceof ControllerRequestError && error.status === 429) && attempt < 1,
     gcTime: 30_000,
   });
   const deletionImpactQuery = useQuery({
@@ -360,8 +371,8 @@ export function GuardrailDetailPage() {
           <GuardrailRuntimeView guardrailId={guardrail.id} metrics={metricsQuery.data} loading={metricsQuery.isLoading} error={metricsQuery.error} routers={routers} versions={guardrailVersions} window={window} onWindowChange={setWindow} />
         </TabsContent>
         <TabsContent value="event" className="space-y-5 pt-5">
-          <GuardrailFindingsView guardrailId={guardrailId} data={findingsQuery.data} loading={findingsQuery.isLoading} error={findingsQuery.error} policies={policies} routers={routers} endpoints={endpointsQuery.data?.items ?? []} window={window} onWindowChange={setWindow} summary={metricsQuery.data?.findings_summary} severities={findingSeverities} onSeveritiesChange={setFindingSeverities} onRetry={() => { void findingsQuery.refetch(); void metricsQuery.refetch(); }} />
-          <EventPagination page={findingsPaging.page} busy={findingsQuery.isFetching} nextCursor={findingsQuery.data?.nextCursor} onNext={findingsPaging.next} onPrevious={findingsPaging.previous} onLatest={findingsPaging.latest} />
+          <GuardrailFindingsView guardrailId={guardrailId} data={findingsQuery.data} loading={findingsQuery.isLoading} error={findingsQuery.error} policies={policies} routers={routers} endpoints={endpointsQuery.data?.items ?? []} window={window} onWindowChange={setWindow} summary={metricsQuery.data?.findings_summary} summaryLoading={metricsQuery.isFetching} summaryError={metricsQuery.error} onRetrySummary={() => { void metricsQuery.refetch(); }} severities={findingSeverities} onSeveritiesChange={setFindingSeverities} onRetry={() => { void findingsQuery.refetch(); }} collectionStatus={metricsQuery.data ? !metricsQuery.data.total_decisions ? "no_events" : metricsQuery.data.data_availability?.execution_evidence === "collected" ? "collected" : "not_collected" : undefined} />
+          <EventPagination page={findingsPaging.page} busy={findingsQuery.isFetching} nextCursor={findingsQuery.data?.nextCursor} onNext={findingsPaging.next} onPrevious={findingsPaging.previous} onLatest={() => { setFindingsRefresh(value => value + 1); void metricsQuery.refetch(); }} pageSize={findingsPageSize} onPageSizeChange={setFindingsPageSize} itemCount={findingsQuery.data?.count} allowRefresh />
         </TabsContent>
         <TabsContent value="immutable" className="pt-5">
           <ImmutableVersionView
@@ -462,13 +473,14 @@ export function GuardrailRuntimeView({ guardrailId, metrics, loading, error, rou
   );
 }
 
-export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary, loading, error, policies, routers, endpoints, window, onWindowChange, severities: controlledSeverities, onSeveritiesChange, onRetry }: { guardrailId?: string; data?: GuardrailFindingPage; summary?: GuardrailFindingPage["summary"]; loading: boolean; error: unknown; policies: Policy[]; routers: Awaited<ReturnType<typeof getRouters>>["items"]; endpoints: Endpoint[]; window: MetricWindow; onWindowChange: (window: MetricWindow) => void; severities?: EventSeverity[]; onSeveritiesChange?: (severities: EventSeverity[]) => void; onRetry?: () => void }) {
+export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary, loading, error, policies, routers, endpoints, window, onWindowChange, severities: controlledSeverities, onSeveritiesChange, onRetry, summaryLoading, summaryError, onRetrySummary, collectionStatus }: { guardrailId?: string; data?: GuardrailFindingPage; summary?: GuardrailFindingPage["summary"]; summaryLoading?: boolean; summaryError?: unknown; collectionStatus?: GuardrailFindingPage["collection_status"]; onRetrySummary?: () => void; loading: boolean; error: unknown; policies: Policy[]; routers: Awaited<ReturnType<typeof getRouters>>["items"]; endpoints: Endpoint[]; window: MetricWindow; onWindowChange: (window: MetricWindow) => void; severities?: EventSeverity[]; onSeveritiesChange?: (severities: EventSeverity[]) => void; onRetry?: () => void }) {
   const { t, i18n } = useTranslation();
   const canViewLogs = hasPermission(useAuth().user?.role, "runtime");
   const [localSeverities, setLocalSeverities] = useState<EventSeverity[]>([]);
   const severities = controlledSeverities ?? localSeverities;
   const setSeverities = onSeveritiesChange ?? setLocalSeverities;
   const summary = scopeSummary ?? data?.summary;
+  const evidenceStatus = collectionStatus ?? data?.collection_status;
   const findings = data?.items ?? [];
   const visibleFindings = severities.length ? findings.filter(finding => severities.includes(finding.severity)) : findings;
   const matchedCount = summary ? (severities.length ? severities.reduce((sum, level) => sum + (summary[level] ?? 0), 0) : summary.total) : undefined;
@@ -481,11 +493,14 @@ export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary
     <div className="border bg-card">
       <EventFilterToolbar window={window} onWindowChange={onWindowChange} severities={severities} onSeveritiesChange={setSeverities} counts={summary} />
       <div className="flex min-h-12 items-center justify-between gap-4 border-y px-4 py-3 text-xs text-muted-foreground" role="status" aria-live="polite" aria-atomic="true">
-        <span>{summary ? t("securityEvents.resultSummary", { matched: matchedCount, total: summary.total, interactions: summary.affected_traces }) : t(error ? "securityEvents.summaryUnavailable" : "securityEvents.loadingSummary")}</span>
-        {loading && summary ? <span className="inline-flex items-center gap-1.5"><LoaderCircle className="size-3.5 animate-spin" />{t("securityEvents.updating")}</span> : null}
+        <span>{summary ? t("securityEvents.resultSummary", { matched: matchedCount, total: summary.total, interactions: summary.affected_traces }) : t(summaryError ? "securityEvents.summaryUnavailable" : "securityEvents.loadingSummary")}</span>
+        {summaryLoading && summary ? <span className="inline-flex items-center gap-1.5"><LoaderCircle className="size-3.5 animate-spin" />{t("securityEvents.updating")}</span> : null}
+        {summaryError && !summary && onRetrySummary ? <Button variant="ghost" size="sm" onClick={onRetrySummary}>{t("securityEvents.retrySummary")}</Button> : null}
       </div>
+      {summaryError && summary ? <div className="flex items-center justify-between gap-4 border-b px-4 py-2 text-xs text-muted-foreground" role="status"><span>{t("securityEvents.summaryStale")}</span>{onRetrySummary ? <Button variant="ghost" size="sm" onClick={onRetrySummary}>{t("securityEvents.retrySummary")}</Button> : null}</div> : null}
       <div aria-busy={loading}>
-        {loading ? <Skeleton className="m-4 h-56 rounded-none" /> : error ? <div className="space-y-3 p-4"><ErrorNotice error={error} />{onRetry ? <Button variant="outline" onClick={onRetry}>{t("securityEvents.retry")}</Button> : null}</div> : visibleFindings.length ? <div className="divide-y">{visibleFindings.map(finding => {
+        {error ? <div className="space-y-3 p-4"><ErrorNotice error={error} />{onRetry ? <Button variant="outline" onClick={onRetry}>{t("securityEvents.retry")}</Button> : null}</div> : null}
+        {loading ? <Skeleton className="m-4 h-56 rounded-none" /> : visibleFindings.length ? <div className="divide-y">{visibleFindings.map(finding => {
           const timestamp = formatEventTimestamp(finding.created_at, i18n.language);
           const router = routers.find(item => item.id === finding.router_id);
           const endpoint = endpoints.find(item => item.id === finding.endpoint_id);
@@ -499,8 +514,7 @@ export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary
             </div>
             <div className="flex flex-col items-end gap-3"><time className="font-mono text-right text-[11px] text-muted-foreground" dateTime={finding.created_at}>{timestamp.time}<span className="mt-1 block">{timestamp.date}</span></time>{canViewLogs ? <Button asChild variant="outline" size="sm" className="min-h-11 shrink-0"><Link to="/logs" search={{ eventId: finding.event_id, requestId: finding.trace_id, checkpointId: finding.event_id, guardrailId: finding.guardrail_id ?? undefined }}><ScrollText />{t("logs.viewLog")}</Link></Button> : null}</div>
           </article>;
-        })}</div> : <div className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center"><ShieldCheck className="size-6 text-muted-foreground" /><p className="mt-3 text-sm font-medium">{t(severities.length ? "guardrails.noMatchingFindings" : data?.collection_status === "not_collected" ? "guardrails.findingsNotCollected" : data?.collection_status === "no_events" ? "guardrails.noRuntimeEvidence" : "guardrails.noSecurityFindings")}</p><p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">{t(severities.length ? "guardrails.noMatchingFindingsDescription" : data?.collection_status === "not_collected" ? "guardrails.findingsNotCollectedDescription" : data?.collection_status === "no_events" ? "guardrails.noRuntimeEvidenceDescription" : "guardrails.noSecurityFindingsDescription")}</p>{severities.length ? <Button variant="ghost" className="mt-3" onClick={() => setSeverities([])}>{t("securityEvents.clearFilters")}</Button> : null}</div>}
-        {!loading && !error && data && (matchedCount ?? 0) > visibleFindings.length ? <div className="border-t px-4 py-3 text-xs text-muted-foreground">{t("guardrails.findingsTruncated", { shown: visibleFindings.length, total: matchedCount })}</div> : null}
+        })}</div> : error ? null : <div className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center"><ShieldCheck className="size-6 text-muted-foreground" /><p className="mt-3 text-sm font-medium">{t(severities.length ? "guardrails.noMatchingFindings" : evidenceStatus === "not_collected" ? "guardrails.findingsNotCollected" : evidenceStatus === "no_events" ? "guardrails.noRuntimeEvidence" : "guardrails.noSecurityFindings")}</p><p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">{t(severities.length ? "guardrails.noMatchingFindingsDescription" : evidenceStatus === "not_collected" ? "guardrails.findingsNotCollectedDescription" : evidenceStatus === "no_events" ? "guardrails.noRuntimeEvidenceDescription" : "guardrails.noSecurityFindingsDescription")}</p>{severities.length ? <Button variant="ghost" className="mt-3" onClick={() => setSeverities([])}>{t("securityEvents.clearFilters")}</Button> : null}</div>}
       </div>
     </div>
   </section>;

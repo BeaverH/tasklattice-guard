@@ -129,6 +129,7 @@ export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, Toke
   ["POST", "/api/v1/routers/:id/simulations", "routers", "read"],
   ["GET", "/api/v1/routing/selector-fields", "routers", "read"],
   ["GET", "/api/v1/telemetry/events", "runtime", "read"],
+  ["GET", "/api/v1/telemetry/security-events", "runtime", "read"],
   ["GET", "/api/v1/telemetry/events/:id", "runtime", "read"],
   ["GET", "/api/v1/telemetry/endpoint-activity", "runtime", "read"],
   ["GET", "/api/v1/telemetry/metrics", "runtime", "read"],

@@ -21,6 +21,7 @@ import { resolve } from "node:path";
 
 import { serveStatic } from "@hono/node-server/serve-static";
 import { prometheus } from "@hono/prometheus";
+import { securityEventsQuery } from "../../shared/security-events.js";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
@@ -1094,6 +1095,10 @@ export function createHttpApp(input: {
     return context.json({ items, endpoints: selected.map(e => ({ id: e.id, adapter: e.adapter })), count: items.length });
   });
 
+  app.get("/api/v1/telemetry/security-events", authenticated, async (context) => {
+    const query = securityEventsQuery.parse(context.req.query());
+    return context.json(await input.service.querySecurityEvents(query));
+  });
   app.get("/api/v1/telemetry/events", authenticated, async (context) => {
     const query = z.object({
       limit: z.coerce.number().int().min(1).max(10_000).default(100),

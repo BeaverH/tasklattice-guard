@@ -142,33 +142,35 @@ describe("privacy-safe runtime observability", () => {
     expect(JSON.stringify(traces)).not.toContain("sensitive prompt fragment");
   });
 
-  it("sends all selected levels to the server and excludes unmatched findings from mixed checkpoints", async () => {
-    const fetchMock = vi.fn(async (path: string) => Response.json(path.startsWith('/api/v1/telemetry/metrics') ? {
-      total_decisions: 2, findings_summary: { total: 3, critical: 1, high: 1, low: 1, affected_traces: 2 },
-    } : { items: [{ ...event, metadata: { ...event.metadata, findings: ["high", "low"].map(riskSeverity => ({ ...event.metadata.findings[0], riskSeverity })) } }], nextCursor: "older" }));
+  it("requests one page of individual findings without requesting statistics", async () => {
+    const record = { eventId: event.id, findingIndex: 45, occurredAt: event.occurredAt, requestId: event.requestId,
+      guardrailId: event.guardrailId, guardrailVersion: event.guardrailVersion, routerId: event.routerId,
+      endpointId: event.endpointId, direction: event.direction, decision: event.decision, protocol: "playground", action: "block",
+      finding: { ...event.metadata.findings[0], riskSeverity: "high" } };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [record], count: 1, nextCursor: "older", since: "start", until: "end" }));
     vi.stubGlobal("fetch", fetchMock);
-    const result = await getGuardrailFindings("guardrail-1", "24h", 1, undefined, undefined, ["high", "critical"]);
-    expect(new URL(String(fetchMock.mock.calls[0]![0]), "http://test").searchParams.get("severity")).toBe("critical,high");
-    expect(result.items.map(item => item.severity)).toEqual(["high"]);
+    const until = "2026-10-15T08:00:00.000Z";
+    const result = await getGuardrailFindings("guardrail-1", "24h", 50, "previous", undefined, ["high", "critical"], until);
+    const url = new URL(String(fetchMock.mock.calls[0]![0]), "http://test");
+    expect(url.pathname).toBe("/api/v1/telemetry/security-events");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ guardrailId: "guardrail-1", window: "24h", limit: "50", cursor: "previous", severity: "critical,high", until });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(result.items[0]).toMatchObject({ id: `${event.id}:finding:45`, event_id: event.id, severity: "high" });
     expect(result.nextCursor).toBe("older");
-    expect(result.summary.total).toBe(3);
+    expect(result).not.toHaveProperty("summary");
   });
 
-  it("marks legacy events as not collected instead of reporting a clean result", async () => {
-    const legacy = { ...event, metadata: { protocol: "litellm", action: "allow" }, decision: "allow" };
-    vi.stubGlobal("fetch", vi.fn(async (path: string) => new Response(JSON.stringify(path.startsWith('/api/v1/telemetry/metrics') ? {
-      total_decisions: 1, data_availability: { execution_evidence: 'not_collected' },
-      findings_summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0, affected_traces: 0, latest_at: null },
-    } : { items: [legacy], count: 1 }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    })));
-
-    const findings = await getGuardrailFindings("guardrail-1", "24h");
-
-    expect(findings.items).toEqual([]);
-    expect(findings.collection_status).toBe("not_collected");
+  it("defaults to 25 findings and propagates cancellation", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [], count: 0, nextCursor: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await getGuardrailFindings("guardrail-1", "7d", undefined, undefined, controller.signal);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain("limit=25");
+    controller.abort();
+    expect(fetchMock.mock.calls[0]![1].signal.aborted).toBe(true);
+    expect(result.items).toEqual([]);
   });
+
 });
 
 it("preserves the mode and real detector result separately from allowed traffic", () => {

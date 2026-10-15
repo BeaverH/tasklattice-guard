@@ -13,6 +13,17 @@ has never received traffic. Runner request metrics supply business outcomes and
 latency. Platform signals explain a degraded business SLI; they are not the
 primary Overview navigation model.
 
+Controller `/metrics` caches database-backed topology and capacity gauges for
+10 seconds and merges concurrent scrapes into one collection/render job. Request
+counters and process metrics are read on each scrape. Failed collections are not
+cached. This bounds duplicate database work from overlapping Prometheus servers;
+the ServiceMonitor interval remains independently configurable.
+
+Security Events use `/api/v1/telemetry/security-events`: 25 individual findings
+per page by default, or 50. Time/severity filters precede the SQL item limit. A
+cursor preserves the occurrence/ingestion boundary and the full filter scope;
+statistics load independently through `/api/v1/telemetry/metrics`.
+
 ## Business metric semantics
 
 `guard_runner_guardrail_requests_total` counts completed GuardRail checks. Its

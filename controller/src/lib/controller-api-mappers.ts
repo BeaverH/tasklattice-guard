@@ -39,7 +39,7 @@ export function isTimedOut(event: controllerApi.RuntimeEvent): boolean {
   return decision === "timeout" || decision === "timed_out" || event.metadata.timedOut === true || event.metadata.timed_out === true;
 }
 
-export function runtimeFindings(event: controllerApi.RuntimeEvent): RouterTraceFinding[] {
+export function runtimeFindings(event: Pick<controllerApi.RuntimeEvent, "id" | "requestId" | "occurredAt" | "guardrailId" | "guardrailVersion" | "routerId" | "endpointId" | "direction" | "decision" | "metadata">): RouterTraceFinding[] {
   return arrayOfRecords(event.metadata.findings).filter(finding => finding.verdict === "matched" || finding.verdict === "unknown").map((finding, index) => {
     const verdict = stringValue(finding.verdict) ?? "unknown";
     const confidence = numberValue(finding.confidence);

@@ -5,10 +5,10 @@ import { routeTree } from "./app-router";
 // Use the actual application route tree so renamed links cannot silently 404.
 describe("Integration navigation", () => {
   it("restores canonical event filters from shareable URLs and browser history", async () => {
-    const history = createMemoryHistory({ initialEntries: ["/guardrails/guardrail-default?tab=event&window=7d&severity=high,critical,high,invalid"] });
+    const history = createMemoryHistory({ initialEntries: ["/guardrails/guardrail-default?tab=event&window=7d&pageSize=50&severity=high,critical,high,invalid"] });
     const router = createRouter({ routeTree, history });
     await router.load();
-    expect(router.state.matches.at(-1)?.search).toMatchObject({ tab: "event", window: "7d", severity: "critical,high" });
+    expect(router.state.matches.at(-1)?.search).toMatchObject({ tab: "event", window: "7d", pageSize: 50, severity: "critical,high" });
     await router.navigate({ to: "/guardrails/$guardrailId", params: { guardrailId: "guardrail-default" }, search: { tab: "event", window: "7d" } });
     expect(router.state.matches.at(-1)?.search.severity).toBeUndefined();
     history.back();

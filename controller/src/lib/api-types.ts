@@ -358,7 +358,7 @@ export type GuardrailFindingPage = {
   nextCursor?: string | null | undefined;
   items: RouterTraceFinding[];
   count: number;
-  summary: RuntimeFindingSummary;
+  summary?: RuntimeFindingSummary;
   collection_status?: "collected" | "not_collected" | "no_events";
 };
 

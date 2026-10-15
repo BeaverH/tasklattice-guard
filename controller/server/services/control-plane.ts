@@ -1,4 +1,6 @@
 import { writeRuntimeEvent } from "./runtime-event-write.js";
+import { querySecurityEvents } from "./security-events.js";
+import type { SecurityEventsQuery } from "../../shared/security-events.js";
 import { ModelPricingService, recordModelUsageCosts } from "./model-pricing.js";
 import { pruneTestingReports, reportCompletionTime, testEvidenceColumns, toTestEvidence } from "./testing-report-retention.js";
 import { latestTestEvidence, matchesTestEvidence } from "../../shared/testing-report-retention.js";
@@ -1673,6 +1675,10 @@ export class ControlPlaneService {
 
   async listRuntimeEvents(limit = 100) {
     return (await this.queryRuntimeEvents({ limit })).items;
+  }
+
+  async querySecurityEvents(query: SecurityEventsQuery) {
+    return querySecurityEvents(this.db, query);
   }
 
   private metricCache = new Map<string, { until: number; value: Awaited<ReturnType<typeof queryRuntimeMetrics>> }>();

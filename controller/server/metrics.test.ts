@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ControllerConfig } from "./config.js";
 import type { ControllerDatabase } from "./db/client.js";
@@ -6,6 +6,7 @@ import { ControlPlaneService } from "./services/control-plane.js";
 import { ControllerMetrics } from "./metrics.js";
 
 describe("Controller metrics contract", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
   it("exports fleet convergence, freshness, capacity, and outbox signals", async () => {
     const now = Date.now();
     const service = {
@@ -141,7 +142,7 @@ describe("Controller metrics contract", () => {
     expect(rendered).toContain('guard_controller_telemetry_events_total{result="accepted"} 1');
   });
 
-  it("removes stale database-backed series on the next scrape", async () => {
+  it("removes stale database-backed series after cache expiry", async () => {
     let present = true;
     const service = {
       desiredGeneration: async () => 1,
@@ -186,10 +187,48 @@ describe("Controller metrics contract", () => {
     expect(await metrics.render(service)).toContain('guardrail_id="guardrail-1"');
     expect(await metrics.render(service)).toContain('endpoint_id="endpoint-1"');
     present = false;
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 10_001);
     const rendered = await metrics.render(service);
     expect(rendered).not.toContain('runner_id="runner-0"');
     expect(rendered).not.toContain('guardrail_id="guardrail-1"');
     expect(rendered).not.toContain('endpoint_id="endpoint-1"');
+  });
+
+  it("coalesces simultaneous scrapes, caches DB gauges for ten seconds and keeps counters live", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const service = {
+      desiredGeneration: vi.fn(async () => { await gate; return 3; }),
+      listRunnerPoolsWithCapacity: vi.fn(async () => []),
+      observabilitySnapshot: vi.fn(async () => ({ watermarks: [], pendingOutbox: [], guardrails: [], endpoints: [], endpointBindings: [], routers: [] })),
+    } as unknown as ControlPlaneService;
+    const metrics = new ControllerMetrics();
+    const scrapes = Array.from({ length: 20 }, () => metrics.render(service));
+    expect(service.desiredGeneration).toHaveBeenCalledOnce();
+    release();
+    const results = await Promise.all(scrapes);
+    expect(new Set(results).size).toBe(1);
+    metrics.observeHeartbeat("default", "accepted");
+    expect(await metrics.render(service)).toContain('guard_controller_runner_heartbeats_total{pool="default",result="accepted"} 1');
+    expect(service.observabilitySnapshot).toHaveBeenCalledOnce();
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 10_001);
+    await metrics.render(service);
+    expect(service.desiredGeneration).toHaveBeenCalledTimes(2);
+    expect(service.observabilitySnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the shared scrape after failure and retries without caching the error", async () => {
+    const service = {
+      desiredGeneration: vi.fn().mockRejectedValueOnce(new Error("DB offline")).mockResolvedValue(3),
+      listRunnerPoolsWithCapacity: vi.fn(async () => []),
+      observabilitySnapshot: vi.fn(async () => ({ watermarks: [], pendingOutbox: [], guardrails: [], endpoints: [], endpointBindings: [], routers: [] })),
+    } as unknown as ControlPlaneService;
+    const metrics = new ControllerMetrics();
+    const results = await Promise.allSettled([metrics.render(service), metrics.render(service)]);
+    expect(results.map(result => result.status)).toEqual(["rejected", "rejected"]);
+    expect(service.desiredGeneration).toHaveBeenCalledOnce();
+    expect(await metrics.render(service)).toContain("guard_controller_desired_generation 3");
+    expect(await metrics.registry.metrics()).toContain('guard_controller_metrics_collection_failures_total{stage="snapshot"} 1');
   });
 
   it("converts persisted Guardrail topology into bounded observability states", async () => {

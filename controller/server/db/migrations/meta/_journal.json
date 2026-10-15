@@ -288,6 +288,13 @@
       "when": 1791760000006,
       "tag": "0040_model_usage_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791760000007,
+      "tag": "0041_security_event_pagination",
+      "breakpoints": true
     }
   ]
 }

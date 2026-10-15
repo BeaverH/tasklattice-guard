@@ -41,6 +41,7 @@ const resources = {
       immutableVersions: immutableVersionsEn,
       guardrailPackage: guardrailPackageEn,
       securityEvents: {
+        perPage: "Events per page:", pageCount_one: "{{count}} event on this page", pageCount_other: "{{count}} events on this page", retrySummary: "Retry statistics", summaryStale: "Statistics could not be refreshed; showing the last result.",
         filters: "Filters", clearFilters: "Clear filters", appliedFilters: "Applied filters", removeRiskFilter: "Remove risk level filter", filtersCleared: "All risk filters cleared", selectedLevels: "Selected risk levels: ", openFilter: "Open options", closeFilter: "Close options", levelGuide: "About risk levels", openLogs: "View runtime logs", retry: "Retry", updating: "Updating…", loadingSummary: "Loading event totals…", summaryUnavailable: "Event totals unavailable",
         resultSummary: "{{matched}} matching events · {{total}} events in this time range, across {{interactions}} interactions",
         actions: { allow: "Allow", block: "Block", transform: "Transform" },
@@ -2547,7 +2548,6 @@ const resources = {
         noRuntimeEvidenceDescription: "There is no evaluated traffic from which to derive a security event result.",
         noMatchingFindings: "No security events match this severity",
         noMatchingFindingsDescription: "Choose another severity or widen the time window.",
-        findingsTruncated: "Showing the latest {{shown}} of {{total}} security events.",
         editLogLevel: "Edit log level",
         defaultDeleteBlocked: "The Default Guardrail is the built-in runtime baseline and cannot be deleted. You can edit it or change its baseline version.",
         loggingTitle: "Prompt History logging",
@@ -3060,6 +3060,7 @@ const resources = {
       immutableVersions: immutableVersionsZh,
       guardrailPackage: guardrailPackageZh,
       securityEvents: {
+        perPage: "每页事件数：", pageCount: "本页 {{count}} 条事件", retrySummary: "重试统计", summaryStale: "统计更新失败，显示上次结果。",
         filters: "筛选", clearFilters: "清除筛选", appliedFilters: "已应用的筛选", removeRiskFilter: "移除风险级别筛选", filtersCleared: "已清除全部风险筛选", selectedLevels: "已选风险级别：", openFilter: "展开选项", closeFilter: "收起选项", levelGuide: "分级说明", openLogs: "查看运行日志", retry: "重试", updating: "正在更新…", loadingSummary: "正在加载事件总量…", summaryUnavailable: "事件总量暂不可用",
         resultSummary: "匹配 {{matched}} 条事件 · 当前时段共 {{total}} 条事件，涉及 {{interactions}} 次交互",
         actions: { allow: "放行", block: "阻断", transform: "修改" },
@@ -5551,7 +5552,6 @@ const resources = {
         noRuntimeEvidenceDescription: "没有经过评估的流量，因此无法判断是否存在安全事件。",
         noMatchingFindings: "当前严重级别下暂无安全事件",
         noMatchingFindingsDescription: "请选择其他严重级别，或扩大时间窗口。",
-        findingsTruncated: "显示最近 {{shown}} 条，共 {{total}} 条安全事件。",
         editLogLevel: "编辑日志等级",
         defaultDeleteBlocked: "Default Guardrail 是内置运行时基线，不能删除。你可以编辑它或切换基线版本。",
         loggingTitle: "Prompt 历史日志",

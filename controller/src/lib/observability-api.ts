@@ -32,21 +32,25 @@ export function metricWindowMilliseconds(window: MetricWindow): number {
 }
 
 export const getGuardrailFindings = async (
-  guardrailId: string, window: MetricWindow, limit = 100, cursor?: string, signal?: AbortSignal, severity?: string | EventSeverity[],
+  guardrailId: string, window: MetricWindow, limit: 25 | 50 = 25, cursor?: string, signal?: AbortSignal,
+  severity?: string | EventSeverity[], until?: string,
 ): Promise<GuardrailFindingPage> => {
-  const since = new Date(Date.now() - metricWindowMilliseconds(window)).toISOString();
   const severities = selectedSeverities(severity);
-  const [events, metrics] = await Promise.all([
-    controllerApi.listRuntimeEvents(limit, { guardrailId, since, findingsOnly: 'true', ...(cursor ? { cursor } : {}), ...(severities.length ? { severity: severities.join(',') } : {}) }, signal),
-    controllerApi.requestController<Metrics>(`/api/v1/telemetry/metrics?${new URLSearchParams({guardrailId,window})}`, signal ? { signal } : undefined),
-  ]);
-  const items = events.items.flatMap(runtimeFindings).filter(f => !severities.length || severities.includes(f.severity));
-  if (!metrics.findings_summary) throw new Error("Runtime findings summary is unavailable. Update the Controller and retry.");
-  return {
-    items, count: items.length, nextCursor: events.nextCursor,
-    summary: metrics.findings_summary,
-    collection_status: !metrics.total_decisions ? "no_events" : metrics.data_availability?.execution_evidence === "collected" ? "collected" : "not_collected",
-  };
+  const query = new URLSearchParams({ guardrailId, window, limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  if (until) query.set("until", until);
+  if (severities.length) query.set("severity", severities.join(","));
+  const page = await controllerApi.requestController<import("../../shared/security-events").SecurityEventPage>(
+    `/api/v1/telemetry/security-events?${query}`, signal ? { signal } : undefined,
+  );
+  const items = page.items.flatMap(event => runtimeFindings({
+    id: event.eventId, requestId: event.requestId, occurredAt: event.occurredAt,
+    guardrailId: event.guardrailId, guardrailVersion: event.guardrailVersion,
+    routerId: event.routerId, endpointId: event.endpointId, direction: event.direction, decision: event.decision,
+    metadata: { protocol: event.protocol, action: event.action,
+      findings: [{ ...event.finding, id: `${event.eventId}:finding:${event.findingIndex}` }] },
+  }));
+  return { items, count: items.length, nextCursor: page.nextCursor };
 };
 
 function runtimeLogEntry(event: controllerApi.RuntimeEvent): RuntimeLogInteraction["entries"][number] {

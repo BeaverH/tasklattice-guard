@@ -10,11 +10,17 @@ Both Controller and Runner expose metrics. Business statistics APIs and Promethe
 
 GET `/api/v1/telemetry/metrics` on this Controller. Use a personal token with `runtime:read` or a browser session. Filter by window, `guardrailId`, and `routerId`. Statistics aggregate reported runtime events.
 
+**Security Events**
+
+GET `/api/v1/telemetry/security-events` requires the User role and `runtime:read`. Supply `guardrailId`; optionally filter by `window` and comma-separated `severity`. Each item is one finding. Pages contain 25 items by default, with `limit=50` also supported. Follow `nextCursor` with unchanged filters and page size. The cursor preserves the time range and ingestion boundary; start without a cursor to browse a fresh range. The list loads independently of statistics, so a statistics error does not hide events or disable pagination.
+
 **Router traffic statistics**
 
 GET `/api/v1/routers/{id}/traffic-distribution`, also available per Route. Requires `routers:read` and reports historical traffic, not configuration rollout status.
 
 **Controller /metrics**
+
+Database-backed gauges use a 10-second snapshot cache. Concurrent scrapes share one collection and rendering job. Counters and process metrics remain live; failed collections are not cached.
 
 Scrape the Controller HTTP address. When `CONTROLLER_METRICS_TOKEN` is configured, send that Bearer token, not a personal Access Token.
 

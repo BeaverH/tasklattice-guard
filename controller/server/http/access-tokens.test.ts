@@ -23,6 +23,7 @@ function setup(identity: TokenIdentity | null = { id: "owner", role: "admin", to
     accessTokens: accessTokens as unknown as AccessTokenService,
     service: { trafficRouting: { list: async () => [], create: createRouter }, listGuardrails: async () => [],
       queryRuntimeEvents: async () => ({ items: [], count: 0 }),
+      querySecurityEvents: async () => ({ items: [], count: 0, nextCursor: null }),
       getRuntimeEvent: async (_id: string, includeContent: boolean) => ({ id: "event", metadata: includeContent ? { contentBefore: [{ text: "Captured tenant request" }] } : {} }),
       listAuditEvents: async () => ({ items: [] }),
     } as unknown as ControlPlaneService,
@@ -73,6 +74,7 @@ describe("Access token HTTP authority", () => {
   it("lets a tenant runtime token read captured content but rejects an old audit grant", async () => {
     const { request } = setup({ id: "owner", role: "user", tokenId: "token", permissions: { runtime: "read", audit: "read" } });
     expect((await request("GET", "/telemetry/events")).status).toBe(200);
+    expect((await request("GET", "/telemetry/security-events?guardrailId=guard")).status).toBe(200);
     expect(await (await request("GET", "/telemetry/events/event?includeContent=true")).json()).toMatchObject({ metadata: { contentBefore: [{ text: "Captured tenant request" }] } });
     expect((await request("GET", "/audit-events")).status).toBe(403);
     expect(await (await request("GET", "/account/identity")).json()).toMatchObject({ effectivePermissions: { runtime: "read" } });
@@ -80,7 +82,7 @@ describe("Access token HTTP authority", () => {
   it("lets platform tokens read audit records but rejects old tenant runtime grants", async () => {
     const { request } = setup({ id: "owner", role: "admin", tokenId: "token", permissions: { runtime: "read", audit: "read" } });
     expect((await request("GET", "/audit-events")).status).toBe(200);
-    for (const path of ["/telemetry/events", "/telemetry/events/event?includeContent=true", "/telemetry/metrics"]) {
+    for (const path of ["/telemetry/events", "/telemetry/security-events?guardrailId=guard", "/telemetry/events/event?includeContent=true", "/telemetry/metrics"]) {
       expect((await request("GET", path)).status).toBe(403);
     }
     expect(await (await request("GET", "/account/identity")).json()).toMatchObject({ effectivePermissions: { audit: "read" } });

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import * as api from "@/lib/api";
+import { ControllerRequestError as apiError } from "@/lib/controller-api";
 import { GuardrailDetailPage } from "./guardrails";
 import { GuardrailDraftReviewSheet } from "@/components/guardrail-draft-review";
 import { GuardrailDraftChangesSheet } from "@/components/guardrail-draft-changes";
@@ -11,7 +12,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { defaultPolicyBinding } from "@/components/policy-binding-editor";
 import { PolicyCatalog } from "../../server/policy-catalog/catalog";
 
-const routing = vi.hoisted(() => ({ navigate: vi.fn(), tab: "testing", role: "user" }));
+const routing = vi.hoisted(() => ({ navigate: vi.fn(), tab: "testing", role: "user", pageSize: undefined as 25 | 50 | undefined, window: "24h", severity: undefined as string | undefined }));
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", exists: () => false } }),
@@ -20,7 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to?: string }) => <a href={to}>{children}</a>,
   useNavigate: () => routing.navigate,
   useParams: () => ({ guardrailId: "guardrail-workflow" }),
-  useSearch: () => ({ tab: routing.tab }),
+  useSearch: () => ({ tab: routing.tab, pageSize: routing.pageSize, window: routing.window, severity: routing.severity }),
 }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: routing.role } }) }));
 vi.mock("@/components/dashboard/runtime-health-alert", () => ({ RuntimeHealthAlert: () => null }));
@@ -64,8 +65,66 @@ function setupPage(overrides: Partial<api.Guardrail> = {}) {
 }
 
 describe("Guardrail edit, test and publish workflow", () => {
-  beforeEach(() => { routing.tab = "testing"; routing.role = "user"; routing.navigate.mockReset(); });
+  beforeEach(() => { routing.tab = "testing"; routing.role = "user"; routing.pageSize = undefined; routing.window = "24h"; routing.severity = undefined; routing.navigate.mockReset(); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  it("pages findings independently of failed statistics and resets pagination when page size changes", async () => {
+    routing.tab = "event";
+    setupPage();
+    vi.mocked(api.getMetrics).mockRejectedValue(new apiError("Rate limited", 429));
+    const finding = { id: "one", trace_id: "call", created_at: "2026-10-15T08:00:00Z", guardrail_id: draft.id,
+      guardrail_version: "v1", router_id: null, endpoint_id: null, phase: "input", severity: "high", risk: "test", taxonomy_id: "test",
+      verdict: "matched", confidence: 1, recommended_action: "block", policy_id: null, rule_id: "rule-one", detail: "Finding evidence" } as api.RouterTraceFinding;
+    vi.mocked(api.getGuardrailFindings).mockImplementation(async (_id, _window, limit, cursor) => ({
+      items: [{ ...finding, id: cursor ? "two" : "one", rule_id: cursor ? "rule-two" : "rule-one" }], count: 1, nextCursor: cursor ? null : "older",
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = <QueryClientProvider client={client}><TooltipProvider><GuardrailDetailPage /></TooltipProvider></QueryClientProvider>;
+    const view = render(ui);
+    await screen.findByText("rule-one");
+    await screen.findByRole("button", { name: "securityEvents.retrySummary" });
+    expect(api.getMetrics).toHaveBeenCalledTimes(1);
+    const firstUntil = vi.mocked(api.getGuardrailFindings).mock.calls[0][6];
+    expect(api.getGuardrailFindings).toHaveBeenLastCalledWith(draft.id, "24h", 25, undefined, expect.any(AbortSignal), [], firstUntil);
+    await waitFor(() => expect(screen.getByRole("button", { name: "eventPagination.next" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "eventPagination.next" }));
+    await screen.findByText("rule-two");
+    expect(api.getGuardrailFindings).toHaveBeenLastCalledWith(draft.id, "24h", 25, "older", expect.any(AbortSignal), [], firstUntil);
+    expect(api.getMetrics).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "eventPagination.next" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "eventPagination.previous" }));
+    await screen.findByText("rule-one");
+    expect(api.getGuardrailFindings).toHaveBeenLastCalledWith(draft.id, "24h", 25, undefined, expect.any(AbortSignal), [], firstUntil);
+    await waitFor(() => expect(screen.getByRole("button", { name: "eventPagination.next" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "eventPagination.next" }));
+    await screen.findByText("rule-two");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "securityEvents.perPage" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.change(screen.getByRole("combobox", { name: "securityEvents.perPage" }), { target: { value: "50" } });
+    const change = routing.navigate.mock.calls.at(-1)![0].search({ pageSize: undefined });
+    routing.pageSize = change.pageSize;
+    view.rerender(<QueryClientProvider client={client}><TooltipProvider><GuardrailDetailPage /></TooltipProvider></QueryClientProvider>);
+    await waitFor(() => expect(api.getGuardrailFindings).toHaveBeenLastCalledWith(draft.id, "24h", 50, undefined, expect.any(AbortSignal), [], expect.any(String)));
+    expect(api.getMetrics).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "eventPagination.previous" }).hasAttribute("disabled")).toBe(true);
+    routing.severity = "critical";
+    view.rerender(<QueryClientProvider client={client}><TooltipProvider><GuardrailDetailPage /></TooltipProvider></QueryClientProvider>);
+    await waitFor(() => expect(api.getGuardrailFindings).toHaveBeenLastCalledWith(draft.id, "24h", 50, undefined, expect.any(AbortSignal), ["critical"], expect.any(String)));
+    expect(api.getMetrics).toHaveBeenCalledTimes(1);
+    routing.window = "7d";
+    view.rerender(<QueryClientProvider client={client}><TooltipProvider><GuardrailDetailPage /></TooltipProvider></QueryClientProvider>);
+    await waitFor(() => expect(api.getGuardrailFindings).toHaveBeenLastCalledWith(draft.id, "7d", 50, undefined, expect.any(AbortSignal), ["critical"], expect.any(String)));
+    await waitFor(() => expect(api.getMetrics).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "securityEvents.retrySummary" }));
+    await waitFor(() => expect(api.getMetrics).toHaveBeenCalledTimes(3));
+  });
+
+  it("does not load Security Events for hidden tabs", async () => {
+    setupPage();
+    render(wrap(<GuardrailDetailPage />));
+    await screen.findByRole("heading", { name: draft.name });
+    expect(api.getGuardrailFindings).not.toHaveBeenCalled();
+    expect(api.getMetrics).not.toHaveBeenCalled();
+  });
 
   it("opens protection mode from Actions while viewing the Testing tab", async () => {
     setupPage({ status: "enforce", protection: { guardrailId: draft.id, mode: "enforce", appliedMode: "enforce", generation: 7, ready: true,

@@ -311,7 +311,7 @@ describe("Guardrail detail information hierarchy", () => {
     const onRetry = vi.fn();
     const summary = { total: 18, critical: 3, high: 3, medium: 3, low: 3, informational: 3, unclassified: 3, affected_traces: 12, latest_at: null };
     const props = { summary, policies: [], routers: [], endpoints: [], window: "24h" as const, onWindowChange: vi.fn(), severities: ["high" as const], onRetry };
-    const view = render(<GuardrailFindingsView {...props} loading error={null} />);
+    const view = render(<GuardrailFindingsView {...props} loading summaryLoading error={null} />);
     expect(screen.getByRole("status").textContent).toContain("matched:3 total:18 interactions:12");
     expect(screen.getByText("securityEvents.updating")).toBeTruthy();
     view.rerender(<GuardrailFindingsView {...props} loading={false} error={new Error("Offline")} />);
