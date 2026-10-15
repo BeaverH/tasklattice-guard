@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RoutersPage } from "./routers";
 import type { TrafficRouter } from "@/lib/traffic-routing-api";
 
-const mocks = vi.hoisted(() => ({ role: "admin", list: vi.fn(), revisions: vi.fn(), get: vi.fn(), remove: vi.fn(), navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ role: "user", list: vi.fn(), revisions: vi.fn(), get: vi.fn(), remove: vi.fn(), navigate: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: mocks.role } }) }));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
@@ -43,7 +43,7 @@ async function openDelete() {
 
 describe("Router list actions and publication state", () => {
   beforeEach(() => {
-    mocks.role = "admin";
+    mocks.role = "user";
     mocks.navigate.mockReset();
     mocks.list.mockReset().mockResolvedValue({ items: [router] });
     mocks.revisions.mockReset().mockResolvedValue({ items: [

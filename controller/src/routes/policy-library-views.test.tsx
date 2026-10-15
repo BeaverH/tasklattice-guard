@@ -14,7 +14,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to?: string }) => <a href={to}>{children}</a>,
   useNavigate: () => vi.fn(), useSearch: () => ({}),
 }));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "user" } }) }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function definition(id: string, version: string, name: string, extra: Partial<Policy> = {}): Policy {

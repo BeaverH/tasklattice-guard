@@ -25,7 +25,7 @@ describe.skipIf(!url)("Personal access tokens in PostgreSQL", () => {
     await pool.query("TRUNCATE auth_user CASCADE");
     await pool.query("INSERT INTO auth_user(id,name,email,role) VALUES ('owner','Owner','owner@test.local','admin'),('other','Other','other@test.local','user')");
   });
-  const input = { name: "CI", expiresInDays: 30, permissions: { guardrails: "write", routers: "read" } };
+  const input = { name: "CI", expiresInDays: 30, permissions: { models: "write", runners: "read" } };
   it("issues unique 256-bit secrets, stores only a hash and returns safe metadata", async () => {
     const first = await service.create("owner", input); const second = await service.create("owner", input);
     expect(first.secret).toMatch(/^tlg_pat_[A-Za-z0-9_-]{43}$/); expect(second.secret).not.toBe(first.secret);
@@ -62,8 +62,10 @@ describe.skipIf(!url)("Personal access tokens in PostgreSQL", () => {
     expect(await service.authenticate(issued.secret)).toBeNull();
     expect(await service.list("owner")).toEqual([]);
   });
-  it("does not allow members to grant write access, but supports their read-only tokens", async () => {
-    await expect(service.create("other", input)).rejects.toMatchObject({ status: 403 });
+  it("allows user workflow grants and rejects platform grants", async () => {
+    const workflowInput = { ...input, permissions: { guardrails: "write", routers: "read" } };
+    expect((await service.create("other", workflowInput)).token.permissions).toEqual(workflowInput.permissions);
+    await expect(service.create("other", { ...input, permissions: { models: "read" } })).rejects.toMatchObject({ status: 403 });
     const issued = await service.create("other", { ...input, permissions: { routers: "read" } });
     expect(await service.authenticate(issued.secret)).toMatchObject({ id: "other", role: "user", permissions: { routers: "read" } });
   });

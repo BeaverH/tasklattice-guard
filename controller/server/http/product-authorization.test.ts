@@ -24,7 +24,7 @@ const config = loadConfig({
 // Explicit product surface inventory, independent of middleware implementation.
 // Requests deliberately carry invalid bodies: authentication/authorization must
 // reject them before parsing data, invoking a model or reaching a mutation.
-const adminRoutes = [
+const protectedRoutes = [
   ["POST", "/model-providers"], ["PATCH", "/model-providers/provider"],
   ["POST", "/model-provider-discoveries"], ["POST", "/model-provider-registrations"],
   ["POST", "/model-providers/provider/connection-tests"], ["POST", "/model-providers/provider/model-discoveries"],
@@ -56,6 +56,13 @@ const adminRoutes = [
   ["POST", "/guardrails/guard/duplicate"], ["DELETE", "/routers/router"],
 ] as const;
 
+const platformRoutes = [
+  ...protectedRoutes.filter(([, path]) => /^\/(model|runner)/.test(path)),
+  ["GET", "/model-pricing"], ["GET", "/model-pricing/catalog?q=model"],
+  ["GET", "/model-configuration"], ["GET", "/model-providers"], ["GET", "/models"],
+  ["GET", "/system/health"], ["GET", "/system/version"], ["GET", "/runner-pools"], ["GET", "/audit-events"],
+] as const;
+
 function setup(role: string | null) {
   const getSession = vi.fn().mockResolvedValue(role === null ? null : { user: { id: "actor", role } });
   const unexpected = vi.fn(() => { throw new Error("Protected service was reached"); });
@@ -68,8 +75,8 @@ function setup(role: string | null) {
   return { app, getSession, unexpected };
 }
 
-describe.each([null, "user", "unknown-role"])("Product API authorization for role %s", (role) => {
-  it.each(adminRoutes)("denies %s %s before protected work", async (method, path) => {
+describe.each([null, "unknown-role"])("Product API authorization for role %s", (role) => {
+  it.each(protectedRoutes)("denies %s %s before protected work", async (method, path) => {
     const { app, unexpected } = setup(role);
     const response = await app.request(`/api/v1${path}`, {
       method, headers: { "content-type": "application/json", "x-role": "admin", "x-user-id": "admin" },
@@ -78,6 +85,55 @@ describe.each([null, "user", "unknown-role"])("Product API authorization for rol
     expect(response.status).toBe(role === null ? 401 : 403);
     expect(await response.json()).toMatchObject({ error: { code: role === null ? "unauthenticated" : "forbidden" } });
     expect(unexpected).not.toHaveBeenCalled();
+  });
+});
+
+describe("User platform boundary", () => {
+  it.each(platformRoutes)("denies %s %s before reading settings or parsing a write", async (method, path) => {
+    const { app, unexpected } = setup("user");
+    const response = await app.request(`/api/v1${path}`, { method, headers: { "content-type": "application/json" }, ...(method === "GET" ? {} : { body: "not-json" }) });
+    expect(response.status).toBe(403);
+    expect(unexpected).not.toHaveBeenCalled();
+  });
+
+  it.each(["user"])("lets %s create Guardrail drafts with its own actor identity", async role => {
+    const createGuardrail = vi.fn().mockResolvedValue({ id: "new-guard" });
+    const app = createHttpApp({ config,
+      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "actor", role } }) } } as unknown as ControllerAuth,
+      service: { createGuardrail } as unknown as ControlPlaneService,
+      runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics });
+    const response = await app.request("/api/v1/guardrails", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "User guardrail", draftConfig: { policyBindings: [{ policyId: "policy", policyVersion: "v1" }] } }) });
+    expect(response.status).toBe(201);
+    expect(createGuardrail).toHaveBeenCalledWith(expect.objectContaining({ name: "User guardrail", actorId: "actor" }));
+  });
+});
+
+describe("Administrator business boundary", () => {
+  it.each([
+    "/telemetry/events", "/telemetry/events/event?includeContent=true",
+    "/telemetry/endpoint-activity", "/telemetry/metrics",
+  ])("denies tenant runtime data at %s before protected work", async path => {
+    const { app, unexpected } = setup("admin");
+    expect((await app.request(`/api/v1${path}`)).status).toBe(403);
+    expect(unexpected).not.toHaveBeenCalled();
+  });
+  it.each(protectedRoutes.filter(([method, path]) => method !== "GET" && !/^\/(model|runner)/.test(path)))("denies %s %s before protected work", async (method, path) => {
+    const { app, unexpected } = setup("admin");
+    const response = await app.request(`/api/v1${path}`, { method, headers: { "content-type": "application/json" }, body: "not-json" });
+    expect(response.status).toBe(403);
+    expect(unexpected).not.toHaveBeenCalled();
+  });
+});
+
+describe("Role changes revoke business authority", () => {
+  it("blocks a former user on the next request after becoming an administrator", async () => {
+    const { app, getSession, unexpected } = setup("user");
+    const send = () => app.request("/api/v1/guardrails", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect((await send()).status).toBe(400);
+    getSession.mockResolvedValueOnce({ user: { id: "actor", role: "admin" } });
+    expect((await send()).status).toBe(403);
+    expect(unexpected).not.toHaveBeenCalled();
+    expect(getSession).toHaveBeenLastCalledWith(expect.objectContaining({ query: { disableCookieCache: true } }));
   });
 });
 
@@ -103,12 +159,12 @@ describe("Session freshness and read-only access", () => {
     expect((await auth.api.getSession({ headers }))?.user.role).toBe("admin");
     const unexpected = vi.fn().mockResolvedValue({ status: "queued" });
     const app = createHttpApp({ config, auth: auth as unknown as ControllerAuth,
-      service: { requestGuardrailPublish: unexpected } as unknown as ControlPlaneService,
+      service: { updateRunnerPool: unexpected } as unknown as ControlPlaneService,
       runnerControl: { hasDefaultCompiler: () => true } as RunnerControlServer, metrics: {} as ControllerMetrics });
-    const response = await app.request("/api/v1/guardrails/guard/publish", { method: "POST", headers, body: JSON.stringify({ expectedDraftRevision: 1 }) });
-    expect(response.status).toBe(state === "active" ? 201 : state === "demoted" ? 403 : 401);
+    const response = await app.request("/api/v1/runner-pools/pool", { method: "PATCH", headers, body: JSON.stringify({ desiredReplicas: 1, safeRpsPerRunner: 50, maxConcurrencyPerRunner: 2 }) });
+    expect(response.status).toBe(state === "active" ? 200 : state === "demoted" ? 403 : 401);
     if (state === "active") expect(unexpected).toHaveBeenCalledExactlyOnceWith({
-      guardrailId: "guard", actorId: data.user![0]!.id, expectedDraftRevision: 1,
+      id: "pool", actorId: data.user![0]!.id, desiredReplicas: 1, safeRpsPerRunner: 50, maxConcurrencyPerRunner: 2,
     });
     else expect(unexpected).not.toHaveBeenCalled();
   });
@@ -116,7 +172,7 @@ describe("Session freshness and read-only access", () => {
   it("rechecks session expiry and role revocation on the next request", async () => {
     const { app, getSession, unexpected } = setup("admin");
     // Invalid admin input reaches schema validation, but never the service.
-    const send = () => app.request("/api/v1/guardrails", { method: "POST",
+    const send = () => app.request("/api/v1/models/model/pricing", { method: "PUT",
       headers: { "content-type": "application/json" }, body: "{}" });
     expect((await send()).status).toBe(400);
     getSession.mockResolvedValueOnce(null);

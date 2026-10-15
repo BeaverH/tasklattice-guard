@@ -15,7 +15,7 @@ const config = loadConfig({ NODE_ENV: "test", CONTROLLER_DATABASE_URL: "postgres
   CONTROLLER_POLICY_CATALOG_DIR: resolve("../runner/toolkit/policy_library/assets"), BETTER_AUTH_SECRET: "better-auth-secret-that-is-at-least-32-characters" });
 export const fallbackDraft = (): RouterDraft => ({ routes: [{ id: "fallback", name: "Fallback", kind: "fallback", enabled: true,
   selector: { expression: { combinator: "and", conditions: [] } }, targets: [{ id: "target", guardrailId: "guard", guardrailVersion: "1", weightBps: 10000 }] }] });
-export function setupRoutingHttp(role: string | null = "admin") {
+export function setupRoutingHttp(role: string | null = "user") {
   const router = { id: "router", draft: fallbackDraft(), draftRevision: 1, activeRevision: 1 };
   const change = { id: "change", routerId: "router", status: "pending" };
   const trafficRouting = { list: vi.fn().mockResolvedValue([router]), get: vi.fn().mockResolvedValue(router), create: vi.fn().mockResolvedValue(router),
@@ -68,7 +68,7 @@ describe("Composed Router HTTP contract", () => {
   it("submits the reviewed publication as a pending change without distributing", async () => {
     const { send, trafficRouting, distributeDesiredState } = setupRoutingHttp();
     expect((await setupRoutingHttp(null).send("POST", "/routers/router/publication-preview", { expectedDraftRevision: 7 })).status).toBe(401);
-    expect((await setupRoutingHttp("user").send("POST", "/routers/router/publication-preview", { expectedDraftRevision: 7 })).status).toBe(403);
+    expect((await setupRoutingHttp("user").send("POST", "/routers/router/publication-preview", { expectedDraftRevision: 7 })).status).toBe(200);
     const response = await send("POST", "/routers/router/publication-preview", { expectedDraftRevision: 7 });
     expect(response.status).toBe(200);
     expect(trafficRouting.preview).toHaveBeenCalledExactlyOnceWith("router", 7);

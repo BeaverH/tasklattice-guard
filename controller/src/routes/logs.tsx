@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { runtimeLogOutcomes, type RuntimeLogOutcome } from "../../shared/runtime-outcome";
 import { Table as CarbonTable, TableHead as CarbonTableHead, TableBody as CarbonTableBody, TableRow as CarbonTableRow, TableHeader as CarbonTableHeader, TableCell as CarbonTableCell } from "@carbon/react";
 import { RuntimeOutcomeBadge } from "@/components/runtime-outcome-badge";
@@ -149,7 +150,7 @@ export function LogsPage() {
         guardrailId={selectedGuardrail}
         checkpointId={checkpointId}
         onCheckpointChange={id => void navigate({ search: previous => ({ ...previous, checkpointId: id }), replace: true })}
-        admin={auth.user?.role === "admin"}
+        canViewContent={hasPermission(auth.user?.role, "runtime")}
         guardrailName={guardrailName}
         routerName={routerName}
         open={Boolean(requestId)}

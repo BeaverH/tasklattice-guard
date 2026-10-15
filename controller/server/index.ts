@@ -12,7 +12,7 @@ import { OpenAICompatibleIntentAnalyzer } from "./control-plane-ai/intent-analyz
 import { RunnerControlServer } from "./control-channel/control-server.js";
 import { ControlPlaneService } from "./services/control-plane.js";
 import { ControllerMetrics } from "./metrics.js";
-import { ensureBootstrapAdmin } from "./bootstrap.js";
+import { ensureBootstrapAdmin, ensureBootstrapUser } from "./bootstrap.js";
 import { OpenAICompatiblePlaygroundModel, RunnerPlaygroundClient } from "./playground/service.js";
 import { ModelConfigurationService } from "./model-config/service.js";
 
@@ -37,6 +37,10 @@ const auth = createAuth(config, db);
 if (config.bootstrapAdmin) {
   const status = await ensureBootstrapAdmin({ auth, db, ...config.bootstrapAdmin });
   if (status === "created") process.stdout.write(`Created Better Auth bootstrap administrator ${config.bootstrapAdmin.email}.\n`);
+}
+if (config.bootstrapUser) {
+  const status = await ensureBootstrapUser({ auth, db, ...config.bootstrapUser });
+  if (status === "created") process.stdout.write(`Created Better Auth bootstrap user ${config.bootstrapUser.email}.\n`);
 }
 const metrics = new ControllerMetrics();
 const runnerControl = new RunnerControlServer(config, service, metrics, models);

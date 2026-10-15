@@ -29,6 +29,7 @@ describe("Guard Better Auth", () => {
       minPasswordLength: 12,
     } as ControllerConfig, {} as ControllerDatabase);
 
+    expect(admin).toHaveBeenCalledWith(expect.objectContaining({ defaultRole: "user", adminRoles: ["admin"], roles: { admin: expect.any(Object), user: expect.any(Object) } }));
     expect(GUARD_AUTH_COOKIE_PREFIX).toBe("tali-guard");
     expect(betterAuth).toHaveBeenCalledWith(expect.objectContaining({
       advanced: { cookiePrefix: "tali-guard" },

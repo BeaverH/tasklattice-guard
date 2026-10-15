@@ -1,5 +1,5 @@
 import { NativeSelect as CarbonNativeSelect } from "@/components/ui/native-select";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import * as api from "@/lib/access-tokens-api";
-import { createAccessTokenSchema, readOnlyTokenModules, tokenModules, type TokenModule, type TokenPermissions } from "../../../shared/access-tokens";
+import { createAccessTokenSchema, accountModuleAccess, effectiveTokenPermissions, tokenModules, type TokenModule, type TokenPermissions } from "../../../shared/access-tokens";
 
 import "./access-tokens.scss";
 export function AccessTokens() {
@@ -24,6 +24,7 @@ export function AccessTokens() {
   const [name, setName] = useState("");
   const [days, setDays] = useState<api.CreateAccessToken["expiresInDays"]>(30);
   const [permissions, setPermissions] = useState<TokenPermissions>({});
+  useEffect(() => { setPermissions(previous => effectiveTokenPermissions(previous, user?.role ?? "")); }, [user?.role]);
   const [issued, setIssued] = useState<{ name: string; secret: string } | null>(null);
   const [revoking, setRevoking] = useState<api.AccessTokenView | null>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -80,7 +81,7 @@ export function AccessTokens() {
         <div><h3 className="font-medium">{t("accessTokens.permissionsTitle")}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{t("accessTokens.permissionsDescription")}</p>
           {user?.role !== "admin" && <p className="mt-2 text-sm text-muted-foreground">{t("accessTokens.readOnlyHint")}</p>}
         </div>
-        <div className="access-token-permissions">{tokenModules.map(module => <div key={module} className="access-token-permission-row"><div className="min-w-0"><Label htmlFor={`token-${module}`}>{t(`accessTokens.modules.${module}.name`)}</Label><p id={`token-${module}-description`} className="mt-1 text-xs leading-5 text-muted-foreground">{t(`accessTokens.modules.${module}.description`)}</p></div><CarbonNativeSelect id={`token-${module}`} aria-describedby={`token-${module}-description`} value={permissions[module] ?? "none"} disabled={create.isPending} onChange={event => { const next = { ...permissions }; if (event.target.value === "none") delete next[module]; else next[module] = event.target.value as "read" | "write"; setPermissions(next); }}><option value="none">{t("accessTokens.noAccess")}</option><option value="read">{t("accessTokens.readOnly")}</option>{user?.role === "admin" && !readOnlyTokenModules.includes(module) && <option value="write">{t("accessTokens.readWrite")}</option>}</CarbonNativeSelect></div>)}</div>
+        <div className="access-token-permissions">{tokenModules.filter(module => accountModuleAccess(user?.role, module)).map(module => <div key={module} className="access-token-permission-row"><div className="min-w-0"><Label htmlFor={`token-${module}`}>{t(`accessTokens.modules.${module}.name`)}</Label><p id={`token-${module}-description`} className="mt-1 text-xs leading-5 text-muted-foreground">{t(`accessTokens.modules.${module}.description`)}</p></div><CarbonNativeSelect id={`token-${module}`} aria-describedby={`token-${module}-description`} value={permissions[module] ?? "none"} disabled={create.isPending} onChange={event => { const next = { ...permissions }; if (event.target.value === "none") delete next[module]; else next[module] = event.target.value as "read" | "write"; setPermissions(next); }}><option value="none">{t("accessTokens.noAccess")}</option><option value="read">{t("accessTokens.readOnly")}</option>{accountModuleAccess(user?.role, module) === "write" && <option value="write">{t("accessTokens.readWrite")}</option>}</CarbonNativeSelect></div>)}</div>
         <p className="text-sm text-muted-foreground">{selected.length ? t("accessTokens.selectedModules", { count: selected.length }) : t("accessTokens.selectPermissionHint")}</p>
         {create.error && <ErrorNotice error={create.error} />}
       </form>

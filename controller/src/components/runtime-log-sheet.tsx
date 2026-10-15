@@ -15,10 +15,10 @@ import { Button } from "@/components/ui/button";
 import { getRuntimeEvent, listRuntimeEvents } from "@/lib/controller-api";
 import { runtimeLogInteractions, type RuntimeLogEntry } from "@/lib/api";
 
-export function RuntimeLogSheet({ requestId, guardrailId, checkpointId, onCheckpointChange, admin, guardrailName, routerName, open, onOpenChange }: {
+export function RuntimeLogSheet({ requestId, guardrailId, checkpointId, onCheckpointChange, canViewContent, guardrailName, routerName, open, onOpenChange }: {
   requestId?: string; guardrailId?: string; checkpointId?: string;
   onCheckpointChange?: (id?: string) => void;
-  admin: boolean; guardrailName: (id: string | null) => string;
+  canViewContent: boolean; guardrailName: (id: string | null) => string;
   routerName: (id: string | null) => string;
   open: boolean; onOpenChange: (open: boolean) => void;
 }) {
@@ -51,7 +51,7 @@ export function RuntimeLogSheet({ requestId, guardrailId, checkpointId, onCheckp
   return <EntitySheet open={open} onOpenChange={onOpenChange} eyebrow={t("logs.interactionDetailEyebrow")} title={t("logs.detailTitle")} description={<span className="break-all font-mono text-xs">{requestId}</span>} width="xl" footer={<Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.close")}</Button>}>
     <div className="grid gap-5">
       {interaction ? <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-b pb-5"><Fact label={t("logs.time")} value={new Date(interaction.created_at).toLocaleString(i18n.language)} /><Fact label={t("logs.context")} value={`${routerName(interaction.router_id)} · ${interaction.protocol}`} /><div className="col-span-2"><Fact label={t("logs.guardrail")} value={<>{guardrailName(interaction.guardrail_id)}{interaction.guardrail_version ? <span className="ml-2 font-mono text-xs text-muted-foreground">{interaction.guardrail_version}</span> : null}</>} /></div></dl> : null}
-      {!admin && entry?.content_available ? <div className="flex gap-3 rounded-lg border bg-muted/25 p-4"><LockKeyhole className="mt-0.5 size-4 shrink-0" /><div><p className="text-sm font-medium">{t("logs.adminContentTitle")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("logs.adminContentDescription")}</p></div></div> : null}
+      {!canViewContent && entry?.content_available ? <div className="flex gap-3 rounded-lg border bg-muted/25 p-4"><LockKeyhole className="mt-0.5 size-4 shrink-0" /><div><p className="text-sm font-medium">{t("logs.restrictedContentTitle")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("logs.restrictedContentDescription")}</p></div></div> : null}
       {checkpoints.isPending && !expanded ? <p role="status">{t('logs.loadingDetail')}</p> : checkpoints.error ? <div><ErrorNotice error={checkpoints.error} /><Button variant="outline" onClick={() => void checkpoints.refetch()}>{t('common.retry')}</Button></div> : null}
       {(checkpoints.data?.items.length ?? 0) > 1 ? <div className="grid divide-y border-y">{checkpoints.data?.items.map(event => <button type="button" key={event.id} className={`grid min-h-11 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-l-2 px-3 py-3 text-left focus-visible:outline-2 focus-visible:outline-ring ${expanded === event.id ? "border-l-primary bg-muted" : "border-l-transparent hover:bg-muted/50"}`} onClick={() => selectCheckpoint(event.id)} aria-pressed={expanded === event.id}>
         <span className="text-sm font-medium">{t(event.direction === 'completion' ? 'logs.callCompletion' : event.direction === 'incoming' ? 'logs.inboundCheckpoint' : 'logs.outboundCheckpoint')}</span>
@@ -59,7 +59,7 @@ export function RuntimeLogSheet({ requestId, guardrailId, checkpointId, onCheckp
         <span className="col-span-2 mt-1 break-all font-mono text-xs text-muted-foreground">{event.id}</span>
       </button>)}</div> : null}
       {paging.page > 1 || checkpoints.data?.nextCursor ? <EventPagination page={paging.page} busy={checkpoints.isFetching} nextCursor={checkpoints.data?.nextCursor} onNext={cursor => { selectCheckpoint(undefined); paging.next(cursor); }} onPrevious={() => { selectCheckpoint(undefined); paging.previous(); }} onLatest={() => { selectCheckpoint(undefined); paging.latest(); }} /> : null}
-      {expanded && detail.isPending ? <p role="status">{t('logs.loadingDetail')}</p> : expanded && detail.error ? <div><ErrorNotice error={detail.error} /><Button variant="outline" onClick={() => void detail.refetch()}>{t('common.retry')}</Button></div> : entry ? <RuntimeCheckpoint key={entry.id} entry={entry} requestId={requestId} admin={admin} loadContent={async signal => {
+      {expanded && detail.isPending ? <p role="status">{t('logs.loadingDetail')}</p> : expanded && detail.error ? <div><ErrorNotice error={detail.error} /><Button variant="outline" onClick={() => void detail.refetch()}>{t('common.retry')}</Button></div> : entry ? <RuntimeCheckpoint key={entry.id} entry={entry} requestId={requestId} canViewContent={canViewContent} loadContent={async signal => {
         const event = await getRuntimeEvent(entry.id, signal, true);
         if (event.requestId !== requestId || (guardrailId && event.guardrailId !== guardrailId)) throw new Error(t('logs.checkpointMismatch'));
         return runtimeLogInteractions([event], { includeUncaptured: true })[0]!.entries[0]!;
@@ -68,16 +68,16 @@ export function RuntimeLogSheet({ requestId, guardrailId, checkpointId, onCheckp
   </EntitySheet>;
 }
 
-export function RuntimeCheckpoint({ entry, requestId, admin, loadContent }: { entry: RuntimeLogEntry; requestId?: string; admin: boolean; loadContent?: (signal: AbortSignal) => Promise<RuntimeLogEntry> }) {
+export function RuntimeCheckpoint({ entry, requestId, canViewContent, loadContent }: { entry: RuntimeLogEntry; requestId?: string; canViewContent: boolean; loadContent?: (signal: AbortSignal) => Promise<RuntimeLogEntry> }) {
   const { t } = useTranslation();
   const Icon = entry.phase === "completion" ? Clock3 : entry.phase === "input" ? ArrowDownToLine : ArrowUpFromLine;
   return <section className="overflow-hidden rounded-lg border"><header className="flex flex-wrap items-center gap-3 border-b bg-muted/25 px-4 py-3"><span className="grid size-8 shrink-0 place-items-center text-muted-foreground"><Icon className="size-4" /></span><div className="min-w-0 flex-1"><h3 className="text-sm font-semibold">{t(entry.phase === "completion" ? "logs.callCompletion" : entry.phase === "input" ? "logs.inboundCheckpoint" : "logs.outboundCheckpoint")}</h3>{entry.trace_id !== requestId ? <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">{entry.trace_id}</p> : null}</div><Badge variant="outline">{t(`states.${entry.protection_mode ?? "enforce"}`)}</Badge><RuntimeOutcomeBadge outcome={entry.outcome} executionError={entry.execution_status === "error"} /><span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock3 className="size-3" />{entry.latency_ms} ms</span></header>
     <div className="grid gap-4 p-4">
-      {admin && entry.phase !== "completion" ? <RuntimeContentPanel title={t(entry.phase === "output" ? "logs.modelOutput" : "logs.requestContent")} description={t(entry.phase === "output" ? "logs.modelOutputDescription" : "logs.requestContentDescription")} blocks={entry.content_before} available={entry.content_available} httpRequest={entry.phase === "input" ? entry.http_request : undefined} downloadId={entry.phase === "input" ? entry.id : undefined} collapsible={entry.phase === "input" || Boolean(loadContent)} loadContent={loadContent ? async signal => {
+      {canViewContent && entry.phase !== "completion" ? <RuntimeContentPanel title={t(entry.phase === "output" ? "logs.modelOutput" : "logs.requestContent")} description={t(entry.phase === "output" ? "logs.modelOutputDescription" : "logs.requestContentDescription")} blocks={entry.content_before} available={entry.content_available} httpRequest={entry.phase === "input" ? entry.http_request : undefined} downloadId={entry.phase === "input" ? entry.id : undefined} collapsible={entry.phase === "input" || Boolean(loadContent)} loadContent={loadContent ? async signal => {
         const content = await loadContent(signal);
         return { blocks: content.content_before, httpRequest: content.phase === "input" ? content.http_request : null, available: content.content_available };
       } : undefined} /> : null}
-      {admin && entry.outcome === "transform" && !entry.original_content_only ? <RuntimeContentPanel title={t("logs.transformedContent")} description={t("logs.transformedDescription")} blocks={entry.content_after} available={entry.content_available} transformed collapsible={Boolean(loadContent)} loadContent={loadContent ? async signal => {
+      {canViewContent && entry.outcome === "transform" && !entry.original_content_only ? <RuntimeContentPanel title={t("logs.transformedContent")} description={t("logs.transformedDescription")} blocks={entry.content_after} available={entry.content_available} transformed collapsible={Boolean(loadContent)} loadContent={loadContent ? async signal => {
         const content = await loadContent(signal);
         return { blocks: content.content_after, available: content.content_available };
       } : undefined} /> : null}

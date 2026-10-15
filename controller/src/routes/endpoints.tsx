@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { EndpointRouterLink } from "@/components/endpoint-router-link";
 import { EndpointSetupBadge } from "@/components/endpoint-setup-badge";
 import { endpointsQueryOptions } from "@/features/endpoints-query";
@@ -151,7 +152,7 @@ export function EndpointsPage({ endpointId, onEndpointChange }: {
         loading={query.isPending} refreshing={query.isFetching} error={query.error} onRefresh={() => void refreshEndpoints()}
         emptyTitle={t("endpoints.emptyTitle")} emptyDescription={t("endpoints.emptyDescription")}
         summary={<span>{t("endpoints.listSummary", { total: endpoints.length, verified })}{attention ? ` · ${t("endpoints.needsAttention", { count: attention })}` : ''}</span>}
-        action={auth.user?.role === "admin" ? <Button variant="create" size="lg" onClick={() => setCreateOpen(true)}><Plus />{t("endpoints.register")}</Button> : undefined}>
+        action={hasPermission(auth.user?.role, "endpoints", "write") ? <Button variant="create" size="lg" onClick={() => setCreateOpen(true)}><Plus />{t("endpoints.register")}</Button> : undefined}>
         {items => <Table className="resource-table resource-endpoint-table" aria-label={t("pages.endpoints.title")}><TableHeader><TableRow>
           <TableHead className="resource-name-column">{t("endpoints.gatewayInstance")}</TableHead>
           <TableHead>{t("endpoints.setup")}</TableHead><TableHead>{t("resourceList.boundRouter")}</TableHead><TableHead>{t("endpoints.successRate24h")}</TableHead>
@@ -171,7 +172,7 @@ export function EndpointsPage({ endpointId, onEndpointChange }: {
         endpoint={selected}
         onOpenChange={(open) => !open && setSelected(null)}
         onUpdated={refreshEndpoints}
-        onDelete={auth.user?.role === "admin" ? (endpoint) => {
+        onDelete={hasPermission(auth.user?.role, "endpoints", "write") ? (endpoint) => {
           setSelected(null);
           deleteMutation.reset();
           queryClient.removeQueries({ queryKey: queryKeys.endpointDeletionImpact(endpoint.id), exact: true });
@@ -265,7 +266,7 @@ function EndpointDetailContent({
 }) {
   const { t, i18n } = useTranslation();
   const auth = useAuth();
-  const canManage = auth.user?.role === "admin";
+  const canManage = hasPermission(auth.user?.role, "endpoints", "write");
   const queryClient = useQueryClient();
   const copy = useCopyText();
   const query = useQuery({

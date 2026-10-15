@@ -557,8 +557,10 @@ the product label-cardinality budget and upstream bypass boundary are in the rep
 ## Offline bootstrap password hash
 
 The local profile stores a Better Auth scrypt hash for the initial `password`
-login in `security.bootstrapAdmin.passwordHash`. The salt is included in the hash.
-The database connection password remains a separate setting.
+login in `security.bootstrapAdmin.passwordHash` and `security.bootstrapUser.passwordHash`.
+The local accounts are `admin` / `password` (admin role) and `user` / `password`
+(user role), with separate salts. `bootstrapUser.enabled` is false by default
+and enabled only by the development profile. The database password is separate.
 
 Generate a compatible hash offline, using the Controller's pinned Better Auth:
 
@@ -575,7 +577,13 @@ existing bootstrap Secret can instead contain `password-hash` (configurable with
 For a non-Helm deployment use `CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH` instead of
 `CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD`.
 
-Hash import is a startup-only operation for a missing administrator. Existing
+An optional user bootstrap accepts the same Secret fields under
+`security.bootstrapUser`, with `enabled: true`; it always creates the `user` role.
+For non-Helm development use `CONTROLLER_BOOTSTRAP_USER_EMAIL`,
+`CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH` and `CONTROLLER_BOOTSTRAP_USER_NAME`.
+Admin and user emails must differ.
+
+Hash import is a startup-only operation for a missing account. Existing
 accounts keep their password, including passwords changed through the UI. Changing
 Values does not reset an existing login. Import does not re-hash the hash, expose
 an HTTP hash-import endpoint, or change Better Auth's normal password hashing.

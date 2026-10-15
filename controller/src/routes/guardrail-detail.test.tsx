@@ -33,7 +33,8 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@/components/dashboard/runtime-health-alert", () => ({ RuntimeHealthAlert: () => null }));
 vi.mock("@/components/dashboard/runtime-metric-chart", () => ({ RuntimeMetricChart: () => <div>runtime-chart</div> }));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
+const identity = vi.hoisted(() => ({ role: "user" }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: identity.role } }) }));
 vi.mock("@/routes/create-guardrail-wizard", () => ({ CreateGuardrailWizard: () => null }));
 vi.mock("@/routes/routers", () => ({
   TrafficScopeBadges: ({ router }: { router: TrafficRouter }) => <span>{router.name} scope</span>,
@@ -85,7 +86,7 @@ const deletableGuardrail = {
 } satisfies Guardrail;
 
 describe("Guardrail detail information hierarchy", () => {
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  afterEach(() => { cleanup(); identity.role = "user"; vi.restoreAllMocks(); });
 
   it("loads the Guardrail logging level and recovers from a failed settings request", async () => {
     const load = vi.spyOn(api, "getGuardrailLoggingSettings")
@@ -139,7 +140,7 @@ describe("Guardrail detail information hierarchy", () => {
   });
 
   it.each(["shortcut", "policy"])("hides Topic Control settings when removed via %s and saves only after explicit Save", async removal => {
-    vi.spyOn(controllerApi, "getModelConfiguration").mockResolvedValue({ models: [], active: null, draft: null, activating: null } as unknown as controllerApi.ModelConfigurationView);
+    vi.spyOn(controllerApi, "getModelReadiness").mockResolvedValue({ models: [], active: null, draft: null, activating: null } as unknown as controllerApi.ModelConfigurationView);
     const catalog = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
     const policies = ["local-credentials", "builtin-topic-safety"].map(id => { const latest = catalog.find(item => item.id === id)!; return id === "builtin-topic-safety" ? latest.published_versions![0]! : latest; });
     const bindings = policies.map(defaultPolicyBinding);
@@ -219,6 +220,7 @@ describe("Guardrail detail information hierarchy", () => {
   });
 
   it("aggregates privacy-safe findings from Playground on the Guardrail", () => {
+    identity.role = "user";
     const data: GuardrailFindingPage = {
       count: 1,
       summary: { total: 1, critical: 1, high: 0, medium: 0, low: 0, informational: 0, unclassified: 0, affected_traces: 1, latest_at: "2026-08-16T09:46:46Z" },
@@ -255,6 +257,13 @@ describe("Guardrail detail information hierarchy", () => {
     const link = new URL(screen.getByRole("link", { name: "logs.viewLog" }).getAttribute("href")!, "http://localhost");
     expect(link.pathname).toBe("/logs");
     expect(Object.fromEntries(link.searchParams)).toEqual({ eventId: "event-critical", requestId: "trace-playground", checkpointId: "event-critical", guardrailId: "guardrail-observed" });
+  });
+
+  it("hides tenant log links from platform administrators", () => {
+    identity.role = "admin";
+    render(<GuardrailFindingsView data={{ items: [], count: 0 } as unknown as GuardrailFindingPage} loading={false} error={null} policies={[]} routers={[]} endpoints={[]} window="24h" onWindowChange={() => undefined} />);
+    expect(screen.getByRole("region", { name: "guardrails.securityFindingsTitle" })).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("removes findings with repeated local ids when filtering to an empty severity", async () => {

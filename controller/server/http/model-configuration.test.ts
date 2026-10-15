@@ -47,10 +47,10 @@ const revision = {
 const view = { providers: [], models: [], draft: revision, active: null, activating: null, failed: null };
 
 describe("Model configuration HTTP routes", () => {
-  it("keeps GET read-only even when a regular session observes a ready activation", async () => {
+  it("keeps administrator GET read-only even when activation is ready", async () => {
     const models = { view: vi.fn().mockResolvedValue({ ...view, activating: { ...revision, state: "activating", generation: 9 } }), finalizeActivation: vi.fn() };
     const runner = { distributionStatus: vi.fn().mockResolvedValue({ distributionStatus: "ready", desiredGeneration: 9 }) };
-    expect((await appWith("user", models, runner).request("/api/v1/model-configuration")).status).toBe(200);
+    expect((await appWith("admin", models, runner).request("/api/v1/model-configuration")).status).toBe(200);
     expect(models.finalizeActivation).not.toHaveBeenCalled();
     expect(runner.distributionStatus).not.toHaveBeenCalled();
   });
@@ -86,15 +86,15 @@ describe("Model configuration HTTP routes", () => {
     expect(result.status).toBe(201);
     expect(models.registerProviderModels).toHaveBeenCalledWith({ connection: { ...connection, skipTlsVerify: false }, models: [selection] }, "admin-1");
   });
-  it("lets authenticated members read the safe configuration projection", async () => {
+  it("denies users the platform configuration projection", async () => {
     const models = { view: vi.fn().mockResolvedValue(view) };
     const app = appWith("user", models);
     const response = await app.request("/api/v1/model-configuration");
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ draft: { revision: 1 }, providers: [] });
+    expect(response.status).toBe(403);
+    expect(models.view).not.toHaveBeenCalled();
   });
 
-  it("lists the safe provider and model projections for authenticated readers", async () => {
+  it("lists provider and model projections for administrators", async () => {
     const models = {
       view: vi.fn().mockResolvedValue({
         ...view,
@@ -102,7 +102,7 @@ describe("Model configuration HTTP routes", () => {
         models: [{ id: "model-1", name: "Safety model" }],
       }),
     };
-    const app = appWith("user", models);
+    const app = appWith("admin", models);
 
     const providers = await app.request("/api/v1/model-providers");
     const listedModels = await app.request("/api/v1/models");
@@ -112,6 +112,18 @@ describe("Model configuration HTTP routes", () => {
     expect(listedModels.status).toBe(200);
     expect(await listedModels.json()).toEqual([{ id: "model-1", name: "Safety model" }]);
     expect(models.view).toHaveBeenCalledTimes(2);
+  });
+
+  it("provides users only the model evidence needed by Guardrail workflows", async () => {
+    const models = { view: vi.fn().mockResolvedValue({ ...view,
+      providers: [{ id: "provider", baseUrl: "https://private.test", credentialHint: "secret-hint" }],
+      models: [{ id: "model", name: "Safety model", providerId: "provider", timeoutSeconds: 60 }],
+      draft: { ...revision, reviewToken: "private-review", assignments: { controlPlane: "private-model", bindings: { "content_safety.input": "model" } }, validationReport: { checkedAt: now.toISOString(), checks: [{ id: "probe:content_safety.input:model", status: "passed", evidenceKind: "nemo-rail-v1", message: "private-evidence", cases: [{ inputContent: "private-prompt" }] }] } },
+    }) };
+    const response = await appWith("user", models).request("/api/v1/guardrail-capabilities");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ models: [{ id: "model", name: "Safety model" }], active: null, activating: null,
+      draft: { revision: 1, assignments: { bindings: { "content_safety.input": "model" } }, validationReport: { checkedAt: now.toISOString(), checks: [{ id: "probe:content_safety.input:model", status: "passed", evidenceKind: "nemo-rail-v1" }] } } });
   });
 
   it("routes save and validation to one assignment target", async () => {

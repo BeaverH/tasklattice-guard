@@ -11,7 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { defaultPolicyBinding } from "@/components/policy-binding-editor";
 import { PolicyCatalog } from "../../server/policy-catalog/catalog";
 
-const routing = vi.hoisted(() => ({ navigate: vi.fn(), tab: "testing", role: "admin" }));
+const routing = vi.hoisted(() => ({ navigate: vi.fn(), tab: "testing", role: "user" }));
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", exists: () => false } }),
@@ -64,7 +64,7 @@ function setupPage(overrides: Partial<api.Guardrail> = {}) {
 }
 
 describe("Guardrail edit, test and publish workflow", () => {
-  beforeEach(() => { routing.tab = "testing"; routing.role = "admin"; routing.navigate.mockReset(); });
+  beforeEach(() => { routing.tab = "testing"; routing.role = "user"; routing.navigate.mockReset(); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   it("opens protection mode from Actions while viewing the Testing tab", async () => {

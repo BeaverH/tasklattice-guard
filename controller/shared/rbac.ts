@@ -1,0 +1,54 @@
+/** Account authority shared by the API, browser and personal access tokens. */
+export const accountRoles = ["admin", "user"] as const;
+export type AccountRole = typeof accountRoles[number];
+export type AccessAction = "read" | "write";
+export const permissionResources = ["guardrails", "policies", "playground", "routers", "endpoints", "models", "runners", "runtime", "audit", "settings", "users"] as const;
+export type PermissionResource = typeof permissionResources[number];
+
+/** Write includes read. Missing entries deny access. */
+export const rolePermissions: Readonly<Record<AccountRole, Readonly<Partial<Record<PermissionResource, AccessAction>>>>> = {
+  admin: {
+    guardrails: "read", policies: "read", playground: "read", routers: "read", endpoints: "read",
+    models: "write", runners: "write", settings: "write", users: "write",
+    audit: "read",
+  },
+  user: {
+    guardrails: "write", policies: "write", playground: "write", routers: "write", endpoints: "write",
+    runtime: "read",
+  },
+};
+
+export function isAccountRole(role: string | null | undefined): role is AccountRole {
+  return role === "admin" || role === "user";
+}
+
+export function accountPermission(role: string | null | undefined, resource: PermissionResource): AccessAction | null {
+  return isAccountRole(role) ? rolePermissions[role][resource] ?? null : null;
+}
+
+export function hasPermission(role: string | null | undefined, resource: PermissionResource, action: AccessAction = "read"): boolean {
+  const granted = accountPermission(role, resource);
+  return granted === "write" || granted === action;
+}
+
+export function isPlatformAdministrator(role: string | null | undefined): boolean {
+  return hasPermission(role, "settings", "write");
+}
+
+export function roleHome(role: string | null | undefined): "/settings/health" | "/guardrails" {
+  return isPlatformAdministrator(role) ? "/settings/health" : "/guardrails";
+}
+
+export function pagePermission(pathname: string): { resource: PermissionResource; action: AccessAction } | null {
+  const routes: ReadonlyArray<readonly [string, PermissionResource, AccessAction]> = [
+    ["/settings", "settings", "read"], ["/access", "users", "read"],
+    ["/logs", "runtime", "read"], ["/audit-log", "audit", "read"],
+    // Authoring workspaces belong to users; platform configuration retains
+    // read access to business metadata without opening these workspaces.
+    ["/guardrails", "guardrails", "write"], ["/policy-library", "policies", "write"],
+    ["/playground", "playground", "write"], ["/integration/routers", "routers", "write"],
+    ["/integration/endpoints", "endpoints", "write"],
+  ];
+  const route = routes.find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
+  return route ? { resource: route[1], action: route[2] } : null;
+}

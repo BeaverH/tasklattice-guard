@@ -238,6 +238,10 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- default (printf "%s-bootstrap-admin" (include "tali-guard.fullname" .)) .Values.security.bootstrapAdmin.existingSecret }}
 {{- end }}
 
+{{- define "tali-guard.bootstrapUserSecretName" -}}
+{{- default (printf "%s-bootstrap-user" (include "tali-guard.fullname" .)) .Values.security.bootstrapUser.existingSecret }}
+{{- end }}
+
 {{- define "tali-guard.artifactSigningSecretName" -}}
 {{- default (printf "%s-artifact-signing" (include "tali-guard.fullname" .)) .Values.security.artifactSigning.existingSecret }}
 {{- end }}
@@ -285,6 +289,25 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- $usesLocalDefault := and .Values.controller.auth.allowLocalDefaultCredentials (eq .Values.security.bootstrapAdmin.email "admin@tasklattice.local") (eq .Values.security.bootstrapAdmin.password "admin") }}
 {{- if and (not .Values.security.bootstrapAdmin.existingSecret) .Values.security.bootstrapAdmin.password (lt (len .Values.security.bootstrapAdmin.password) (int .Values.controller.auth.minPasswordLength)) (not $usesLocalDefault) }}
 {{- fail (printf "bootstrapAdmin inline password must contain at least %v characters" .Values.controller.auth.minPasswordLength) }}
+{{- end }}
+{{- with .Values.security.bootstrapUser }}
+{{- if .enabled }}
+{{- if and .existingSecret (or .email .password .passwordHash) }}
+{{- fail "bootstrapUser existingSecret cannot be combined with inline credentials" }}
+{{- end }}
+{{- if not (or .existingSecret (and .email (or .password .passwordHash))) }}
+{{- fail "configure bootstrapUser existingSecret or an email with password/passwordHash" }}
+{{- end }}
+{{- if and .password .passwordHash }}
+{{- fail "bootstrapUser password and passwordHash are mutually exclusive" }}
+{{- end }}
+{{- if and .password (lt (len .password) (int $.Values.controller.auth.minPasswordLength)) }}
+{{- fail (printf "bootstrapUser inline password must contain at least %v characters" $.Values.controller.auth.minPasswordLength) }}
+{{- end }}
+{{- if and .email (eq (lower .email) (lower $.Values.security.bootstrapAdmin.email)) }}
+{{- fail "bootstrapAdmin and bootstrapUser must have different email addresses" }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- if and .Values.security.artifactSigning.existingSecret (or .Values.security.artifactSigning.privateKey .Values.security.artifactSigning.publicKey) }}
 {{- fail "artifactSigning existingSecret cannot be combined with inline keys" }}

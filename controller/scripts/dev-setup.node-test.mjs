@@ -28,6 +28,9 @@ test('setup preserves provider settings and reuses credentials and keys', async 
   assert.equal(first.CONTROLLER_RUNNER_TOKEN, first.GUARD_CONTROLLER_TOKEN);
   assert.equal(first.CONTROLLER_METRICS_TOKEN, first.GUARD_METRICS_TOKEN);
   assert.equal(await verifyPassword({ password: 'password', hash: first.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH }), true);
+  assert.equal(first.CONTROLLER_BOOTSTRAP_USER_EMAIL, 'user@tasklattice.local');
+  assert.equal(await verifyPassword({ password: 'password', hash: first.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH }), true);
+  assert.notEqual(first.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH, first.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH);
   const privateKey = readFileSync(first.CONTROLLER_ARTIFACT_SIGNING_KEY_PATH);
   assert.equal(createPrivateKey(privateKey).asymmetricKeyType, 'ed25519');
   assert.deepEqual(createPublicKey(privateKey).export({ type: 'spki', format: 'pem' }), readFileSync(first.GUARD_ARTIFACT_PUBLIC_KEY_PATH, 'utf8'));
@@ -35,6 +38,16 @@ test('setup preserves provider settings and reuses credentials and keys', async 
   assert.deepEqual(parseEnv(readFileSync(join(root, '.env'), 'utf8')), first);
   assert.deepEqual(readFileSync(first.CONTROLLER_ARTIFACT_SIGNING_KEY_PATH), privateKey);
   assert.equal(statSync(join(root, '.env')).mode & 0o777, 0o600);
+});
+test('setup preserves separately configured admin and user credentials', async t => {
+  const root = fixture(t);
+  writeFileSync(join(root, '.env'), 'CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD=existing-admin-password\nCONTROLLER_BOOTSTRAP_USER_PASSWORD=existing-user-password\n');
+  await setupDevelopment(root);
+  const values = parseEnv(readFileSync(join(root, '.env'), 'utf8'));
+  assert.equal(values.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD, 'existing-admin-password');
+  assert.equal(values.CONTROLLER_BOOTSTRAP_USER_PASSWORD, 'existing-user-password');
+  assert.equal(values.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH, undefined);
+  assert.equal(values.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH, undefined);
 });
 test('setup refuses mismatched existing tokens without changing env', async t => {
   const root = fixture(t);

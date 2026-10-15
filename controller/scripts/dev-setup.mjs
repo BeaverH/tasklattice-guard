@@ -44,11 +44,15 @@ export async function setupDevelopment(root = projectRoot) {
   values.CONTROLLER_ARTIFACT_SIGNING_KEY_PATH = privatePath;
   values.GUARD_ARTIFACT_PUBLIC_KEY_PATH = publicPath;
   values.GUARD_RUNNER_STATE_PATH = current.GUARD_RUNNER_STATE_PATH ?? join(root, 'data', 'runner');
-  if (current.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD && !current.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH) {
-    delete values.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH;
-  } else if (!current.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH) {
-    delete values.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD;
-    values.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH = await hashPassword('password');
+  for (const role of ['ADMIN', 'USER']) {
+    const passwordKey = `CONTROLLER_BOOTSTRAP_${role}_PASSWORD`;
+    const hashKey = `${passwordKey}_HASH`;
+    if (current[passwordKey] && !current[hashKey]) {
+      delete values[hashKey];
+    } else if (!current[hashKey]) {
+      delete values[passwordKey];
+      values[hashKey] = await hashPassword('password');
+    }
   }
   // Leave existing values byte-for-byte intact, including quoted provider secrets.
   const pending = new Map(Object.entries(values));
@@ -74,7 +78,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     await setupDevelopment();
     console.log('Local .env and Ed25519 keys are ready; existing credentials were preserved.');
     console.log('Ensure PostgreSQL is reachable at CONTROLLER_DATABASE_URL, then run npm run dev from the repository root.');
-    console.log('New default accounts use admin / password; existing accounts are not reset.');
+    console.log('New local accounts: admin / password (admin), user / password (user); existing accounts are not reset.');
   } catch (error) {
     console.error(`dev:setup: ${error.message}`);
     process.exitCode = 1;

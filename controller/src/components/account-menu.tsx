@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, CircleUserRound, LogOut, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -90,7 +91,7 @@ export function AccountMenu({
             {t("account.title")}
           </Link>
         </DropdownMenuItem>
-        {user?.role === "admin" ? (
+        {hasPermission(user?.role, "users") ? (
           <DropdownMenuItem asChild className="min-h-11">
             <Link to="/access" onClick={onNavigate}>
               <UsersRound />

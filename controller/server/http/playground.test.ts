@@ -74,7 +74,7 @@ describe("Guardrail Playground HTTP capability", () => {
     const app = createHttpApp({
       config,
       auth: {
-        api: { getSession: vi.fn().mockResolvedValue({ user: { id: "admin-1", role: "admin" } }) },
+        api: { getSession: vi.fn().mockResolvedValue({ user: { id: "admin-1", role: "user" } }) },
         handler: vi.fn(),
       } as unknown as ControllerAuth,
       service,
@@ -110,12 +110,12 @@ describe("Guardrail Playground HTTP capability", () => {
     expect(modelFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects draft preview preparation for non-administrators", async () => {
+  it("rejects draft preview preparation for unknown roles", async () => {
     const prepare = vi.fn();
     const app = createHttpApp({
       config,
       auth: {
-        api: { getSession: vi.fn().mockResolvedValue({ user: { id: "member-1", role: "user" } }) },
+        api: { getSession: vi.fn().mockResolvedValue({ user: { id: "member-1", role: "unknown" } }) },
         handler: vi.fn(),
       } as unknown as ControllerAuth,
       service: { playgroundDraftCandidate: prepare } as unknown as ControlPlaneService,

@@ -8,7 +8,7 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 const catalog = vi.hoisted(() => ({ items: [] as Policy[], search: {} as { policy?: string } }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn(), useSearch: () => catalog.search }));
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { email: "author@example.test", role: "admin" } }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { email: "author@example.test", role: "user" } }) }));
 vi.mock("@/lib/api", async original => ({ ...await original<typeof import("@/lib/api")>(),
   getPolicies: async () => ({ items: catalog.items }), getActionCatalog: async () => ({ items: [] }),
 }));

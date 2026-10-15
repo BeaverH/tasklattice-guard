@@ -4,7 +4,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { VersionPage } from "./version";
 import { getSystemVersion } from "@/lib/controller-api";
 vi.mock("@/lib/controller-api", () => ({ getSystemVersion: vi.fn() }));
-vi.mock("@/components/settings-navigation", () => ({ SettingsNavigation: () => null }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", exists: () => false } }) }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const software = { version: "v1-1-gabc-dirty", commit: "abc", branch: "main", dirty: true, source: "build" as const };

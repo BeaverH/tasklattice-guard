@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
-import { createAccessTokenSchema, type AccessTokenView, type TokenPermissions } from "../../shared/access-tokens.js";
+import { allowsTokenPermission, createAccessTokenSchema, type AccessTokenView, type TokenModule, type TokenPermissions } from "../../shared/access-tokens.js";
 import type { ControllerDatabase } from "../db/client.js";
 import { auditEvents, personalAccessTokens, user } from "../db/schema.js";
 import { ControllerError, NotFoundError } from "../domain/errors.js";
@@ -25,8 +25,8 @@ export class AccessTokenService {
       // Lock the owner to serialize issuance and enforce the current role and token limit.
       const [owner] = await tx.select().from(user).where(eq(user.id, userId)).for("update");
       if (!owner || owner.banned) throw new ControllerError("Account is unavailable.", 403, "forbidden");
-      if (owner.role !== "admin" && Object.values(input.permissions).includes("write"))
-        throw new ControllerError("Only administrators can grant write access.", 403, "forbidden");
+      if (Object.entries(input.permissions).some(([module, access]) => access && !allowsTokenPermission(input.permissions, module as TokenModule, access, owner.role)))
+        throw new ControllerError("Token permissions exceed the current account role.", 403, "forbidden");
       const now = new Date();
       const active = await tx.select({ id: personalAccessTokens.id }).from(personalAccessTokens)
         .where(and(eq(personalAccessTokens.userId, userId), isNull(personalAccessTokens.revokedAt), gt(personalAccessTokens.expiresAt, now)));

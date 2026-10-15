@@ -1,10 +1,11 @@
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TopicControlUnavailable, useTopicControlAvailability } from "./topic-control-availability";
 
 const getModels = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/controller-api", () => ({ getModelConfiguration: getModels }));
+vi.mock("@/lib/controller-api", () => ({ getModelReadiness: getModels }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 afterEach(() => { cleanup(); getModels.mockReset(); });
 

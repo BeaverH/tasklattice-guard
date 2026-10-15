@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { Fragment, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
@@ -71,7 +72,7 @@ function RunnerPoolPanel({ pool, updatedAt, refreshing, onRemove }: { pool: Runn
         <header className="runner-instance-heading"><h3 id={`${id}-instances`}>{t("runners.instancesTitle")}</h3><span>{t("runnerView.registered", { count: pool.instances.length })}</span></header>
         <Table className="runner-instance-table table-fixed" aria-labelledby={`${id}-instances`}>
           <TableHeader><TableRow><TableHead className="w-[29%]">{t("runnerView.instance")}</TableHead><TableHead className="w-[14%]">{t("runnerView.runtime")}</TableHead><TableHead className="w-[23%]">{t("runnerView.configuration")}</TableHead><TableHead className="w-[16%]">{t("runners.columns.inflightQueue")}</TableHead><TableHead className="w-[18%]">{t("runners.columns.lastHeartbeat")}</TableHead></TableRow></TableHeader>
-          <TableBody>{pool.instances.map(runner => <RunnerRow key={runner.runnerId} runner={runner} now={updatedAt} canRemove={user?.role === "admin"} onRemove={() => onRemove({ runner, poolName: pool.name })} />)}
+          <TableBody>{pool.instances.map(runner => <RunnerRow key={runner.runnerId} runner={runner} now={updatedAt} canRemove={hasPermission(user?.role, "runners", "write")} onRemove={() => onRemove({ runner, poolName: pool.name })} />)}
             {!pool.instances.length ? <TableRow><TableCell colSpan={5} className="runner-empty-row">{t("runnerView.waitingRegistration")}</TableCell></TableRow> : null}
           </TableBody>
         </Table>
@@ -82,7 +83,7 @@ function RunnerPoolPanel({ pool, updatedAt, refreshing, onRemove }: { pool: Runn
         <dl className="runner-planning-facts"><RunnerDatum label={t("runnerView.servingLabel")} value={String(serving)} /><RunnerDatum label={t("runnerView.desiredLabel")} value={String(pool.desiredReplicas)} /><RunnerDatum label={t("runnerView.recommendedLabel")} value={String(pool.capacity.recommendedReplicas)} /></dl>
         <p>{t("runnerView.plannedCapacity", { capacity: pool.capacity.safeRpsCapacity.toFixed(1), count: serving, perRunner: pool.safeRpsPerRunner.toFixed(1) })}</p>
         <p>{t("runnerView.planningHint")}</p>
-        {user?.role === "admin" ? <Button ref={editButton} variant="link" className="mt-2 min-h-11" aria-expanded={editing} aria-controls={`${id}-editor`} onClick={() => setEditing(!editing)}>{t("runnerView.editTargets")}</Button> : null}
+        {hasPermission(user?.role, "runners", "write") ? <Button ref={editButton} variant="link" className="mt-2 min-h-11" aria-expanded={editing} aria-controls={`${id}-editor`} onClick={() => setEditing(!editing)}>{t("runnerView.editTargets")}</Button> : null}
         {editing ? <div id={`${id}-editor`}><RunnerCapacityEditor pool={pool} onClose={() => { setEditing(false); editButton.current?.focus(); }} /></div> : null}
       </section>
       <p className="runner-feedback" role="status">{t(refreshing ? "runnerView.refreshingPrevious" : "runnerView.complete")}</p>

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleAlert, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { GuardrailPolicyBinding, Policy } from "@/lib/api-types";
-import { getModelConfiguration } from "@/lib/controller-api";
+import { getModelReadiness } from "@/lib/controller-api";
 import { dependencyAssignment, selectedModelDependencies } from "@/lib/protection-dependencies";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
@@ -13,7 +13,7 @@ export function useGuardrailValidationReadiness({ bindings, policies, enabled = 
   const { t } = useTranslation();
   const dependencies = selectedModelDependencies(bindings, policies);
   const needsModels = dependencies.required.length > 0;
-  const query = useQuery({ queryKey: ["resources", "model-configuration"], queryFn: getModelConfiguration,
+  const query = useQuery({ queryKey: ["resources", "model-readiness"], queryFn: getModelReadiness,
     enabled: enabled && policiesReady && needsModels, retry: false, refetchInterval: enabled && needsModels ? 10_000 : false });
   const unavailable = policiesError || needsModels && query.isError;
   const checking = !unavailable && (!policiesReady || needsModels && query.isPending);

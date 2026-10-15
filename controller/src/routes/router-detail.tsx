@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { useTranslation } from "react-i18next";
 import { discardRouterDraft } from "@/components/traffic-routing/discard-router-draft";
 import { DistributionOverview } from "@/components/traffic-routing/distribution";
@@ -68,7 +69,7 @@ export function RouterDetailPage() {
 export function RouterWorkspace({ router }: { router: api.TrafficRouter }) {
   const { t: localize } = useTranslation();
   const auth = useAuth(),
-    canEdit = auth.user?.role === "admin";
+    canEdit = hasPermission(auth.user?.role, "routers", "write");
   const awaiting = router.pendingChangeRequest;
   const client = useQueryClient();
   const search = useSearch({ strict: false }) as { routeId?: string; tab?: string };

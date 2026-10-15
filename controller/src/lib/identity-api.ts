@@ -1,6 +1,7 @@
+import { isAccountRole } from "../../shared/rbac";
 import { authClient } from "@/lib/better-auth";
 
-export type IdentityRole = "admin" | "member";
+export type IdentityRole = import("../../shared/rbac").AccountRole;
 export type IdentityUser = {
   id: string;
   display_name: string;
@@ -77,7 +78,7 @@ export const createUser = async (input: { display_name: string; email: string; p
     name: input.display_name,
     email: input.email,
     password: input.password,
-    role: input.role === "admin" ? "admin" : "user",
+    role: input.role,
     data: { preferredLanguage: input.preferred_language },
   });
   if (result.error) throw new Error(result.error.message || "User creation failed.");
@@ -90,7 +91,7 @@ export const updateUser = async (id: string, input: { display_name?: string; rol
     if (result.error) throw new Error(result.error.message || "User update failed.");
   }
   if (input.role) {
-    const result = await authClient.admin.setRole({ userId: id, role: input.role === "admin" ? "admin" : "user" });
+    const result = await authClient.admin.setRole({ userId: id, role: input.role });
     if (result.error) throw new Error(result.error.message || "Role update failed.");
   }
   if (input.enabled !== undefined) {
@@ -115,12 +116,14 @@ function identityUser(value: unknown): IdentityUser {
     preferredLanguage?: string | null; createdAt: Date | string; updatedAt?: Date | string;
     lastLoginAt?: Date | string | null;
   };
+  const role = user.role ?? "user";
+  if (!isAccountRole(role)) throw new Error("This account has an unsupported role. Contact an administrator.");
   const createdAt = new Date(user.createdAt).toISOString();
   return {
     id: user.id,
     display_name: user.name,
     email: user.email,
-    role: user.role === "admin" ? "admin" : "member",
+    role,
     enabled: !user.banned,
     preferred_language: user.preferredLanguage === "zh-CN" ? "zh-CN" : "en",
     last_login_at: user.lastLoginAt ? new Date(user.lastLoginAt).toISOString() : null,

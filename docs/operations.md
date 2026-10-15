@@ -12,15 +12,15 @@ installation, dependency settings, and production Secrets.
   expiry, and revocation. Effective permissions are limited by the owner's
   current role. These are separate from Runner tokens and Endpoint credentials;
   see [Access Tokens](account-access-tokens.md).
-- The OrbStack/local baseline login is username `admin` and password `password`.
-  Controller maps that username to the internal Better Auth identity
-  `admin@tasklattice.local`; these local-only credentials must not be used in
-  production.
+- The OrbStack/local profiles initialize `admin` / `password` (admin role) and
+  `user` / `password` (user role). Controller maps these usernames to
+  `admin@tasklattice.local` and `user@tasklattice.local`. Their separate salted
+  hashes are imported only when each account is absent.
 - Production has no default credentials. Its bootstrap administrator is created
   through Better Auth from a strong deployment Secret, with a default minimum
   password length of 12.
-- Bootstrap is idempotent: it creates a missing administrator but never resets
-  an existing administrator's password during Controller startup. Passwords
+- Bootstrap is idempotent: it creates missing accounts but never resets
+  an existing account's password or role during Controller startup. Passwords
   changed through Better Auth therefore survive restarts and upgrades.
 - Runner control uses a Runner token plus mutual TLS by default. The shared
   initialization Job creates and retains its CA/credentials in Namespace-owned

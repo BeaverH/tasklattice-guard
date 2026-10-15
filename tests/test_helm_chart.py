@@ -1436,3 +1436,42 @@ def test_local_endpoint_address_uses_runtime_load_balancer_port(host):
 ])
 def test_runtime_address_is_not_inferred_without_local_load_balancer(overrides):
     assert controller_config(render_dev(*overrides))["data"]["CONTROLLER_RUNTIME_PUBLIC_URL"] == ""
+
+
+def test_development_bootstraps_both_roles_with_separate_secrets():
+    documents = render_dev()
+    secrets = {item['metadata']['name']: item for item in documents if item.get('kind') == 'Secret'}
+    deployment = next(item for item in documents if item.get('kind') == 'Deployment' and item['metadata']['name'] == 'tali-guard-controller')
+    env = {item['name']: item for item in deployment['spec']['template']['spec']['containers'][0]['env']}
+    values = load_values(DEV_VALUES)['security']
+    assert values['bootstrapAdmin']['passwordHash'] != values['bootstrapUser']['passwordHash']
+    for role in ('admin', 'user'):
+        account = values[f'bootstrap{role.title()}']
+        secret = f'tali-guard-bootstrap-{role}'
+        assert secrets[secret]['stringData'] == {'email': f'{role}@tasklattice.local', 'password-hash': account['passwordHash'], 'name': account['name']}
+        assert env[f'CONTROLLER_BOOTSTRAP_{role.upper()}_PASSWORD_HASH']['valueFrom']['secretKeyRef'] == {'name': secret, 'key': 'password-hash', 'optional': True}
+        assert f'CONTROLLER_BOOTSTRAP_{role.upper()}_PASSWORD' not in env
+
+
+def test_optional_bootstrap_user_is_disabled_in_production_and_supports_existing_secrets():
+    documents = render()
+    deployment = next(item for item in documents if item.get('kind') == 'Deployment' and item['metadata']['name'].endswith('-controller'))
+    assert not any(item['name'].startswith('CONTROLLER_BOOTSTRAP_USER_') for item in deployment['spec']['template']['spec']['containers'][0]['env'])
+    assert not any(item['kind'] == 'Secret' and item['metadata']['name'].endswith('-bootstrap-user') for item in documents)
+    documents = render('--set', 'security.bootstrapUser.enabled=true', '--set', 'security.bootstrapUser.existingSecret=tenant-bootstrap')
+    deployment = next(item for item in documents if item.get('kind') == 'Deployment' and item['metadata']['name'].endswith('-controller'))
+    env = {item['name']: item for item in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['CONTROLLER_BOOTSTRAP_USER_EMAIL']['valueFrom']['secretKeyRef']['name'] == 'tenant-bootstrap'
+    assert not any(item['kind'] == 'Secret' and item['metadata']['name'] == 'tenant-bootstrap' for item in documents)
+
+
+@pytest.mark.parametrize('settings,error', [
+    ([], 'configure bootstrapUser'),
+    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.password=short'], 'at least 12'),
+    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.passwordHash=invalid'], 'pattern'),
+    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.existingSecret=existing'], 'cannot be combined'),
+    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.password=long-enough-password', '--set-string', 'security.bootstrapUser.passwordHash=' + 'a' * 32 + ':' + 'b' * 128], 'mutually exclusive'),
+    (['--set', 'security.bootstrapUser.email=same@example.test', '--set', 'security.bootstrapUser.password=long-enough-password', '--set', 'security.bootstrapAdmin.existingSecret=', '--set', 'security.bootstrapAdmin.email=SAME@example.test', '--set', 'security.bootstrapAdmin.password=long-enough-password'], 'different email'),
+])
+def test_bootstrap_user_rejects_invalid_configuration(settings, error):
+    assert error.lower() in render_error('--set', 'security.bootstrapUser.enabled=true', *settings).lower()

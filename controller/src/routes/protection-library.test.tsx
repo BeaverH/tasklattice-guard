@@ -6,7 +6,7 @@ import type { Policy } from "@/lib/api";
 import { PolicyLibraryPage } from "./policy-library";
 
 vi.mock("@/components/policy-studio", () => ({ PolicyStudioSheet: () => null }));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "member" } }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "user" } }) }));
 const routing = vi.hoisted(() => ({ search: {} as { policy?: string; version?: string }, navigate: vi.fn() }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => routing.navigate, useSearch: () => routing.search, Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span> }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key.startsWith("protection.") ? key.slice(11).split(".").reduce((value: unknown, part) => (value as Record<string, unknown>)?.[part], protectionEn) ?? key : key }) }));

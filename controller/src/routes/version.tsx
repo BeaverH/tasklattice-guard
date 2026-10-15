@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader, StateBadge } from "@/components/product-shell";
-import { SettingsNavigation } from "@/components/settings-navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +18,6 @@ export function VersionPage() {
         {t(query.isFetching ? "softwareVersion.refreshing" : "softwareVersion.refresh")}
       </Button>
     } />
-    <SettingsNavigation />
     <div className="mt-6 space-y-6">
       {query.isError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{t("softwareVersion.error")}</p>}
       {query.isPending && <div role="status" aria-label={t("softwareVersion.refreshing")} className="space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-48 w-full" /></div>}

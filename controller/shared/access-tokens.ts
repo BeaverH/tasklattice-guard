@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { accountPermission } from "./rbac.js";
 
 export const tokenModules = ["guardrails", "routers", "endpoints", "policies", "playground", "models", "runners", "runtime", "audit"] as const;
 export type TokenModule = typeof tokenModules[number];
@@ -20,7 +21,20 @@ export type AccessTokenView = {
   id: string; name: string; prefix: string; permissions: TokenPermissions;
   createdAt: string; expiresAt: string; lastUsedAt: string | null; revokedAt: string | null;
 };
+export function accountModuleAccess(role: string | null | undefined, module: TokenModule): "read" | "write" | null {
+  return accountPermission(role, module);
+}
+
+export function effectiveTokenPermissions(permissions: TokenPermissions, role: string): TokenPermissions {
+  return Object.fromEntries(Object.entries(permissions).flatMap(([module, grant]) => {
+    const maximum = accountModuleAccess(role, module as TokenModule);
+    return grant && maximum ? [[module, maximum === "read" ? "read" : grant]] : [];
+  }));
+}
+
 export function allowsTokenPermission(permissions: TokenPermissions, module: TokenModule, access: "read" | "write", role: string) {
+  const maximum = accountModuleAccess(role, module);
+  if (!maximum || access === "write" && maximum !== "write") return false;
   const granted = permissions[module];
-  return access === "read" ? granted === "read" || granted === "write" : role === "admin" && granted === "write";
+  return access === "read" ? granted === "read" || granted === "write" : granted === "write";
 }

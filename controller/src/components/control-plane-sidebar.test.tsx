@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 
 import { ControlPlaneSidebar } from "./control-plane-sidebar";
+
+const identity = vi.hoisted(() => ({ role: "admin" }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: identity.role } }) }));
 
 const queryData = vi.hoisted(() => ({ value: { items: [] } as Record<string, unknown> }));
 vi.mock("@tanstack/react-query", () => ({
@@ -22,49 +25,69 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 
 describe("ControlPlaneSidebar", () => {
-  afterEach(() => { cleanup(); queryData.value = { items: [] }; });
+  afterEach(() => { cleanup(); identity.role = "admin"; queryData.value = { items: [] }; });
 
   beforeEach(async () => { await i18n.changeLanguage("en"); });
 
-  it("keeps the primary workflow flat while Dashboard remains on the logo", () => {
-    render(
-      <SidebarProvider>
-        <TooltipProvider>
-          <ControlPlaneSidebar />
-        </TooltipProvider>
-      </SidebarProvider>,
-    );
-
-    expect(screen.getByRole("link", { name: "Routers" }).getAttribute("href")).toBe("/integration/routers");
-    expect(screen.getByRole("link", { name: "Endpoints" }).getAttribute("href")).toBe("/integration/endpoints");
-    expect(document.body.textContent).toContain("Integration");
-    expect(screen.queryByRole("link", { name: "Deployments" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Integrations" })).toBeNull();
-
-    const help = screen.getByRole("link", { name: "Documentation" });
-    const settings = screen.getByRole("link", { name: "Settings" });
-    expect(help.closest('[data-sidebar="footer"]')).toBe(settings.closest('[data-sidebar="footer"]'));
-    expect(help.getAttribute("href")).toBe("/document");
-    expect(settings.getAttribute("href")).toBe("/settings/health");
-    expect(settings.getAttribute("aria-haspopup")).toBeNull();
-    expect(settings.querySelectorAll("svg")).toHaveLength(1);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.body.textContent).toContain("Documentation");
-
-    const links = screen.getAllByRole("link");
-    expect(links.slice(0, 4).map((link) => link.textContent?.trim())).toEqual([
-      "TaskLattice Guard",
-      "Guardrails",
-      "Playground",
-      "Policy Library",
-    ]);
-    expect(links[0].getAttribute("href")).toBe("/dashboard");
-    expect(screen.queryByRole("link", { name: "Dashboard" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Testing Reports" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Runner capacity" })).toBeNull();
-    expect(document.body.textContent).toContain("Guardrail Design");
-    expect(document.body.textContent).not.toContain("Build & validate");
+  it("groups administrator pages by operations, model services, and governance", () => {
+    render(<SidebarProvider><TooltipProvider><ControlPlaneSidebar /></TooltipProvider></SidebarProvider>);
+    const expected = {
+      Health: "/settings/health", Runner: "/settings/runner", Providers: "/settings/providers",
+      Models: "/settings/models", "Guardrail Catalog": "/settings/guardrail-catalog", Version: "/settings/version",
+      "Users & access": "/access", "Audit log": "/audit-log",
+    };
+    for (const [label, path] of Object.entries(expected)) expect(screen.getByRole("link", { name: label }).getAttribute("href")).toBe(path);
+    const groups = {
+      "Platform operations": ["Health", "Runner", "Version"],
+      "Models & detection": ["Providers", "Models", "Guardrail Catalog"],
+      "Access & audit": ["Users & access", "Audit log"],
+    };
+    for (const [label, links] of Object.entries(groups)) {
+      const group = screen.getByText(label).closest('[data-sidebar="group"]') as HTMLElement;
+      expect(within(group).getAllByRole("link").map(link => link.textContent)).toEqual(links);
+    }
+    for (const label of ["Guardrails", "Playground", "Policy Library", "Routers", "Endpoints", "Settings", "Runtime logs"]) expect(screen.queryByRole("link", { name: label })).toBeNull();
+    expect(document.body.textContent).not.toContain("Guardrail Design");
+    expect(document.body.textContent).not.toContain("Integration");
+    expect(document.body.textContent).not.toContain("Runtime observability");
+    expect(screen.getByRole("link", { name: "TaskLattice Guard" }).getAttribute("href")).toBe("/settings/health");
+    expect(screen.getByRole("link", { name: "Documentation" }).closest('[data-sidebar="footer"]')).toBeTruthy();
   });
+  it("shows users workflow groups and runtime observations without platform audit", () => {
+    identity.role = "user";
+    render(<SidebarProvider><TooltipProvider><ControlPlaneSidebar /></TooltipProvider></SidebarProvider>);
+    for (const name of ["Guardrails", "Playground", "Policy Library", "Routers", "Endpoints", "Runtime logs", "Documentation"]) expect(screen.getByRole("link", { name })).toBeTruthy();
+    for (const name of ["Settings", "Health", "Runner", "Providers", "Models", "Guardrail Catalog", "Version", "Users & access", "Audit log"]) expect(screen.queryByRole("link", { name })).toBeNull();
+    expect(screen.getByRole("link", { name: "TaskLattice Guard" }).getAttribute("href")).toBe("/guardrails");
+    expect(screen.getByRole("link", { name: "Runtime logs" }).getAttribute("href")).toBe("/logs");
+    expect(document.body.textContent).toContain("Runtime observability");
+    expect(document.body.textContent).not.toContain("Platform");
+  });
+
+  it("updates Chinese labels and collapsed accessible names when switching languages", async () => {
+    render(<SidebarProvider><ControlPlaneSidebar /><SidebarTrigger /></SidebarProvider>);
+    expect(screen.getByRole("link", { name: "Providers" })).toBeTruthy();
+    await act(async () => { await i18n.changeLanguage("zh-CN"); });
+    for (const name of ["平台运维", "模型与检测", "访问与审计"]) expect(screen.getByText(name)).toBeTruthy();
+    const paths = { "模型提供商": "/settings/providers", "检测器目录": "/settings/guardrail-catalog", "执行节点": "/settings/runner" };
+    for (const [name, path] of Object.entries(paths)) expect(screen.getByRole("link", { name }).getAttribute("href")).toBe(path);
+    for (const name of ["Providers", "Provider", "Guardrail Catalog", "Runner"]) expect(screen.queryByRole("link", { name })).toBeNull();
+    const rail = document.querySelector('[data-sidebar="rail"]');
+    fireEvent.click(screen.getAllByRole("button", { name: "展开或收起导航" }).find(button => button !== rail)!);
+    for (const name of Object.keys(paths)) expect(screen.getByRole("link", { name }).getAttribute("aria-label")).toBe(name);
+    await act(async () => { await i18n.changeLanguage("en"); });
+    for (const name of ["Providers", "Guardrail Catalog", "Runner"]) expect(screen.getByRole("link", { name }).getAttribute("aria-label")).toBe(name);
+  });
+
+  it("localizes every tenant navigation group and entry in Chinese", async () => {
+    identity.role = "user";
+    await i18n.changeLanguage("zh-CN");
+    render(<SidebarProvider><ControlPlaneSidebar /></SidebarProvider>);
+    for (const name of ["护栏设计", "集成", "运行观测"]) expect(screen.getByText(name)).toBeTruthy();
+    for (const name of ["安全护栏", "调试场", "策略库", "路由器", "端点", "运行日志", "文档"]) expect(screen.getByRole("link", { name })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "审计日志" })).toBeNull();
+  });
+
   it("preserves explicit collapse controls without expanding on hover", () => {
     const { container } = render(
       <SidebarProvider>

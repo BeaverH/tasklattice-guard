@@ -1,3 +1,4 @@
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import { CorrectnessUnavailable, useCorrectnessAvailability } from "./correctnes
 import { protectionEn } from "../protection-i18n";
 
 const getModels = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/controller-api", () => ({ getModelConfiguration: getModels }));
+vi.mock("@/lib/controller-api", () => ({ getModelReadiness: getModels }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, values?: Record<string, string>) => {
   const label = key.startsWith("protection.") ? key.slice(11).split(".").reduce<unknown>((value, part) => (value as Record<string, unknown>)?.[part], protectionEn) : key;
   return Object.entries(values ?? {}).reduce((text, [name, value]) => text.replaceAll(`{{${name}}}`, value), String(label ?? key));

@@ -6,7 +6,7 @@ import { ImmutableVersionView } from "./guardrail-immutable-versions";
 import type { GuardrailVersionDetail, ValidationRun } from "@/lib/api";
 import { getControllerGuardrail, getGuardrailVersionDeletionImpact } from "@/lib/controller-api";
 
-const auth = vi.hoisted(() => ({ user: { role: "admin" } }));
+const auth = vi.hoisted(() => ({ user: { role: "user" } }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => auth }));
 vi.mock("react-i18next", () => ({ initReactI18next: { type: "3rdParty", init: () => undefined }, useTranslation: () => ({
   t: (key: string, values?: Record<string, unknown>) => Object.entries(values ?? {}).reduce((text, [key, value]) => `${text} ${key}:${value}`, key),
@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.mocked(getControllerGuardrail).mockResolvedValue({ id: "g1", versions: versions.map(v => ({ version: v.version, createdAt: v.created_at, status: "ready", artifactId: v.version, validationRunId: `run-${v.version}` })) } as never);
   vi.mocked(getGuardrailVersionDeletionImpact).mockResolvedValue({ deletable: false, blockers: [{ code: "latest", until: null }], references: [], unrestorableRevisions: [] } as never);
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); auth.user.role = "admin"; });
+afterEach(() => { cleanup(); vi.clearAllMocks(); auth.user.role = "user"; });
 
 describe("Immutable version list and detail drawer", () => {
   it("shows a retained failed outcome after its report expires without offering a dead report link", () => {

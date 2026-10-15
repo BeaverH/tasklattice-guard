@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "@/components/product-shell";
 import { RunnerCapacitySection, runnerPoolKey } from "@/components/runner-capacity";
-import { SettingsNavigation } from "@/components/settings-navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +30,6 @@ export function RunnerPage() {
           </Button>
         )}
       />
-      <SettingsNavigation />
       <div className="mt-6">
         <RunnerCapacitySection showHeader={false} />
       </div>

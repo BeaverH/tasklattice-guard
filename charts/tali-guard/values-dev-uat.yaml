@@ -67,6 +67,12 @@ security:
     # Offline Better Auth hash for the local initial admin / password login.
     passwordHash: "0a23d43dc81c52d322fbf3f52b2858bb:563bdba4c8dd2c5a6bf67ddb82e6111c41e14b3462c5e3cabf6442d6b529be9ddabd22391d9b1dc2b0e8f4841454786a440d58703dd5a3c417accb84947dcf31"
     name: Local Administrator
+  bootstrapUser:
+    enabled: true
+    email: user@tasklattice.local
+    # Separate offline hash for the initial user / password login.
+    passwordHash: "8e2671eed5876365cb848b07ee55dc0f:3704a97c3a029f0d8b86f086d96f78d7b5874adc72e2f78503d9a8a4e1551d2ab243d2729b6abfc4579f2818af8004417ee0d435d224622b7f7be24682dde2fc"
+    name: Local User
 
 # Keep the self-contained development baseline independent from Prometheus
 # Operator and Grafana. Use npm run helm:deploy:dev:debug when the local

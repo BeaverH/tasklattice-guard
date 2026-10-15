@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Save } from "lucide-react";
@@ -19,7 +20,7 @@ export function EditGuardrailLoggingSheet({ guardrailId, guardrailName, onClose 
 }) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
-  const canEdit = useAuth().user?.role === "admin";
+  const canEdit = hasPermission(useAuth().user?.role, "guardrails", "write");
   const [selectedLevel, setSelectedLevel] = useState<LoggingLevel | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const query = useQuery({ queryKey: queryKeys.guardrailLogging(guardrailId), queryFn: () => getGuardrailLoggingSettings(guardrailId) });

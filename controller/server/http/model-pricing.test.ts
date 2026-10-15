@@ -10,8 +10,8 @@ const config = loadConfig({ NODE_ENV: "test", CONTROLLER_DATABASE_URL: "postgres
 const pricing = { view: vi.fn().mockResolvedValue({ models: [] }), guardrailUsage: vi.fn().mockResolvedValue({ calls: 0 }), configure: vi.fn().mockResolvedValue({}) };
 const app = (role: string) => createHttpApp({ config, auth: { api: { getSession: async () => ({ user: { id: "actor", role } }) }, handler: vi.fn() } as unknown as ControllerAuth, service: { pricing } as unknown as ControlPlaneService, runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics });
 describe("model price and usage permissions", () => {
-  it("lets members read usage, but only administrators set prices", async () => {
-    expect((await app("user").request("/api/v1/model-pricing")).status).toBe(200);
+  it("lets users read Guardrail usage while reserving platform pricing for administrators", async () => {
+    expect((await app("user").request("/api/v1/model-pricing")).status).toBe(403);
     expect((await app("user").request("/api/v1/guardrails/g/usage-costs?window=7d&source=testing")).status).toBe(200);
     expect(pricing.guardrailUsage).toHaveBeenCalledWith("g", { window: "7d", source: "testing" });
     const options = { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "manual", rates: { unit: "free", currency: "USD" } }) };

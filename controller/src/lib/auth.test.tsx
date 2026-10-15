@@ -21,7 +21,7 @@ describe("Authenticated cache boundaries", () => {
   it.each([
     { authenticated: false, user: null },
     { authenticated: true, user: { ...user, id: "second" } },
-    { authenticated: true, user: { ...user, role: "member" as const } },
+    { authenticated: true, user: { ...user, role: "user" as const } },
   ])("clears prior resource data before exposing changed identity $user.id", async (next: AuthStatus) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(queryKeys.auth, { authenticated: true, user });

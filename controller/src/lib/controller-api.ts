@@ -506,6 +506,8 @@ export const getControllerSystemHealth = async (signal?: AbortSignal) => {
   }
   return snapshot;
 };
+export const getModelReadiness = () => requestController<import("../../shared/model-readiness").ModelReadinessView>("/api/v1/guardrail-capabilities");
+
 export const getModelConfiguration = async () => {
   const view = await requestController<ModelConfigurationView>("/api/v1/model-configuration");
   if (!view.draft?.assignments?.bindings) {

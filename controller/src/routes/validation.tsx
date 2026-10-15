@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { EventPagination, useEventCursor } from "@/components/event-pagination";
 import { DeleteTestingReportSheet } from "@/components/delete-testing-report-sheet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -40,7 +41,7 @@ export function ValidationPage() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const auth = useAuth();
-  const canManage = auth.user?.role === "admin";
+  const canManage = hasPermission(auth.user?.role, "guardrails", "write");
   const requestedGuardrail = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("guardrail") ?? "";
   const guardrailsQuery = useQuery({ queryKey: queryKeys.guardrails, queryFn: getGuardrails });
   const guardrails = (guardrailsQuery.data?.items ?? []).filter((item) => item.is_default || !item.system_managed);

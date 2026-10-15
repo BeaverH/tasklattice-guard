@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAuth } from "./auth.js";
-import { ensureBootstrapAdmin } from "./bootstrap.js";
+import { ensureBootstrapAdmin, ensureBootstrapUser } from "./bootstrap.js";
 import { loadConfig } from "./config.js";
 import * as schema from "./db/schema.js";
 
@@ -32,17 +32,18 @@ describe.skipIf(!process.env.GUARD_BOOTSTRAP_TEST_DATABASE_URL)("bootstrap hash 
   });
   afterAll(async () => { await pool.end(); });
 
-  it("logs in with password, rejects the hash as a password, and never resets an existing account", async () => {
+  it.each([["admin", ensureBootstrapAdmin], ["user", ensureBootstrapUser]] as const)("logs in %s with password and never resets its credentials", async (role, ensure) => {
     const hash = await hashPassword("password");
-    const input = { auth, db, email: "admin@example.test", name: "Administrator", passwordHash: hash };
-    expect(await ensureBootstrapAdmin(input)).toBe("created");
+    const input = { auth, db, email: `${role}@example.test`, name: role, passwordHash: hash };
+    expect(await ensure(input)).toBe("created");
     const signedIn = await auth.api.signInEmail({ body: { email: input.email, password: "password" } });
     expect(signedIn.user.email).toBe(input.email);
+    expect(signedIn.user.role).toBe(role);
     const [stored] = await db.select().from(schema.account).where(eq(schema.account.userId, signedIn.user.id));
     expect(stored?.password).toBe(hash);
     await expect(auth.api.signInEmail({ body: { email: input.email, password: hash } })).rejects.toThrow();
     await expect(auth.api.signInEmail({ body: { email: input.email, password: "incorrect" } })).rejects.toThrow();
-    expect(await ensureBootstrapAdmin({ ...input, passwordHash: await hashPassword("replacement") })).toBe("existing");
+    expect(await ensure({ ...input, passwordHash: await hashPassword("replacement") })).toBe("existing");
     expect((await auth.api.signInEmail({ body: { email: input.email, password: "password" } })).user.id).toBe(signedIn.user.id);
   });
 });

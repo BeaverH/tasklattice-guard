@@ -5,7 +5,7 @@ import type { Guardrail } from "@/lib/api";
 import type { ProtectionModeSettings } from "../../shared/protection-mode";
 import { MenuButton } from "@carbon/react";
 import { GuardrailProtectionMode, useGuardrailProtectionActions } from "./guardrail-protection-mode";
-const mocks = vi.hoisted(() => ({ role: "admin", update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ role: "user", update: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: mocks.role } }) }));
 vi.mock("@/lib/guardrails-api", () => ({ updateGuardrailProtectionMode: mocks.update }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", exists: () => false } }) }));
@@ -15,7 +15,7 @@ const settings: ProtectionModeSettings = { guardrailId: "g", mode: "enforce", ap
 function ModeControls({ guardrail, onChanged }: { guardrail: Guardrail; onChanged: () => Promise<unknown> }) {
   const actions = useGuardrailProtectionActions(guardrail, onChanged);
   return <>
-    {mocks.role === "admin" ? <MenuButton ref={actions.menuRef} label="Actions">{actions.menuItems}</MenuButton> : null}
+    {mocks.role === "user" ? <MenuButton ref={actions.menuRef} label="Actions">{actions.menuItems}</MenuButton> : null}
     {actions.feedback}
     <GuardrailProtectionMode guardrail={guardrail} />
   </>;
@@ -35,7 +35,7 @@ function show(overrides: Partial<ProtectionModeSettings> = {}) {
   render(<QueryClientProvider client={new QueryClient()}><ModeControls guardrail={guardrail} onChanged={onChanged} /></QueryClientProvider>);
   return onChanged;
 }
-beforeEach(() => { mocks.role = "admin"; mocks.update.mockReset().mockResolvedValue(settings); });
+beforeEach(() => { mocks.role = "user"; mocks.update.mockReset().mockResolvedValue(settings); });
 afterEach(cleanup);
 describe("protection-mode interaction", () => {
   it("keeps healthy mode compact and opens Runner details without changing protection", () => {

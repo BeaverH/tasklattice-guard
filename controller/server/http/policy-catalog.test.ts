@@ -24,19 +24,19 @@ const config = loadConfig({
 });
 
 describe("Policy catalog HTTP compatibility", () => {
-  it("authorizes maintenance by administrator role and validates Policy identity", async () => {
+  it.each(["user"])("authorizes %s maintenance and validates Policy identity", async role => {
     const definition = emptyPolicyDefinition(); definition.metadata.id = "builtin-secrets"; definition.metadata.name = "Maintained Policy";
     const save = vi.fn().mockResolvedValue({ id: definition.metadata.id, definition, revision: 1 });
     const publish = vi.fn().mockResolvedValue({ id: definition.metadata.id, version: "r1-test", source: "custom" });
     const overrides = { policyResources: { save, publish } as unknown as ControlPlaneService["policyResources"] };
     const body = { definition, maintainer: "Platform administrators", expectedRevision: 0 };
     const path = `/api/v1/policies/${definition.metadata.id}/definition`;
-    const member = appWithSession({ user: { id: "member", role: "user" } }, overrides);
+    const member = appWithSession({ user: { id: "member", role: "unknown" } }, overrides);
     for (const [url, method, payload] of [[path, "PUT", body], [`${path}/test-runs`, "POST", {}], [`${path}/publish`, "POST", { expectedRevision: 1 }]] as const) {
       expect((await member.request(url, { method, body: JSON.stringify(payload) })).status).toBe(403);
     }
     expect(save).not.toHaveBeenCalled(); expect(publish).not.toHaveBeenCalled();
-    const admin = appWithSession({ user: { id: "admin", role: "admin" } }, overrides);
+    const admin = appWithSession({ user: { id: "admin", role } }, overrides);
     expect((await admin.request(path, { method: "PUT", body: JSON.stringify(body) })).status).toBe(200);
     expect(save).toHaveBeenCalledWith({ ...body, actorId: "admin" });
     expect((await admin.request("/api/v1/policies/another/definition", { method: "PUT", body: JSON.stringify(body) })).status).toBe(422);
@@ -46,7 +46,7 @@ describe("Policy catalog HTTP compatibility", () => {
   });
   it("validates and forwards the requested publication revision", async () => {
     const publishPolicy = vi.fn().mockResolvedValue({ version: "1" });
-    const app = appWithSession({ user: { id: "author", role: "admin" } }, { publishPolicy });
+    const app = appWithSession({ user: { id: "author", role: "user" } }, { publishPolicy });
     const response = await app.request("/api/v1/policies/example/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedDraftRevision: 7 }) });
     expect(response.status).toBe(201);
     expect(publishPolicy).toHaveBeenCalledWith({ id: "example", actorId: "author", expectedDraftRevision: 7 });

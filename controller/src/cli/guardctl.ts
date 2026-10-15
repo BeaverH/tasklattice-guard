@@ -700,7 +700,7 @@ async function handleCommand(line: string) {
     const ident = await runApi('GET', '/api/v1/account/identity');
     if (ident.ok && ident.data) {
       const user = ident.data.user ?? ident.data;
-      const role = user?.role ?? user?.roleId ?? 'member';
+      const role = user?.role ?? user?.roleId ?? 'user';
       const permissions = ident.data.effectivePermissions ?? ident.data.permissions;
       console.log(`Signed in: ${(user?.email ?? user?.name ?? ident.data.userId ?? 'unknown')} (${role})`);
       if (permissions && typeof permissions === 'object') {

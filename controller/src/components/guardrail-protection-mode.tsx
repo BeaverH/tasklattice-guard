@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -22,7 +23,7 @@ function CurrentModeMarker() {
 // Keep mutation controls at the detail-page level so Actions works from every tab.
 export function useGuardrailProtectionActions(guardrail: Guardrail | undefined, onChanged: () => Promise<unknown>) {
   const { t } = useTranslation();
-  const canEdit = useAuth().user?.role === "admin";
+  const canEdit = hasPermission(useAuth().user?.role, "guardrails", "write");
   const settings = guardrail?.protection;
   const menuRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLButtonElement>(null);

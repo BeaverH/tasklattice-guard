@@ -84,6 +84,20 @@ spec:
             {{- end }}
             - name: CONTROLLER_BOOTSTRAP_ADMIN_NAME
               valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapAdminSecretName" . }}, key: {{ .Values.security.bootstrapAdmin.nameKey }} } }
+            {{- if .Values.security.bootstrapUser.enabled }}
+            - name: CONTROLLER_BOOTSTRAP_USER_EMAIL
+              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.emailKey }} } }
+            {{- if or .Values.security.bootstrapUser.existingSecret (not .Values.security.bootstrapUser.passwordHash) }}
+            - name: CONTROLLER_BOOTSTRAP_USER_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.passwordKey }}, optional: true } }
+            {{- end }}
+            {{- if or .Values.security.bootstrapUser.existingSecret .Values.security.bootstrapUser.passwordHash }}
+            - name: CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH
+              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.passwordHashKey }}, optional: true } }
+            {{- end }}
+            - name: CONTROLLER_BOOTSTRAP_USER_NAME
+              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.nameKey }} } }
+            {{- end }}
             - { name: CONTROLLER_ARTIFACT_SIGNING_KEY_PATH, value: /var/run/tasklattice/artifact/private-key.pem }
             {{- with .Values.controller.promotion }}
             {{- if .baselinePackage.existingConfigMap }}

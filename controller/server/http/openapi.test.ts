@@ -55,10 +55,18 @@ describe("Generated OpenAPI contract", () => {
       const operation = contract.paths[path.replace(/:([^/]+)/g, "{$1}")][method.toLowerCase()];
       expect(operation["x-token-permission"]).toEqual({ module, access });
       expect(operation.security).toContainEqual({ personalAccessToken: [] });
-      if (access === "write") expect(operation["x-token-account-role"]).toBe("admin");
+      expect(operation["x-token-account-role"]).toBe(operation["x-account-role"]);
     }
     expect(contract.paths["/api/v1/account/access-tokens"].post.security).toEqual([{ sessionCookie: [] }]);
     expect(contract.paths["/api/v1/system/status"].get.security).toEqual([]);
+  });
+  it("documents the separate user and administrator configuration authority", () => {
+    expect(contract.paths["/api/v1/guardrails"].post["x-account-roles"]).toEqual(["user"]);
+    expect(contract.paths["/api/v1/models"].post["x-account-roles"]).toEqual(["admin"]);
+    expect(contract.paths["/api/v1/guardrails"].get["x-account-roles"]).toEqual(["admin", "user"]);
+    expect(contract.paths["/api/v1/telemetry/events"].get["x-account-roles"]).toEqual(["user"]);
+    expect(contract.paths["/api/v1/telemetry/events/{id}"].get["x-account-roles"]).toEqual(["user"]);
+    expect(contract.paths["/api/v1/audit-events"].get["x-account-roles"]).toEqual(["admin"]);
   });
   it("separates product tags from grants and describes retry boundaries for every operation", () => {
     for (const methods of Object.values(contract.paths) as any[]) {

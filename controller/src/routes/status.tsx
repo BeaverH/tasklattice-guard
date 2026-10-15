@@ -4,7 +4,6 @@ import { ArrowRight, CircleCheck, CircleHelp, CircleX, RefreshCw } from "lucide-
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "@/components/product-shell";
-import { SettingsNavigation } from "@/components/settings-navigation";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { queryKeys } from "@/features/query-keys";
@@ -66,7 +65,6 @@ export function HealthPage() {
           </Button>
         )}
       />
-      <SettingsNavigation />
       <div className="health-panel mt-6 bg-card px-6 pb-3" aria-busy={refreshing}>
         <section className="health-summary" aria-labelledby="system-health-label">
           <div className="min-w-0 flex-1">

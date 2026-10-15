@@ -1,7 +1,8 @@
 import type { TokenModule } from "../../shared/access-tokens.js";
 
-// Explicit allowlist: new API routes are unavailable to tokens until classified.
+// Shared route allowlist for session RBAC and token scopes. Unclassified APIs deny access.
 export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, TokenModule, "read" | "write"]> = [
+  ["GET", "/api/v1/guardrail-capabilities", "guardrails", "read"],
   ["GET", "/api/v1/policy-catalog/detectors", "policies", "read"],
   ["GET", "/api/v1/policies/:id/definition", "policies", "read"],
   ["PUT", "/api/v1/policies/:id/definition", "policies", "write"],

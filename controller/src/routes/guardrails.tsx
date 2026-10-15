@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { GuardrailUsageCosts } from "@/components/guardrail-usage-costs";
 import { GuardrailProtectionMode, useGuardrailProtectionActions } from "@/components/guardrail-protection-mode";
 import { MAX_GUARDRAIL_VERSIONS } from "../../shared/guardrail-version-limit";
@@ -107,9 +108,9 @@ export function GuardrailsPage() {
   // Both sheets return focus to the control that opened them.
   const opener = useRef<HTMLElement | null>(null);
   const guardrails = query.data?.items ?? [];
-  const isAdmin = auth.user?.role === "admin";
+  const canManage = hasPermission(auth.user?.role, "guardrails", "write");
   // The same entry in every environment: create here, or import a released package from the arrow.
-  const actions = isAdmin ? <CreateSplitButton label={t("guardrails.create")} importLabel={t("guardrailPackage.importPackage")}
+  const actions = canManage ? <CreateSplitButton label={t("guardrails.create")} importLabel={t("guardrailPackage.importPackage")}
     onCreate={(trigger) => { opener.current = trigger; setCreateOpen(true); }}
     onImport={(trigger) => { opener.current = trigger; setImportOpen(true); }} /> : undefined;
 
@@ -294,7 +295,7 @@ export function GuardrailDetailPage() {
   const guardrail = guardrailQuery.data;
   const policies = policiesQuery.data?.items ?? EMPTY_POLICIES;
   const routers = routersQuery.data?.items.filter((item) => item.activeSnapshot?.routes.some(route => route.enabled && route.targets.some(target => target.guardrailId === guardrail.id && target.weightBps > 0))) ?? [];
-  const canManageDraft = auth.user?.role === "admin" && isGuardrailDraftManageable(guardrail);
+  const canManageDraft = hasPermission(auth.user?.role, "guardrails", "write") && isGuardrailDraftManageable(guardrail);
   const hasDraft = hasUnpublishedDraft(guardrail);
   const currentTest = guardrail.latest_validation_run?.source_draft_version === guardrail.draft_revision ? guardrail.latest_validation_run : null;
   const testingDraft = isValidationRunning(currentTest);
@@ -321,7 +322,7 @@ export function GuardrailDetailPage() {
         <div className="flex shrink-0 items-center gap-2">
           {canManageDraft && hasDraft ? <Button variant="testing" onClick={openDraftReview}>{testingDraft ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(testingDraft ? "guardrails.viewTestProgress" : "guardrails.testDraft")}</Button> : null}
           {canManageDraft && guardrail.tested_current && !guardrail.published_current ? <Button onClick={() => { setDraftJustSaved(false); setDraftAction("publish"); }}><ShieldCheck />{t("guardrails.publishVersion")}</Button> : null}
-          {auth.user?.role === "admin" ? <MenuButton ref={protectionActions.menuRef} label={t("routing.actions")} kind="tertiary" size="md" menuAlignment="bottom-end" className="guard-actions-menu">
+          {hasPermission(auth.user?.role, "guardrails", "write") ? <MenuButton ref={protectionActions.menuRef} label={t("routing.actions")} kind="tertiary" size="md" menuAlignment="bottom-end" className="guard-actions-menu">
             {protectionActions.menuItems}
             {canManageDraft ? <MenuItem label={t("guardrails.editAction")} renderIcon={Pencil} onClick={() => setEditOpen(true)} /> : null}
             {canManageDraft ? <MenuItem label={t("guardrails.editTestCases")} renderIcon={FilePenLine} onClick={() => setTestCasesOpen(true)} /> : null}
@@ -411,7 +412,7 @@ export function GuardrailDetailPage() {
             onOpenTarget={openValidationTarget}
             description={t("immutableVersions.testingDescription")}
             emptyDescription={t(hasDraft && !publishedVersions.length ? "resourceList.draftNextStep" : "immutableVersions.localTestingEmpty")}
-            action={auth.user?.role === "admin" ? <GuardrailVersionTestControl guardrailName={guardrail.name} versions={guardrailVersions} runs={versionReports} loading={versionsQuery.isPending || validationRunsQuery.isPending} error={versionsQuery.error || validationRunsQuery.error} submitting={versionTestMutation.isPending} onRun={version => versionTestMutation.mutateAsync(version)} onRetry={() => { void versionsQuery.refetch(); void validationRunsQuery.refetch(); }} draft={canManageDraft ? { running: testingDraft, reason: validationReadiness.reason, onReview: openDraftReview } : undefined} /> : undefined}
+            action={hasPermission(auth.user?.role, "guardrails", "write") ? <GuardrailVersionTestControl guardrailName={guardrail.name} versions={guardrailVersions} runs={versionReports} loading={versionsQuery.isPending || validationRunsQuery.isPending} error={versionsQuery.error || validationRunsQuery.error} submitting={versionTestMutation.isPending} onRun={version => versionTestMutation.mutateAsync(version)} onRetry={() => { void versionsQuery.refetch(); void validationRunsQuery.refetch(); }} draft={canManageDraft ? { running: testingDraft, reason: validationReadiness.reason, onReview: openDraftReview } : undefined} /> : undefined}
           />
         </TabsContent>
       </Tabs>
@@ -420,8 +421,8 @@ export function GuardrailDetailPage() {
       {draftAction === "changes" || draftAction === "discard" ? <GuardrailDraftChangesSheet guardrail={guardrail} initialDiscard={draftAction === "discard"} canManage={canManageDraft} onClose={() => setDraftAction(null)} onChanged={refresh} /> : null}
       {draftAction === "review" || draftAction === "publish" ? <GuardrailDraftReviewSheet guardrail={guardrail} policies={policies} versions={guardrailVersions} policiesReady={policiesQuery.isSuccess} policiesError={policiesQuery.isError} onRetryPolicies={() => { void policiesQuery.refetch(); }} readOnly={!canManageDraft} justSaved={draftJustSaved} initialPublish={draftAction === "publish"} onClose={() => setDraftAction(null)} onEdit={() => setEditOpen(true)} onChanged={refresh} onPublished={version => { setDraftAction(null); setSelectedVersionOverride(version.version); setVersionDetailRequested(true); setSection("immutable"); }} /> : null}
       {canManageDraft && testCasesOpen ? <EditGuardrailTestCasesSheet guardrail={guardrail} policies={policies} cases={testsQuery.data?.items ?? []} casesLoading={testsQuery.isLoading} casesError={testsQuery.error} onRetryCases={() => { void testsQuery.refetch(); }} onChanged={refresh} onClose={() => setTestCasesOpen(false)} /> : null}
-      <ValidationDetailSheet blockedReason={currentValidationRun?.subject === "version" ? null : validationReadiness.reason} run={currentValidationRun} guardrail={guardrail} canManage={canManageDraft} running={validationMutation.isPending || versionTestMutation.isPending} onRunAgain={() => validationMutation.mutate()} onRunVersionAgain={auth.user?.role === "admin" && guardrailVersions.some(version => version.version === currentValidationRun?.guardrail_version && Boolean(version.test_suite_count)) ? run => versionTestMutation.mutate(run.guardrail_version) : undefined} onOpenTarget={openValidationTarget} onClose={() => setSelectedValidationRun(null)} />
-      {auth.user?.role === "admin" && loggingOpen ? <EditGuardrailLoggingSheet guardrailId={guardrail.id} guardrailName={guardrail.name} onClose={() => setLoggingOpen(false)} /> : null}
+      <ValidationDetailSheet blockedReason={currentValidationRun?.subject === "version" ? null : validationReadiness.reason} run={currentValidationRun} guardrail={guardrail} canManage={canManageDraft} running={validationMutation.isPending || versionTestMutation.isPending} onRunAgain={() => validationMutation.mutate()} onRunVersionAgain={hasPermission(auth.user?.role, "guardrails", "write") && guardrailVersions.some(version => version.version === currentValidationRun?.guardrail_version && Boolean(version.test_suite_count)) ? run => versionTestMutation.mutate(run.guardrail_version) : undefined} onOpenTarget={openValidationTarget} onClose={() => setSelectedValidationRun(null)} />
+      {hasPermission(auth.user?.role, "guardrails", "write") && loggingOpen ? <EditGuardrailLoggingSheet guardrailId={guardrail.id} guardrailName={guardrail.name} onClose={() => setLoggingOpen(false)} /> : null}
       <DeleteGuardrailSheet
         guardrail={guardrail}
         open={deleteOpen}
@@ -463,6 +464,7 @@ export function GuardrailRuntimeView({ guardrailId, metrics, loading, error, rou
 
 export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary, loading, error, policies, routers, endpoints, window, onWindowChange, severities: controlledSeverities, onSeveritiesChange, onRetry }: { guardrailId?: string; data?: GuardrailFindingPage; summary?: GuardrailFindingPage["summary"]; loading: boolean; error: unknown; policies: Policy[]; routers: Awaited<ReturnType<typeof getRouters>>["items"]; endpoints: Endpoint[]; window: MetricWindow; onWindowChange: (window: MetricWindow) => void; severities?: EventSeverity[]; onSeveritiesChange?: (severities: EventSeverity[]) => void; onRetry?: () => void }) {
   const { t, i18n } = useTranslation();
+  const canViewLogs = hasPermission(useAuth().user?.role, "runtime");
   const [localSeverities, setLocalSeverities] = useState<EventSeverity[]>([]);
   const severities = controlledSeverities ?? localSeverities;
   const setSeverities = onSeveritiesChange ?? setLocalSeverities;
@@ -474,7 +476,7 @@ export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary
   return <section className="space-y-4" aria-label={t("guardrails.securityFindingsTitle")}>
     <header className="flex items-start justify-between gap-6">
       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{t("guardrails.securityFindingsDescription")}</p>
-      <Link to="/logs" search={{ guardrailId: guardrailId ?? data?.items[0]?.guardrail_id ?? undefined }} className="inline-flex shrink-0 items-center gap-1.5 py-1 text-sm text-primary underline-offset-4 hover:underline">{t("securityEvents.openLogs")}<ArrowUpRight className="size-4" /></Link>
+      {canViewLogs ? <Link to="/logs" search={{ guardrailId: guardrailId ?? data?.items[0]?.guardrail_id ?? undefined }} className="inline-flex shrink-0 items-center gap-1.5 py-1 text-sm text-primary underline-offset-4 hover:underline">{t("securityEvents.openLogs")}<ArrowUpRight className="size-4" /></Link> : null}
     </header>
     <div className="border bg-card">
       <EventFilterToolbar window={window} onWindowChange={onWindowChange} severities={severities} onSeveritiesChange={setSeverities} counts={summary} />
@@ -495,7 +497,7 @@ export function GuardrailFindingsView({ guardrailId, data, summary: scopeSummary
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"><span>{t("guardrails.sourceLabel")}: <strong className="font-medium text-foreground">{source}</strong></span><span>{t("guardrails.versionLabel")}: <code>{finding.guardrail_version ?? "—"}</code></span><span>{t("guardrails.phaseLabel")}: <code>{finding.phase}</code></span>{finding.confidence !== null ? <span>{t("guardrails.confidenceLabel")}: <code>{`${Math.round(finding.confidence * 100)}%`}</code></span> : null}</div>
               {finding.detail ? <details className="mt-2 text-xs text-muted-foreground"><summary className="min-h-11 w-fit cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-ring">{t("logs.checkpointDetail")}</summary><p className="max-w-3xl break-words pb-2 leading-5">{finding.detail}</p></details> : null}
             </div>
-            <div className="flex flex-col items-end gap-3"><time className="font-mono text-right text-[11px] text-muted-foreground" dateTime={finding.created_at}>{timestamp.time}<span className="mt-1 block">{timestamp.date}</span></time><Button asChild variant="outline" size="sm" className="min-h-11 shrink-0"><Link to="/logs" search={{ eventId: finding.event_id, requestId: finding.trace_id, checkpointId: finding.event_id, guardrailId: finding.guardrail_id ?? undefined }}><ScrollText />{t("logs.viewLog")}</Link></Button></div>
+            <div className="flex flex-col items-end gap-3"><time className="font-mono text-right text-[11px] text-muted-foreground" dateTime={finding.created_at}>{timestamp.time}<span className="mt-1 block">{timestamp.date}</span></time>{canViewLogs ? <Button asChild variant="outline" size="sm" className="min-h-11 shrink-0"><Link to="/logs" search={{ eventId: finding.event_id, requestId: finding.trace_id, checkpointId: finding.event_id, guardrailId: finding.guardrail_id ?? undefined }}><ScrollText />{t("logs.viewLog")}</Link></Button> : null}</div>
           </article>;
         })}</div> : <div className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center"><ShieldCheck className="size-6 text-muted-foreground" /><p className="mt-3 text-sm font-medium">{t(severities.length ? "guardrails.noMatchingFindings" : data?.collection_status === "not_collected" ? "guardrails.findingsNotCollected" : data?.collection_status === "no_events" ? "guardrails.noRuntimeEvidence" : "guardrails.noSecurityFindings")}</p><p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">{t(severities.length ? "guardrails.noMatchingFindingsDescription" : data?.collection_status === "not_collected" ? "guardrails.findingsNotCollectedDescription" : data?.collection_status === "no_events" ? "guardrails.noRuntimeEvidenceDescription" : "guardrails.noSecurityFindingsDescription")}</p>{severities.length ? <Button variant="ghost" className="mt-3" onClick={() => setSeverities([])}>{t("securityEvents.clearFilters")}</Button> : null}</div>}
         {!loading && !error && data && (matchedCount ?? 0) > visibleFindings.length ? <div className="border-t px-4 py-3 text-xs text-muted-foreground">{t("guardrails.findingsTruncated", { shown: visibleFindings.length, total: matchedCount })}</div> : null}

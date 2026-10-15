@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { SecuritySeverityBadge } from "@/components/security-severity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,7 +79,7 @@ export function PolicyLibraryPage() {
   const searchParams = useSearch({ strict: false }) as { policy?: string; version?: string };
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canManage = hasPermission(user?.role, "policies", "write");
   const query = useQuery({ queryKey: queryKeys.policies, queryFn: getPolicies });
   const policies = query.data?.items ?? EMPTY_POLICIES;
   const editable = (policy: Policy | null) => Boolean(policy);
@@ -187,7 +188,7 @@ export function PolicyLibraryPage() {
       <PageHeader
         title={t("pages.policyLibrary.title")}
         description={t("pages.policyLibrary.description")}
-        action={isAdmin ? (
+        action={canManage ? (
           <div className="shrink-0">
             <CreateSplitButton label={t("policyLibrary.newPolicy")} importLabel={t("policyStudio.importPolicy")}
               onCreate={(trigger) => { studioOpenerRef.current = trigger; setPolicyImport(null); setImportedDefinition(undefined); setDeclarativeId(null); }}
@@ -248,7 +249,7 @@ export function PolicyLibraryPage() {
                     policy={policy}
                     onOpen={trigger => { catalogOpenerRef.current = trigger; openPolicy(policy); }}
                     onExport={legacyEditable(policy) ? () => exportPolicy(policy) : undefined}
-                    onDelete={isAdmin && legacyEditable(policy) ? () => requestPolicyDelete(policy) : undefined}
+                    onDelete={canManage && legacyEditable(policy) ? () => requestPolicyDelete(policy) : undefined}
                   />
                 ))}
               </div>
@@ -268,8 +269,8 @@ export function PolicyLibraryPage() {
         policy={selected}
         onClose={closePolicy}
         onExport={!searchParams.version && legacyEditable(selected) ? exportPolicy : undefined}
-        onDelete={!searchParams.version && isAdmin && legacyEditable(selected) ? requestPolicyDelete : undefined}
-        onEdit={!searchParams.version && isAdmin && editable(selected) ? (policy, trigger) => { studioOpenerRef.current = policy.implementation === "rules" ? catalogOpenerRef.current : trigger; setPolicyImport(null); if (policy.implementation === "rules") { setImportedDefinition(undefined); setDeclarativeId(policy.id); closePolicy(); } else setStudioPolicy(policy.implementation_detail ?? null); } : undefined}
+        onDelete={!searchParams.version && canManage && legacyEditable(selected) ? requestPolicyDelete : undefined}
+        onEdit={!searchParams.version && canManage && editable(selected) ? (policy, trigger) => { studioOpenerRef.current = policy.implementation === "rules" ? catalogOpenerRef.current : trigger; setPolicyImport(null); if (policy.implementation === "rules") { setImportedDefinition(undefined); setDeclarativeId(policy.id); closePolicy(); } else setStudioPolicy(policy.implementation_detail ?? null); } : undefined}
       />
       <DeletePolicyDialog
         policy={pendingDelete}

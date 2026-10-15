@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { queryKeys } from '@/features/query-keys';
 import { ResourceList } from '@/components/resource-list';
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '@/components/ui/table';
@@ -37,11 +38,11 @@ export function RoutersPage() {
       filter={{ label: t("resourceList.statusAndChanges"), options: [{ value: '', label: translate('resourceList.allStatuses') }, { value: 'pending', label: t('routing.changeStatus.pending') }, ...['unpublished', 'distributing', 'active', 'failed'].map(value => ({ value, label: rolloutLabel(value, t) }))], matches: (item, value) => value === "pending" ? Boolean(item.pendingChangeRequest) : item.rolloutStatus === value }}
       loading={routers.isPending} refreshing={routers.isFetching || endpoints.isFetching} error={routers.error} onRefresh={() => { void queryClient.invalidateQueries({ queryKey: trafficRouterKeys.all }); void endpoints.refetch(); }}
       emptyTitle={t("routing.noRoutersYet")} emptyDescription={t("routing.chooseSourceEndpointsRoutingRulesAndADefaultGuardrail")}
-      action={auth.user?.role === 'admin' ? <Button variant="create" size="lg" onClick={() => setOpen(true)}><Plus />{t("routing.createRouter")}</Button> : undefined}>
+      action={hasPermission(auth.user?.role, "routers", "write") ? <Button variant="create" size="lg" onClick={() => setOpen(true)}><Plus />{t("routing.createRouter")}</Button> : undefined}>
       {items => <Table className="resource-table resource-router-table" aria-label={t("routing.trafficRouters")}><TableHeader><TableRow>
         {[localize("routing.router"), localize("routing.endpoints2"), t("routing.enabledRoutes"), t("routing.24hCalls"), t("resourceList.fallbackShare"), t("routing.publishedRevision")].map((label, index) => <TableHead key={label} className={index === 0 ? 'resource-name-column' : index === 1 ? 'resource-endpoints-column' : index === 2 ? 'resource-routes-column' : index === 5 ? 'resource-rollout-column' : undefined}>{label}</TableHead>)}
         <TableHead className="resource-actions-column"><span className="sr-only">{t("routing.actions")}</span></TableHead>
-      </TableRow></TableHeader><TableBody>{items.map(router => <RouterRow key={router.id} router={router} endpointName={endpointName} onDelete={auth.user?.role === 'admin' ? () => setDeleting(router) : undefined} onOpen={() => void navigate({ to: '/integration/routers/$routerId', params: { routerId: router.id } })} />)}</TableBody></Table>}
+      </TableRow></TableHeader><TableBody>{items.map(router => <RouterRow key={router.id} router={router} endpointName={endpointName} onDelete={hasPermission(auth.user?.role, "routers", "write") ? () => setDeleting(router) : undefined} onOpen={() => void navigate({ to: '/integration/routers/$routerId', params: { routerId: router.id } })} />)}</TableBody></Table>}
     </ResourceList>
     {open && <CreateRouterSheet open onOpenChange={setOpen} onCreated={router => { setOpen(false); void navigate({ to: "/integration/routers/$routerId", params: { routerId: router.id }, search: { tab: "routing" } }); }} />}
     {deleting && <DeleteTrafficRouterSheet router={deleting} onClose={() => setDeleting(null)} />}

@@ -14,6 +14,42 @@ function runtimeUiSources(directory: string): string[] {
 }
 
 describe("i18n source boundary", () => {
+  it("resolves every navigation label in both languages without English fallback", async () => {
+    const { default: i18n } = await import("./i18n");
+    const sources = ["src/components/control-plane-sidebar.tsx", "src/routes/layout.tsx", "src/components/ui/sidebar.tsx"]
+      .map(path => readFileSync(resolve(path), "utf8")).join("\n");
+    const keys = [...new Set([...sources.matchAll(/"((?:nav|sidebar)\.[\w]+)"/g)].map(match => match[1]!))];
+    for (const lng of ["en", "zh-CN"]) {
+      const t = i18n.getFixedT(lng);
+      for (const key of keys) {
+        expect(i18n.exists(key, { lng, fallbackLng: false }), `${lng}: ${key}`).toBe(true);
+        expect(t(key).trim(), `${lng}: ${key}`).not.toBe("");
+        expect(t(key), `${lng}: ${key}`).not.toBe(key);
+        if (lng === "zh-CN") expect(t(key), key).toMatch(/[\u3400-\u9fff]/u);
+      }
+    }
+  });
+
+  it("keeps platform page names aligned with the sidebar and localized terminology", async () => {
+    const { default: i18n } = await import("./i18n");
+    const zh = i18n.getFixedT("zh-CN");
+    expect(zh("nav.providers")).toBe("模型提供商");
+    expect(zh("nav.guardrailCatalog")).toBe("检测器目录");
+    expect(zh("nav.runner")).toBe("执行节点");
+    expect(zh("nav.guardrailDesign")).toBe("护栏设计");
+    expect(zh("modelSettings.capabilityColumn")).toBe("检测能力");
+    expect(zh("modelSettings.controlPlane")).toBe("控制面");
+    for (const lng of ["en", "zh-CN"]) {
+      const t = i18n.getFixedT(lng);
+      for (const [title, navigation] of [
+        ["modelSettings.providersTitle", "nav.providers"],
+        ["modelSettings.providers", "nav.providers"],
+        ["modelSettings.catalogTitle", "nav.guardrailCatalog"],
+        ["runners.pageTitle", "nav.runner"],
+      ]) expect(t(title!)).toBe(t(navigation!));
+    }
+  });
+
   it("resolves Access Token copy in both languages without falling back", async () => {
     const { default: i18n } = await import("./i18n");
     const source = readFileSync(resolve("src/components/account/access-tokens.tsx"), "utf8");
@@ -138,6 +174,27 @@ describe("routing translation contract", () => {
       const source = readFileSync(file, "utf8");
       expect(source, file).not.toMatch(/>\s*[A-Z][a-z]+(?:\s+[A-Za-z]+)+[.!?]?\s*</);
       expect(source, file).not.toMatch(/(?:title|description|placeholder|aria-label)="[A-Z][a-z]+(?:\s+[A-Za-z]+)+/);
+    }
+  });
+});
+
+describe("Provider registration translation contract", () => {
+  it("preserves keys and interpolation parameters while localizing Provider and Catalog copy", async () => {
+    const { providerRegistrationEn, providerRegistrationZh } = await import("./provider-registration-i18n");
+    const flatten = (value: Record<string, unknown>, prefix = ""): Record<string, string> => Object.fromEntries(
+      Object.entries(value).flatMap(([key, text]) => typeof text === "string"
+        ? [[`${prefix}${key}`, text]]
+        : Object.entries(flatten(text as Record<string, unknown>, `${prefix}${key}.`))),
+    );
+    const en = flatten(providerRegistrationEn), zh = flatten(providerRegistrationZh);
+    // Chinese uses the base key where English has singular/plural variants.
+    const baseKey = (key: string) => key.replace(/_(zero|one|two|few|many|other)$/, "");
+    expect([...new Set(Object.keys(zh).map(baseKey))].sort()).toEqual([...new Set(Object.keys(en).map(baseKey))].sort());
+    for (const key of Object.keys(en)) {
+      const translated = zh[key] ?? zh[baseKey(key)]!;
+      const parameters = (text: string) => [...text.matchAll(/{{\s*([\w]+)\s*}}/g)].map(match => match[1]).sort();
+      expect(parameters(translated), key).toEqual(parameters(en[key]!));
+      expect(translated, key).not.toMatch(/\bProvider\b|Guardrail Catalog/);
     }
   });
 });

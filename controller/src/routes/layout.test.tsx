@@ -5,8 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlPlaneLayout } from "./layout";
 
 let pathname = "/dashboard";
+let role = "admin";
 
 vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
+  Navigate: ({ to }: { to: string }) => <div>Redirect {to}</div>,
   Outlet: () => <div>Page content</div>,
   useRouterState: () => pathname,
 }));
@@ -15,7 +18,7 @@ vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
     isLoading: false,
     status: { authenticated: true },
-    user: { role: "admin", display_name: "Administrator" },
+    user: { role, display_name: "Administrator" },
   }),
 }));
 
@@ -39,7 +42,11 @@ vi.mock("react-i18next", () => ({
       "nav.dashboard": "Dashboard",
       "nav.guardrailDesign": "Guardrail Design",
       "nav.guardrails": "Guardrails",
-      "nav.settings": "Settings",
+      "nav.platform": "Platform",
+      "nav.platformOperations": "Platform operations",
+      "nav.modelServices": "Models & detection",
+      "nav.accessAudit": "Access & audit",
+      "nav.runtimeObservations": "Observability",
       "nav.runner": "Runner",
       "auth.sessionLoading": "Checking your session…",
     } as Record<string, string>)[key] ?? key,
@@ -47,25 +54,22 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("ControlPlaneLayout", () => {
-  afterEach(() => { cleanup(); pathname = "/dashboard"; });
+  afterEach(() => { cleanup(); pathname = "/dashboard"; role = "admin"; });
 
-  it("shows Dashboard as a standalone title instead of a breadcrumb trail", () => {
+  it("lands administrators in Platform", () => {
     render(<ControlPlaneLayout />);
+    expect(screen.getByText("Redirect /settings/health")).toBeTruthy();
+    expect(screen.queryByText("Page content")).toBeNull();
+  });
 
-    expect(screen.getByRole("button", { name: "Account menu · header" })).toBeTruthy();
-    expect(screen.getByText("Page content")).toBeTruthy();
-    const header = screen.getByRole("banner");
-    expect(header.contains(screen.getByRole("button", { name: "Toggle navigation" }))).toBe(true);
-    expect(header.contains(screen.getByRole("button", { name: "Account menu · header" }))).toBe(true);
-    expect(header.contains(screen.getByText("Navigation"))).toBe(false);
-    expect(screen.getByText("Dashboard")).toBeTruthy();
-    expect(screen.queryByText("Home")).toBeNull();
-    expect(screen.queryByText("TaskLattice Guard")).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "breadcrumb" })).toBeNull();
+  it.each(["/guardrails", "/guardrails/id", "/playground", "/policy-library", "/integration/routers", "/integration/endpoints", "/logs"])("prevents administrators from mounting %s", path => {
+    pathname = path; render(<ControlPlaneLayout />);
+    expect(screen.queryByText("Page content")).toBeNull();
+    expect(screen.getByRole("link", { name: "Platform" }).getAttribute("href")).toBe("/settings/health");
   });
 
   it("starts sidebar-page breadcrumbs at the navigation group", () => {
-    pathname = "/guardrails";
+    pathname = "/guardrails"; role = "user";
     render(<ControlPlaneLayout />);
 
     expect(screen.getByText("Guardrail Design")).toBeTruthy();
@@ -73,11 +77,27 @@ describe("ControlPlaneLayout", () => {
     expect(screen.queryByText("TaskLattice Guard")).toBeNull();
   });
 
+  it.each(["/settings", "/settings/models", "/settings/runner", "/settings/guardrail-catalog", "/access", "/audit-log"])("prevents a user from mounting %s", path => {
+    role = "user"; pathname = path;
+    render(<ControlPlaneLayout />);
+    expect(screen.queryByText("Page content")).toBeNull();
+    expect(screen.getByRole("link", { name: "Guardrails" }).getAttribute("href")).toBe("/guardrails");
+  });
+  it.each(["/guardrails", "/playground", "/policy-library", "/integration/routers", "/integration/endpoints", "/logs", "/account"])("allows a user to mount %s", path => {
+    role = "user"; pathname = path; render(<ControlPlaneLayout />);
+    expect(screen.getByText("Page content")).toBeTruthy();
+  });
+  it("lands users on Guardrails instead of the platform dashboard", () => {
+    role = "user"; render(<ControlPlaneLayout />);
+    expect(screen.getByText("Redirect /guardrails")).toBeTruthy();
+    expect(screen.queryByText("Page content")).toBeNull();
+  });
+
   it("labels the Runner settings page independently from Health", () => {
     pathname = "/settings/runner";
     render(<ControlPlaneLayout />);
 
-    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(screen.getByText("Platform operations")).toBeTruthy();
     expect(screen.getByText("Runner")).toBeTruthy();
   });
 

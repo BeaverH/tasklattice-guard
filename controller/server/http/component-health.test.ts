@@ -17,7 +17,7 @@ function setup(signedIn = true) {
     defaultGuardrailReadiness: vi.fn().mockRejectedValue(new Error("No published Guardrail")),
   };
   const app = createHttpApp({ config,
-    auth: { api: { getSession: vi.fn().mockResolvedValue(signedIn ? { user: { id: "reader", role: "user" } } : null) } } as unknown as ControllerAuth,
+    auth: { api: { getSession: vi.fn().mockResolvedValue(signedIn ? { user: { id: "reader", role: "admin" } } : null) } } as unknown as ControllerAuth,
     service: service as unknown as ControlPlaneService,
     runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics,
   });

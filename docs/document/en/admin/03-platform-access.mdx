@@ -8,6 +8,29 @@ Platform management controls both who can change configuration and how services 
 
 <a id="admin-governance" />
 
+## Two account roles
+
+| Role | Available features |
+| --- | --- |
+| User (`user`) | Guardrails, Playground and Policy Library in Guardrail Design; Routers and Endpoints in Integration. Users can create, edit, test, publish and manage these business resources, and inspect runtime logs and captured request/response content. |
+| Administrator (`admin`) | Platform settings only: health, Runners, Providers, models, model pricing, Guardrail Catalog and versions. Administrators also manage accounts and inspect activity audit records. They cannot access tenant runtime logs or captured content, and they cannot configure Guardrails, Policies, Routers or Endpoints. |
+
+Users see Guardrail Design, Integration and Runtime observability, and land on Guardrails. Runtime logs contain requests, responses, enforcement results and execution steps, and belong to the tenant workflow. Captured request and response bodies load on demand; existing capture levels, redaction and retention rules still apply. Activity audit records describe who changed configuration and belong to the platform. Users cannot access audit records through pages, APIs or personal Tokens.
+
+Administrators land on Health and see three platform groups:
+
+- Platform operations: Health, Runner and Version, for environment operations and software status.
+- Models & detection: Providers, Models (including pricing) and Guardrail Catalog, for shared model services and detector bindings.
+- Access & audit: Users & access and Audit log, for account authority and configuration activity review.
+
+Cross-page Settings tabs are removed; Models retains its local model/pricing tabs. Both roles retain their account, password, personal Access Tokens and documentation. Direct access to the other role's workspace shows an access explanation, and corresponding APIs deny access.
+
+Design workflows read a reduced model-capability projection without Provider addresses, credential hints, control-plane model configuration or test bodies.
+
+Roles apply to the shared workspace, without resource ownership isolation. Effective personal Token permissions are the intersection of the current account role and module grants. Changing roles immediately recalculates existing Token authority. Users may grant read-only runtime access, including on-demand captured content, but cannot grant audit access. Administrators can inspect activity audits and cannot access tenant runtime logs. Existing Router separation of submitter and reviewer remains enforced.
+
+<a id="credential-types" />
+
 ## Four identities
 
 | Identity or credential | Used for | Not used for |

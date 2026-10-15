@@ -142,6 +142,10 @@ const environmentSchema = z.object({
   CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD: z.string().min(1).optional(),
   CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH: z.string().regex(bootstrapPasswordHashPattern, "Expected a Better Auth scrypt password hash.").optional(),
   CONTROLLER_BOOTSTRAP_ADMIN_NAME: z.string().min(1).default("Administrator"),
+  CONTROLLER_BOOTSTRAP_USER_EMAIL: z.string().email().optional(),
+  CONTROLLER_BOOTSTRAP_USER_PASSWORD: z.string().min(1).optional(),
+  CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH: z.string().regex(bootstrapPasswordHashPattern, "Expected a Better Auth scrypt password hash.").optional(),
+  CONTROLLER_BOOTSTRAP_USER_NAME: z.string().min(1).default("User"),
   MODEL_GUARDRAILS_CONTROL_PLANE_AI_BASE_URL: z.string().trim().optional(),
   MODEL_GUARDRAILS_CONTROL_PLANE_AI_MODEL: z.string().min(1).optional(),
   MODEL_GUARDRAILS_CONTROL_PLANE_AI_API_KEY: z.string().min(1).optional(),
@@ -207,6 +211,18 @@ const environmentSchema = z.object({
       path: ["CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD"],
       message: `CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD must contain at least ${value.BETTER_AUTH_MIN_PASSWORD_LENGTH} characters.`,
     });
+  }
+  if (Boolean(value.CONTROLLER_BOOTSTRAP_USER_EMAIL) !== Boolean(value.CONTROLLER_BOOTSTRAP_USER_PASSWORD || value.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH)) {
+    context.addIssue({ code: "custom", message: "Bootstrap user email requires either CONTROLLER_BOOTSTRAP_USER_PASSWORD or CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH, and vice versa." });
+  }
+  if (value.CONTROLLER_BOOTSTRAP_USER_PASSWORD && value.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH) {
+    context.addIssue({ code: "custom", message: "Bootstrap user password and passwordHash are mutually exclusive." });
+  }
+  if (value.CONTROLLER_BOOTSTRAP_USER_PASSWORD && value.CONTROLLER_BOOTSTRAP_USER_PASSWORD.length < value.BETTER_AUTH_MIN_PASSWORD_LENGTH) {
+    context.addIssue({ code: "custom", path: ["CONTROLLER_BOOTSTRAP_USER_PASSWORD"], message: `CONTROLLER_BOOTSTRAP_USER_PASSWORD must contain at least ${value.BETTER_AUTH_MIN_PASSWORD_LENGTH} characters.` });
+  }
+  if (value.CONTROLLER_BOOTSTRAP_USER_EMAIL && value.CONTROLLER_BOOTSTRAP_USER_EMAIL.toLowerCase() === value.CONTROLLER_BOOTSTRAP_ADMIN_EMAIL?.toLowerCase()) {
+    context.addIssue({ code: "custom", message: "Bootstrap admin and user must have different email addresses." });
   }
 });
 
@@ -290,6 +306,14 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
           ...(parsed.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD ? { password: parsed.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD } : {}),
           ...(parsed.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH ? { passwordHash: parsed.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH } : {}),
           name: parsed.CONTROLLER_BOOTSTRAP_ADMIN_NAME,
+        }
+      : null,
+    bootstrapUser: parsed.CONTROLLER_BOOTSTRAP_USER_EMAIL && (parsed.CONTROLLER_BOOTSTRAP_USER_PASSWORD || parsed.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH)
+      ? {
+          email: parsed.CONTROLLER_BOOTSTRAP_USER_EMAIL,
+          ...(parsed.CONTROLLER_BOOTSTRAP_USER_PASSWORD ? { password: parsed.CONTROLLER_BOOTSTRAP_USER_PASSWORD } : {}),
+          ...(parsed.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH ? { passwordHash: parsed.CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH } : {}),
+          name: parsed.CONTROLLER_BOOTSTRAP_USER_NAME,
         }
       : null,
     controlPlaneAi,

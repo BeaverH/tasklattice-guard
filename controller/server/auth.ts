@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
+import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { eq } from "drizzle-orm";
 
 import type { ControllerConfig } from "./config.js";
@@ -57,7 +58,7 @@ export function createAuth(config: ControllerConfig, db: ControllerDatabase) {
         },
       },
     },
-    plugins: [admin({ defaultRole: "user", adminRoles: ["admin"] })],
+    plugins: [admin({ defaultRole: "user", adminRoles: ["admin"], roles: { admin: adminAc, user: userAc } })],
   });
 }
 

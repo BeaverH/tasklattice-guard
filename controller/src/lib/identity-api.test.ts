@@ -40,6 +40,14 @@ describe("identity login", () => {
     expect(getSession).toHaveBeenCalledWith({ query: { disableCookieCache: true } });
   });
 
+  it("uses the canonical user role instead of the retired member alias", async () => {
+    getSession.mockResolvedValue({ data: { user: { ...signedInUser, role: "user" } }, error: null });
+    expect((await getAuthStatus()).user?.role).toBe("user");
+  });
+  it("rejects an unsupported role instead of granting user authority", async () => {
+    getSession.mockResolvedValue({ data: { user: { ...signedInUser, role: "unknown" } }, error: null });
+    await expect(getAuthStatus()).rejects.toThrow("unsupported role");
+  });
   it("maps the admin username alias to the internal Better Auth email", async () => {
     await login({ email: " ADMIN ", password: "admin" });
 

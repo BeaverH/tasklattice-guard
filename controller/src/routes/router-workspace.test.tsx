@@ -23,7 +23,7 @@ const { save, preview, publish, approve, emergencyApply, withdraw, revert, role,
   emergencyApply: vi.fn(),
   withdraw: vi.fn(),
   revert: vi.fn(),
-  role: { value: "admin", id: "submitter" },
+  role: { value: "user", id: "submitter" },
 }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ user: { id: role.id, role: role.value } }),
@@ -180,7 +180,7 @@ async function edit() {
 describe("Router detail workflow", () => {
   beforeEach(() => {
     getEndpoints.mockResolvedValue({ items: [] });
-    role.value = "admin";
+    role.value = "user";
     role.id = "submitter";
     requestRows.items = [];
     changeDetail.mockImplementation(async (_id: string, id: string) => requestRows.items.find(item => item.id === id) ?? pendingChange);

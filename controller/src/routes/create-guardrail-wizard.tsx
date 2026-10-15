@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { isSplitTopicPolicy } from "../../shared/topic-policy";
 import { CorrectnessUnavailable, useCorrectnessAvailability } from "@/components/correctness-availability";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -75,7 +76,7 @@ export function CreateGuardrailWizard({
   const { t: uiText } = useTranslation();
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
-  const canManage = user?.role === "admin";
+  const canManage = hasPermission(user?.role, "guardrails", "write");
   const policiesQuery = useQuery({ queryKey: queryKeys.policies, queryFn: getPolicies, enabled: open });
   const presetsQuery = useQuery({ queryKey: queryKeys.guardrailProfiles, queryFn: getGuardrailProfiles, enabled: open, retry: false });
   const intentStatusQuery = useQuery({ queryKey: queryKeys.intentAnalysisStatus, queryFn: getIntentAnalysisStatus, enabled: open, retry: false });

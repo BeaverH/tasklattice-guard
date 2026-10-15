@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { useTranslation } from "react-i18next";
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,7 +15,7 @@ import { deleteGuardrail, getGuardrailDeletionImpact, type Guardrail } from '@/l
 
 export function GuardrailRowActions({ guardrail }: { guardrail: Guardrail }) {
   const { t } = useTranslation();
-  const canEdit = useAuth().user?.role === 'admin';
+  const canEdit = hasPermission(useAuth().user?.role, "guardrails", "write");
   const [action, setAction] = useState<'delete' | 'duplicate' | 'export' | null>(null);
   return <>
     <DropdownMenu>

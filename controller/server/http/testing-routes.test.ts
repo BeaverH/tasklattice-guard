@@ -8,7 +8,7 @@ import type { ControllerMetrics } from "../metrics.js";
 import type { ControlPlaneService } from "../services/control-plane.js";
 import { createHttpApp } from "./app.js";
 
-function setup(role = "admin") {
+function setup(role = "user") {
   const run = { id: "run-1", status: "queued" };
   const service = {
     requestValidation: vi.fn().mockResolvedValue(run),

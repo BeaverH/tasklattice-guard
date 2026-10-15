@@ -25,7 +25,7 @@ describe("Runner instance management HTTP routes", () => {
   });
   it("uses each Runner's reported source, retaining unknown metadata for older Runners", async () => {
     const software = { version: "v1.0.0-1-gabcdef-dirty", commit: "abcdef", branch: "main", dirty: true, source: "build" };
-    const app = appWith({ user: { id: "user-1", role: "user" } }, {
+    const app = appWith({ user: { id: "user-1", role: "admin" } }, {
       listRunnerPoolsWithCapacity: vi.fn().mockResolvedValue([{ id: "default", instances: [
         { runnerId: "new", runnerVersion: software.version, labels: { "tasklattice.build": JSON.stringify(software) }, status: "ready", lastHeartbeatAt: null },
         { runnerId: "old", runnerVersion: "0.2.0", labels: {}, status: "offline", lastHeartbeatAt: null },

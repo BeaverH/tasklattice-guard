@@ -4,6 +4,8 @@ title: "Audit log: trace management changes"
 summary: "Trace control-plane changes by actor, time, and resource, then verify rollout and runtime results."
 order: 4
 ---
+Administrators open Audit log under Access & audit. Tenant users cannot access this page or its API. Runtime requests and responses belong to the tenant Runtime observability workspace.
+
 Audit log answers “which person or system did what to which resource, and when?” Control-plane events help you reconstruct the order of changes. Examples are Policy tests, Guardrail publication, Router rollback and credential changes. Per-request Decisions are in [runtime logs](/document/admin/concept-logs), not in this log.
 
 <a id="audit-how-to-use" />
@@ -13,8 +15,8 @@ Audit log answers “which person or system did what to which resource, and when
 If a Router moves traffic from Guardrail v1 to v2:
 
 1. Search the audit log by time, **person/system**, and resource ID for the Router publication or rollback event. Open its details to inspect the event kind, actor, and any additional information. System-initiated events show System as their actor.
-2. In [Routers](/integration/routers), inspect the new revision, Target, and Runner rollout status. An audit event proves a management action occurred, not that Runners applied it.
-3. In [runtime logs](/document/admin/concept-logs), filter by Guardrail and time range to inspect real requests after the change and confirm their pinned versions and Decisions.
+2. The tenant user checks the new revision, Target and Runner rollout status in [Routers](/integration/routers). An audit event proves a management action occurred, not that Runners applied it.
+3. The tenant user filters [runtime logs](/document/admin/concept-logs) by Guardrail and time range to inspect real requests after the change and confirm their pinned versions and Decisions.
 
 <a id="audit-scope" />
 

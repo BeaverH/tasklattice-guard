@@ -2,7 +2,7 @@ import { capabilityBindingDefinitions, type CapabilityBindingId } from "../../sh
 import { evaluationContractDependencies } from "../../shared/protection-dependencies";
 import type { GuardrailPolicyBinding, Policy } from "./api-types";
 import { boundPolicy } from "./bound-policy";
-import type { ModelConfigurationView, ModelConfigurationRevision } from "./controller-api";
+import type { ModelReadinessView, ModelReadinessRevision } from "../../shared/model-readiness";
 
 /** Navigation categories never imply executable dependencies. Directions and enabled Rules do. */
 export function selectedModelDependencies(bindings: GuardrailPolicyBinding[], policies: Policy[]) {
@@ -43,8 +43,8 @@ export function selectedModelDependencies(bindings: GuardrailPolicyBinding[], po
 }
 
 export type DependencyAssignmentState = "active" | "activating" | "validated" | "failed" | "unverified" | "missing";
-export function dependencyAssignment(id: CapabilityBindingId, view: ModelConfigurationView) {
-  const inspect = (revision: ModelConfigurationRevision, stage: "active" | "activating" | "draft") => {
+export function dependencyAssignment(id: CapabilityBindingId, view: ModelReadinessView) {
+  const inspect = (revision: ModelReadinessRevision, stage: "active" | "activating" | "draft") => {
     const modelId = revision.assignments.bindings[id];
     if (!modelId) return null;
     const model = view.models.find(item => item.id === modelId);

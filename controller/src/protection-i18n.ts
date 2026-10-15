@@ -53,7 +53,7 @@ export const protectionEn = {
   catalogUnavailable: "Policy details could not be loaded. Your selections are preserved. Retry the catalog before creating the draft.",
   catalogPending: "Awaiting Policy details",
   retryCatalog: "Retry Policy catalog",
-  adminAccessRequired: "Administrator access is required to create this Guardrail or generate proposals. Your selections are kept here. Ask an administrator to restore access; nothing will be submitted automatically.",
+  adminAccessRequired: "An active user or administrator account is required to create this Guardrail or generate proposals. Your selections are kept here. Ask an administrator to restore access; nothing will be submitted automatically.",
   createRecovery: "Your selections are kept here. If the connection was interrupted, check the Guardrails list before retrying: the draft may already have been created. Reconnecting will not submit it automatically.",
   pinnedVersionUnavailable: "{{name}} is unavailable. No other version has been substituted.",
   dependencies: {
@@ -177,7 +177,7 @@ export const protectionZh = {
   catalogUnavailable: "Policy 详情加载失败。你的选择已保留，请重试加载策略库后再创建草稿。",
   catalogPending: "等待 Policy 详情",
   retryCatalog: "重试加载策略库",
-  adminAccessRequired: "创建 Guardrail 或生成建议需要管理员权限。你的配置仍保留在这里，请联系管理员恢复权限；系统不会自动提交。",
+  adminAccessRequired: "创建 Guardrail 或生成建议需要有效的用户或管理员账户。你的配置仍保留在这里，请联系管理员恢复权限；系统不会自动提交。",
   createRecovery: "你的配置仍保留在这里。如果连接中断，请先检查 Guardrails 列表再重试：草稿可能已经创建。恢复网络不会自动重新提交。",
   pinnedVersionUnavailable: "{{name}} 不可用，系统没有用其他版本替代它。",
   dependencies: {

@@ -107,7 +107,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "user" } }) }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/api")>();

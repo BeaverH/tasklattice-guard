@@ -15,9 +15,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   };
 });
 
-vi.mock("@/components/settings-navigation", () => ({
-  SettingsNavigation: () => <nav aria-label="Settings pages">Settings navigation</nav>,
-}));
+
 
 vi.mock("@/components/runner-capacity", () => ({
   runnerPoolKey: ["resources", "runner-pools"],

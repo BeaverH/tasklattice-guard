@@ -114,9 +114,10 @@ npm run build       # Controller UI + server
 npm start
 ```
 
-Controller runs database migrations and creates the bootstrap administrator
-only if absent. New local accounts initialized by `dev:setup` use `admin` /
-`password`, stored as a salted Better Auth hash. Existing accounts are not reset.
+Controller runs database migrations and creates missing bootstrap accounts.
+`dev:setup` initializes `admin` / `password` with the admin role and `user` /
+`password` with the user role, using separate salted Better Auth hashes.
+Existing passwords and roles are not reset.
 For a complete local Kubernetes stack, use `npm run helm:deploy:dev` instead;
 that deployment initializes credentials inside Kubernetes independently.
 

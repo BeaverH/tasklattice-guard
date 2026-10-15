@@ -41,7 +41,7 @@ describe("Intent analysis HTTP API", () => {
     const analyzer = fakeAnalyzer();
     vi.mocked(analyzer.analyzeDocuments).mockResolvedValue({ ...analysis, requirements: [{ title: "Privacy", description: "Protect identifiers", effect: "transform", source_refs: ["document-1:lines-1-1"] }], recommended_policy_ids: [policyId] });
     const policies = PolicyCatalog.load(config.policyCatalogDir).list();
-    const response = await appWith({ user: { id: "admin-1", role: "admin" } }, analyzer, policies)
+    const response = await appWith({ user: { id: "admin-1", role: "user" } }, analyzer, policies)
       .request("/api/v1/authoring/document-analyses", {
         method: "POST",
         headers: { "content-type": "multipart/form-data; boundary=regression-boundary" },
@@ -72,7 +72,7 @@ describe("Intent analysis HTTP API", () => {
 
   it("converts an administrator's business purpose into editable Topic rules", async () => {
     const analyzer = fakeAnalyzer();
-    const response = await appWith({ user: { id: "admin-1", role: "admin" } }, analyzer)
+    const response = await appWith({ user: { id: "admin-1", role: "user" } }, analyzer)
       .request("/api/v1/authoring/intent-analyses", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -101,7 +101,7 @@ describe("Intent analysis HTTP API", () => {
       "Privacy standard\nAccount identifiers must be redacted before any model request.\n\r\n",
       `--${boundary}--\r\n`,
     ].join("");
-    const response = await appWith({ user: { id: "admin-1", role: "admin" } }, analyzer)
+    const response = await appWith({ user: { id: "admin-1", role: "user" } }, analyzer)
       .request("/api/v1/authoring/document-analyses", {
         method: "POST",
         headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
@@ -121,7 +121,7 @@ describe("Intent analysis HTTP API", () => {
   });
 
   it("returns an explicit unavailable response when no authoring model is configured", async () => {
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, null);
+    const app = appWith({ user: { id: "admin-1", role: "user" } }, null);
     const status = await app.request("/api/v1/authoring/capabilities");
     const analysisResponse = await app.request("/api/v1/authoring/intent-analyses", {
       method: "POST",
@@ -134,7 +134,7 @@ describe("Intent analysis HTTP API", () => {
     await expect(analysisResponse.json()).resolves.toMatchObject({ error: { code: "intent_analysis_unavailable" } });
   });
 
-  it("does not let a non-administrator spend authoring-model tokens", async () => {
+  it("lets users generate authoring proposals", async () => {
     const analyzer = fakeAnalyzer();
     const response = await appWith({ user: { id: "member-1", role: "user" } }, analyzer)
       .request("/api/v1/authoring/intent-analyses", {
@@ -143,8 +143,8 @@ describe("Intent analysis HTTP API", () => {
         body: JSON.stringify({ purpose: "A sufficiently detailed business purpose for analysis.", language: "en" }),
       });
 
-    expect(response.status).toBe(403);
-    expect(analyzer.analyze).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(analyzer.analyze).toHaveBeenCalledOnce();
   });
 });
 

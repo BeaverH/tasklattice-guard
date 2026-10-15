@@ -21,7 +21,11 @@ function setup(identity: TokenIdentity | null = { id: "owner", role: "admin", to
   const createRouter = vi.fn().mockResolvedValue({ id: "new" });
   const app = createHttpApp({ config, auth: { api: { getSession } } as unknown as ControllerAuth,
     accessTokens: accessTokens as unknown as AccessTokenService,
-    service: { trafficRouting: { list: async () => [], create: createRouter }, listGuardrails: async () => [] } as unknown as ControlPlaneService,
+    service: { trafficRouting: { list: async () => [], create: createRouter }, listGuardrails: async () => [],
+      queryRuntimeEvents: async () => ({ items: [], count: 0 }),
+      getRuntimeEvent: async (_id: string, includeContent: boolean) => ({ id: "event", metadata: includeContent ? { contentBefore: [{ text: "Captured tenant request" }] } : {} }),
+      listAuditEvents: async () => ({ items: [] }),
+    } as unknown as ControlPlaneService,
     runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics });
   const request = (method: string, path: string, authorization: string | null = "Bearer test", body?: unknown, extra: Record<string,string> = {}) => app.request(`/api/v1${path}`, {
     method, headers: { cookie: "valid-session", ...(authorization === null ? {} : { authorization }), "content-type": "application/json", ...extra }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -46,17 +50,40 @@ describe("Access token HTTP authority", () => {
     expect((await request("POST", "/routers", "Bearer test", {})).status).toBe(403);
     expect(createRouter).not.toHaveBeenCalled();
   });
-  it("forwards an authorized mutation with the token owner and records token attribution", async () => {
-    const { request, accessTokens, createRouter } = setup({ id: "owner", role: "admin", tokenId: "token", permissions: { routers: "write" } });
+  it.each(["user"])("forwards a %s token mutation with the owner and token attribution", async role => {
+    const { request, accessTokens, createRouter } = setup({ id: "owner", role, tokenId: "token", permissions: { routers: "write" } });
     const draft = { routes: [{ id: "fallback", name: "Fallback", kind: "fallback", enabled: true, selector: { expression: { combinator: "and", conditions: [] } }, targets: [{ id: "target", guardrailId: "guard", guardrailVersion: "1", weightBps: 10000 }] }] };
     expect((await request("POST", "/routers", "Bearer test", { name: "Automation", draft })).status).toBe(201);
     expect(createRouter.mock.calls[0]?.[3]).toBe("owner");
     expect(accessTokens.recordRequest).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "token" }), "POST", "/api/v1/routers", 201);
   });
-  it("blocks writes after demotion even if the token still grants write", async () => {
-    const { request } = setup({ id: "owner", role: "user", tokenId: "token", permissions: { routers: "write" } });
-    expect((await request("GET", "/routers")).status).toBe(200);
+  it("denies administrator business mutations even when an old token grants write", async () => {
+    const { request, createRouter } = setup({ id: "owner", role: "admin", tokenId: "token", permissions: { routers: "write" } });
     expect((await request("POST", "/routers", "Bearer test", {})).status).toBe(403);
+    expect(createRouter).not.toHaveBeenCalled();
+    expect(await (await request("GET", "/account/identity")).json()).toMatchObject({ effectivePermissions: { routers: "read" } });
+  });
+  it("retains business write authority after demotion, but blocks platform grants", async () => {
+    const { request } = setup({ id: "owner", role: "user", tokenId: "token", permissions: { routers: "write", models: "write" } });
+    expect((await request("GET", "/routers")).status).toBe(200);
+    expect((await request("POST", "/routers", "Bearer test", {})).status).toBe(400);
+    expect((await request("GET", "/models")).status).toBe(403);
+    expect((await request("PUT", "/models/id/pricing", "Bearer test", {})).status).toBe(403);
+  });
+  it("lets a tenant runtime token read captured content but rejects an old audit grant", async () => {
+    const { request } = setup({ id: "owner", role: "user", tokenId: "token", permissions: { runtime: "read", audit: "read" } });
+    expect((await request("GET", "/telemetry/events")).status).toBe(200);
+    expect(await (await request("GET", "/telemetry/events/event?includeContent=true")).json()).toMatchObject({ metadata: { contentBefore: [{ text: "Captured tenant request" }] } });
+    expect((await request("GET", "/audit-events")).status).toBe(403);
+    expect(await (await request("GET", "/account/identity")).json()).toMatchObject({ effectivePermissions: { runtime: "read" } });
+  });
+  it("lets platform tokens read audit records but rejects old tenant runtime grants", async () => {
+    const { request } = setup({ id: "owner", role: "admin", tokenId: "token", permissions: { runtime: "read", audit: "read" } });
+    expect((await request("GET", "/audit-events")).status).toBe(200);
+    for (const path of ["/telemetry/events", "/telemetry/events/event?includeContent=true", "/telemetry/metrics"]) {
+      expect((await request("GET", path)).status).toBe(403);
+    }
+    expect(await (await request("GET", "/account/identity")).json()).toMatchObject({ effectivePermissions: { audit: "read" } });
   });
   it.each([["GET", "/account/access-tokens"], ["POST", "/account/access-tokens"], ["DELETE", "/account/access-tokens/another"]])("tokens cannot manage credentials: %s %s", async (method, path) => {
     const { request, accessTokens } = setup();

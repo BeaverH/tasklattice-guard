@@ -10,6 +10,7 @@ import { apiTags, operationContract } from '../shared/api-contract.ts';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { GUARD_AUTH_COOKIE_PREFIX } from '../server/auth.ts';
 import { tokenRoutePermissions } from '../server/http/token-permissions.ts';
+import { accountRoles, hasPermission } from '../shared/rbac.ts';
 import { createAccessTokenSchema } from '../shared/access-tokens.ts';
 import { assignmentInputSchema, modelConfigurationInputSchema } from '../server/model-config/domain.ts';
 import { MAX_DOCUMENTS, MAX_DOCUMENT_BYTES, MAX_TOTAL_BYTES } from '../server/control-plane-ai/document-ingestion.ts';
@@ -135,12 +136,13 @@ try {
     const permission = tokenRoutePermissions.find(([m,p])=>m===method && p===path);
     const sessionOnly = middleware.includes('accountSession'); const authenticated = middleware.includes('authenticated');
     assert(!authenticated || permission || sessionOnly || path === '/api/v1/account/identity', `Missing token policy: ${method} ${path}`);
-    const role = middleware.includes('administrator') ? 'admin' : 'user';
+    const allowedRoles = permission ? accountRoles.filter(role => hasPermission(role, permission[2], permission[3])) : [...accountRoles];
+    const role = allowedRoles.length === 1 ? allowedRoles[0] : 'user';
     const operation = { operationId:id, summary: `${method} ${template}`, tags:[sessionOnly || path==='/api/v1/account/identity' ? 'Account' : permission?.[2] ?? 'System'],
-      description: permission ? `Requires ${permission[2]}:${permission[3]} for personal access tokens. ${permission[3]==='write' ? 'Write includes read access and requires a current administrator account. ' : ''}${role==='admin' ? 'This operation also requires the admin account role. ' : ''}Token access covers all resources in the selected module.` : sessionOnly ? 'Browser session only. Personal access tokens cannot manage credentials. Ownership is taken from the authenticated session.' : path==='/api/v1/account/identity' ? 'Returns the authenticated identity and token permissions. Effective permissions are capped by the current account role.' : 'Public system health information; no credential is required.',
+      description: permission ? `Requires ${permission[2]}:${permission[3]} for personal access tokens. ${permission[3]==='write' ? 'Write includes read access; account role restrictions still apply. ' : ''}Allowed account roles: ${allowedRoles.join(', ')}. Token access covers all resources in the selected module.` : sessionOnly ? 'Browser session only. Personal access tokens cannot manage credentials. Ownership is taken from the authenticated session.' : path==='/api/v1/account/identity' ? 'Returns the authenticated identity and token permissions. Effective permissions are capped by the current account role.' : 'Public system health information; no credential is required.',
       security: authenticated ? sessionOnly ? [{sessionCookie:[]}] : [{personalAccessToken:[]},{sessionCookie:[]}] : [],
       ...(permission ? {'x-token-permission':{module:permission[2],access:permission[3]}} : {}),
-      'x-account-role':role, ...(permission ? {'x-token-account-role':permission[3]==='write' ? 'admin' : role} : {}), 'x-source':`server/http/app.ts#${source.getLineAndCharacterOfPosition(route.handler.pos).line+1}`,
+      'x-account-role':role, 'x-account-roles':allowedRoles, ...(permission ? {'x-token-account-role':role} : {}), 'x-source':`server/http/app.ts#${source.getLineAndCharacterOfPosition(route.handler.pos).line+1}`,
       parameters:[], responses:{} };
     const semantics = operationContract(method, path);
     Object.assign(operation, semantics, { description: `${semantics.description} ${operation.description}` });

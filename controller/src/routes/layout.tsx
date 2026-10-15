@@ -1,4 +1,7 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
+import { pagePermission, hasPermission, roleHome } from "../../shared/rbac";
+import { EmptyState } from "@/components/product-shell";
+import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';
 import { getTrafficRouter, trafficRouterKeys } from '@/lib/traffic-routing-api';
 import { ShieldCheck } from "lucide-react";
@@ -30,17 +33,17 @@ const names: Record<string, { group?: string; page: string }> = {
   "/playground": { group: "nav.guardrailDesign", page: "nav.playground" },
   "/integration/routers": { group: "nav.runtime", page: "nav.routers" },
   "/integration/endpoints": { group: "nav.runtime", page: "nav.endpoints" },
-  "/logs": { group: "nav.observability", page: "nav.logs" },
-  "/audit-log": { group: "nav.observability", page: "nav.auditLog" },
-  "/access": { group: "nav.system", page: "nav.access" },
+  "/logs": { group: "nav.runtimeObservations", page: "nav.logs" },
+  "/audit-log": { group: "nav.accessAudit", page: "nav.auditLog" },
+  "/access": { group: "nav.accessAudit", page: "nav.access" },
   "/account": { group: "nav.system", page: "account.title" },
-  "/settings": { group: "nav.settings", page: "nav.health" },
-  "/settings/version": { group: "nav.settings", page: "nav.version" },
-  "/settings/health": { group: "nav.settings", page: "nav.health" },
-  "/settings/runner": { group: "nav.settings", page: "nav.runner" },
-  "/settings/providers": { group: "nav.settings", page: "nav.providers" },
-  "/settings/models": { group: "nav.settings", page: "nav.models" },
-  "/settings/guardrail-catalog": { group: "nav.settings", page: "nav.guardrailCatalog" },
+  "/settings": { group: "nav.platformOperations", page: "nav.health" },
+  "/settings/version": { group: "nav.platformOperations", page: "nav.version" },
+  "/settings/health": { group: "nav.platformOperations", page: "nav.health" },
+  "/settings/runner": { group: "nav.platformOperations", page: "nav.runner" },
+  "/settings/providers": { group: "nav.modelServices", page: "nav.providers" },
+  "/settings/models": { group: "nav.modelServices", page: "nav.models" },
+  "/settings/guardrail-catalog": { group: "nav.modelServices", page: "nav.guardrailCatalog" },
   "/document": { group: "nav.helpResources", page: "nav.helpCenter" },
 };
 
@@ -58,6 +61,10 @@ export function ControlPlaneLayout() {
   }
   if (!auth.status?.authenticated || !auth.user) return <LoginPage />;
   if (pathname === "/document" || pathname.startsWith("/document/") || ["/help", "/help/"].includes(pathname)) return <HelpLayout />;
+  const home = roleHome(auth.user.role);
+  if (["/", "/dashboard"].includes(pathname)) return <Navigate to={home} replace />;
+  const permission = pagePermission(pathname);
+  const forbidden = permission !== null && !hasPermission(auth.user.role, permission.resource, permission.action);
 
   return (
     <TooltipProvider>
@@ -83,7 +90,11 @@ export function ControlPlaneLayout() {
             <AccountMenu placement="header" />
           </header>
           <main className="w-full min-w-0 flex-1 px-4 pb-12 sm:px-6 lg:px-8">
-            <Outlet />
+            {forbidden ? <section className="py-8"><EmptyState
+              title={t("auth.accessDeniedTitle")}
+              description={t("auth.rolePageDenied")}
+              action={<Button asChild><Link to={home}>{t(home === "/guardrails" ? "nav.guardrails" : "nav.platform")}</Link></Button>}
+            /></section> : <Outlet />}
           </main>
         </SidebarInset>
         <Toaster />

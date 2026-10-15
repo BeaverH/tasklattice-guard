@@ -6,7 +6,7 @@ import { protectionEn } from "../protection-i18n";
 import type { GuardrailPolicyBinding, Policy } from "@/lib/api-types";
 
 const read = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/controller-api", () => ({ getModelConfiguration: read }));
+vi.mock("@/lib/controller-api", () => ({ getModelReadiness: read }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, values: Record<string, unknown> = {}) => {
   const value = key.replace(/^protection\./, "").split(".").reduce<unknown>((object, key) => (object as Record<string, unknown>)?.[key], protectionEn);
   return Object.entries(values).reduce((text, [key, value]) => text.replaceAll(`{{${key}}}`, String(value)), typeof value === "string" ? value : key);

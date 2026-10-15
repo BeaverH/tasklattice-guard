@@ -23,7 +23,7 @@ const identity = vi.hoisted(() => ({ role: 'admin' }));
 
 vi.mock("@/lib/controller-api", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/controller-api")>(),
-  getModelConfiguration: (...args: unknown[]) => apiMocks.getModels(...args),
+  getModelReadiness: (...args: unknown[]) => apiMocks.getModels(...args),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -206,7 +206,7 @@ describe("Create Guardrail wizard", () => {
         checks: [{ id: "probe:topic_control.input:topic-model", status: "passed", evidenceKind: "nemo-rail-v1" }],
       } },
     });
-    identity.role = 'admin';
+    identity.role = 'user';
     apiMocks.analyzeIntent.mockReset().mockResolvedValue({
       summary: "Customer support only.",
       structured_purpose: { audience: "Support agents", tasks: "Answer order questions", protect: "Customer identifiers", out_of_scope: "Medical advice" },
@@ -454,7 +454,8 @@ describe("Create Guardrail wizard", () => {
     expect(screen.getByRole("combobox", { name: "Output delivery" }).hasAttribute("disabled")).toBe(true);
   });
 
-  it("saves a Policy-based draft without a purpose or description", async () => {
+  it.each(["user"])("lets %s save a Policy-based draft without a purpose or description", async role => {
+    identity.role = role;
     const { onCreated } = renderWizard();
     fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Support Guardrail" } });
     fireEvent.click(screen.getByRole("button", { name: "Configure protections" }));
@@ -618,7 +619,7 @@ describe("Create Guardrail wizard", () => {
     await waitFor(() => expect(apiMocks.preview).toHaveBeenCalledWith(expect.objectContaining({ policy_bindings: [configuredRequiredBinding] })));
   });
 
-  it("preserves selections but prevents writes after administrator access is lost", async () => {
+  it("preserves selections but prevents writes after account access is revoked", async () => {
     const { refreshIdentity } = renderWizard();
     fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Preserved access draft" } });
     fireEvent.click(screen.getByRole("button", { name: "Configure protections" }));
@@ -628,7 +629,7 @@ describe("Create Guardrail wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review & create" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Create draft" }).hasAttribute("disabled")).toBe(false));
 
-    identity.role = 'member';
+    identity.role = 'revoked';
     refreshIdentity();
     expect(screen.getByRole("button", { name: "Create draft" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText(protectionEn.adminAccessRequired)).toBeTruthy();
@@ -643,7 +644,7 @@ describe("Create Guardrail wizard", () => {
     expect(screen.getByRole("button", { name: /Generate from intent/ }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("button", { name: /Generate from documents/ }).hasAttribute("disabled")).toBe(true);
 
-    identity.role = 'admin';
+    identity.role = 'user';
     refreshIdentity();
     fireEvent.click(screen.getByRole("button", { name: "Review & create" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Create draft" }).hasAttribute("disabled")).toBe(false));

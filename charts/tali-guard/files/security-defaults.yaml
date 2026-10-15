@@ -14,6 +14,17 @@ bootstrapAdmin:
   passwordKey: password
   passwordHashKey: password-hash
   nameKey: name
+bootstrapUser:
+  enabled: false
+  existingSecret: ''
+  email: ''
+  password: ''
+  passwordHash: ''
+  name: User
+  emailKey: email
+  passwordKey: password
+  passwordHashKey: password-hash
+  nameKey: name
 controlSecret:
   existingSecret: ''
   runnerTokenKey: runner-token

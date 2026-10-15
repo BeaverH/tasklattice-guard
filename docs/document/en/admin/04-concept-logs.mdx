@@ -4,6 +4,8 @@ title: "Runtime logs: verify protection ran"
 summary: "Understand INFO, DEBUG, and TRACE, how they relate to Rule risk levels, and when request and response content is captured."
 order: 3
 ---
+Runtime logs belong to the tenant (`user`) workflow. They include captured request and response bodies; platform activity audit records remain administrator-only.
+
 Runtime logs answer “which protection handled this request, and what happened?” For example, if a support application reports that an ordinary order question was blocked, filter by Guardrail, time range, and Blocked outcome. Open the interaction to inspect the Guardrail Version, the input or output checkpoint, the matching Rule and the execution steps. The Router publication status tells whether the configuration was distributed. A runtime record shows what happened to one request.
 
 <a id="runtime-log-views" />
@@ -28,13 +30,13 @@ Evidence is the set of findings, matching Policy and Rule, execution steps and v
 
 ## Enforce mode: how Rule risk and Log Level work together
 
-Logging is configured per **Guardrail**, defaults to **INFO**, and applies across its versions. Administrators use **Guardrail → Actions → Edit log level** and save; DEBUG and TRACE require acknowledgement of content-capture costs. Once distributed to the Runner, the setting applies to new calls without republishing a version. A correlated call keeps the level selected at its first check. Raising the level does not recover historical bodies.
+Logging is configured per **Guardrail**, defaults to **INFO**, and applies across its versions. Users use **Guardrail → Actions → Edit log level** and save; DEBUG and TRACE require acknowledgement of content-capture costs. Once distributed to the Runner, the setting applies to new calls without republishing a version. A correlated call keeps the level selected at its first check. Raising the level does not recover historical bodies.
 
-**Every level retains existing audit records, findings, actions, versions, and execution traces.** Body capture depends on the logging level and the highest risk of a Rule actually matched anywhere in the call. Allowed traffic still has runtime records, but does not create a security finding by itself.
+**Every level retains existing runtime records, findings, actions, versions, and execution traces.** Body capture depends on the logging level and the highest risk of a Rule actually matched anywhere in the call. Allowed traffic still has runtime records, but does not create a security finding by itself.
 
 | Records in Enforce mode | INFO (default) | DEBUG | TRACE |
 | --- | --- | --- | --- |
-| Audit records, correlation IDs, and versions for every check | Retained | Retained | Retained |
+| Runtime records, correlation IDs, and versions for every check | Retained | Retained | Retained |
 | Rule matches, risk severity, actual Action, and execution trace | Retained | Retained | Retained |
 | Original request / response bodies for the whole call | Not retained | Retained when either phase matches a Medium, High, or Critical Rule | Retained for every call; no match required |
 | Rewritten or transformed body copies | Not additionally retained | Not additionally retained | Not additionally retained |
@@ -45,12 +47,12 @@ Logging is configured per **Guardrail**, defaults to **INFO**, and applies acros
 
 | Highest matched Rule risk in the correlated call | INFO | DEBUG | TRACE |
 | --- | --- | --- | --- |
-| Critical | Audit and trace only | Audit, trace, and original bodies | Audit, trace, and original bodies |
-| High | Audit and trace only | Audit, trace, and original bodies | Audit, trace, and original bodies |
-| Medium | Audit and trace only | Audit, trace, and original bodies | Audit, trace, and original bodies |
-| Low | Audit and trace only | Audit and trace only | Audit, trace, and original bodies |
-| Informational | Audit and trace only | Audit and trace only | Audit, trace, and original bodies |
-| No match, or no match with a known risk level | Audit and trace only | Audit and trace only | Audit, trace, and original bodies |
+| Critical | Runtime records and trace only | Runtime records, trace, and original bodies | Runtime records, trace, and original bodies |
+| High | Runtime records and trace only | Runtime records, trace, and original bodies | Runtime records, trace, and original bodies |
+| Medium | Runtime records and trace only | Runtime records, trace, and original bodies | Runtime records, trace, and original bodies |
+| Low | Runtime records and trace only | Runtime records and trace only | Runtime records, trace, and original bodies |
+| Informational | Runtime records and trace only | Runtime records and trace only | Runtime records, trace, and original bodies |
+| No match, or no match with a known risk level | Runtime records and trace only | Runtime records and trace only | Runtime records, trace, and original bodies |
 
 Only actual Rule matches select bodies. Non-matches, inconclusive results, and execution errors do not count as high-risk matches. **Action does not change this table**: a High Rule that only records and allows still selects bodies at DEBUG; a Low Rule that blocks or transforms neither becomes High nor selects bodies at DEBUG. INFO never retains bodies, including for blocks, timeouts, and fail-closed results. Error evidence remains available.
 
@@ -62,16 +64,16 @@ Rule `informational` describes risk; log INFO describes capture. Changing loggin
 
 Capture uses the **whole correlated call**. The integration submits Input and Output under the same call ID: Input contains the incoming request and Output contains the model response. Different Runners may check the two directions.
 
-- **INFO:** both directions retain audit records and execution traces, without bodies.
+- **INFO:** both directions retain runtime records and execution traces, without bodies.
 - **DEBUG:** a Medium-or-higher match on either Input or Output selects the entire call, retaining the original input and output received. An output-only match also enriches the earlier input record with its original body.
 - **TRACE:** retains original bodies from both directions whenever received, including completely allowed calls.
 
 | One call in Enforce mode | Body retention |
 | --- | --- |
-| INFO: Input allows; Output matches High and blocks | Neither body; audit records, findings, and traces remain |
+| INFO: Input allows; Output matches High and blocks | Neither body; runtime records, findings, and traces remain |
 | DEBUG: Input allows; Output matches High and blocks | Both correlated original bodies |
 | DEBUG: Input matches Medium and allows; Output passes | Both correlated original bodies |
-| DEBUG: only Low matches, even with a block or transformation | No bodies; audit records, findings, and traces remain |
+| DEBUG: only Low matches, even with a block or transformation | No bodies; runtime records, findings, and traces remain |
 | TRACE: both Input and Output pass | Both original bodies |
 | DEBUG with a High match, or TRACE: Input blocks and the caller does not invoke the model | Only the received Input body; no model response exists |
 
@@ -91,9 +93,9 @@ Streaming output retains original text received during checks, correlated throug
 
 ### Why a log may have no body
 
-Check the level at the call's first check, matched Rule risks, correlation ID, and whether the integration submitted the content. Only administrators can inspect bodies. The separate system-events view does not display them.
+Check the level at the call's first check, matched Rule risks, correlation ID, and whether the integration submitted the content. Users inspect captured bodies through Runtime observability → Runtime logs; platform administrators cannot access these tenant records. The separate system-events view does not display them.
 
-DEBUG briefly holds candidate bodies while waiting for a later match. The correlation window is five minutes from the first check. Expiry, buffer capacity, or storage and delivery failures can leave incomplete content; existing audit records are not deleted. Raising the level cannot recover expired or uncaptured bodies.
+DEBUG briefly holds candidate bodies while waiting for a later match. The correlation window is five minutes from the first check. Expiry, buffer capacity, or storage and delivery failures can leave incomplete content; existing runtime records are not deleted. Raising the level cannot recover expired or uncaptured bodies.
 
 Monitor uses the risk of actual detected Rule matches too; its final allow does not cancel selection. Bypass performs no detection, so DEBUG cannot invent a risk match; TRACE can still retain received originals.
 

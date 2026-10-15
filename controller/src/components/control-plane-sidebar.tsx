@@ -1,6 +1,7 @@
+import { hasPermission, isPlatformAdministrator, roleHome } from "../../shared/rbac";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Cable, CircleHelp, FlaskConical, History, LibraryBig, Rocket, ScrollText, Settings, ShieldCheck } from "lucide-react";
+import { Activity, Bot, Cable, CircleHelp, FlaskConical, GitBranch, History, LibraryBig, Rocket, ScrollText, Server, ServerCog, ShieldCheck, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -21,9 +22,11 @@ import {
 import { getGuardrails, getEndpoints } from "@/lib/api";
 import { queryKeys } from "@/features/query-keys";
 import { listTrafficRouters, trafficRouterKeys } from "@/lib/traffic-routing-api";
+import { useAuth } from "@/lib/auth";
 
 const navigation = [
   {
+    scope: "tenant",
     label: "nav.guardrailDesign",
     items: [
       { label: "nav.guardrails", to: "/guardrails", icon: ShieldCheck, count: "guardrails" },
@@ -33,6 +36,7 @@ const navigation = [
     ],
   },
   {
+    scope: "tenant",
     label: "nav.runtime",
     items: [
       { label: "nav.routers", to: "/integration/routers", icon: Rocket, count: "routers" },
@@ -40,9 +44,35 @@ const navigation = [
     ],
   },
   {
-    label: "nav.observability",
+    scope: "tenant",
+    label: "nav.runtimeObservations",
     items: [
       { label: "nav.logs", to: "/logs", icon: ScrollText },
+    ],
+  },
+  {
+    scope: "platform",
+    label: "nav.platformOperations",
+    items: [
+      { label: "nav.health", to: "/settings/health", icon: Activity },
+      { label: "nav.runner", to: "/settings/runner", icon: Server },
+      { label: "nav.version", to: "/settings/version", icon: GitBranch },
+    ],
+  },
+  {
+    scope: "platform",
+    label: "nav.modelServices",
+    items: [
+      { label: "nav.providers", to: "/settings/providers", icon: ServerCog },
+      { label: "nav.models", to: "/settings/models", icon: Bot },
+      { label: "nav.guardrailCatalog", to: "/settings/guardrail-catalog", icon: LibraryBig },
+    ],
+  },
+  {
+    scope: "platform",
+    label: "nav.accessAudit",
+    items: [
+      { label: "nav.access", to: "/access", icon: UsersRound },
       { label: "nav.auditLog", to: "/audit-log", icon: History },
     ],
   },
@@ -50,13 +80,14 @@ const navigation = [
 
 export function ControlPlaneSidebar() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const administrator = isPlatformAdministrator(user?.role);
+  const workflowUser = hasPermission(user?.role, "guardrails", "write");
   const { setOpenMobile, state } = useSidebar();
-  // Receiving environments do not author Guardrails; the API refuses these areas too.
   const pathname = useRouterState({ select: (routerState) => routerState.location.pathname });
-  const settingsActive = pathname.startsWith("/settings/");
-  const guardrails = useQuery({ queryKey: queryKeys.guardrails, queryFn: getGuardrails });
-  const routers = useQuery({ queryKey: trafficRouterKeys.all, queryFn: listTrafficRouters });
-  const endpoints = useQuery({ queryKey: queryKeys.endpoints, queryFn: getEndpoints });
+  const guardrails = useQuery({ queryKey: queryKeys.guardrails, queryFn: getGuardrails, enabled: workflowUser });
+  const routers = useQuery({ queryKey: trafficRouterKeys.all, queryFn: listTrafficRouters, enabled: workflowUser });
+  const endpoints = useQuery({ queryKey: queryKeys.endpoints, queryFn: getEndpoints, enabled: workflowUser });
   const counts: Record<string, number | undefined> = {
     guardrails: guardrails.data?.items.length,
     routers: routers.data?.items.length,
@@ -66,7 +97,7 @@ export function ControlPlaneSidebar() {
       <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader className="h-16 justify-center border-b border-sidebar-border px-4 group-data-[collapsible=icon]:px-3">
           <Link
-            to="/dashboard"
+            to={roleHome(user?.role)}
             aria-label="TaskLattice Guard"
             onClick={() => setOpenMobile(false)}
             className="flex min-h-11 items-center gap-2.5 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center"
@@ -79,7 +110,7 @@ export function ControlPlaneSidebar() {
         </SidebarHeader>
 
         <SidebarContent className="px-2 py-3">
-          {navigation.map((group) => {
+          {navigation.filter(group => group.scope === "platform" ? administrator : workflowUser).map((group) => {
             return (
               <SidebarGroup key={group.label} className="px-0 py-2 group-data-[collapsible=icon]:px-1">
                 {group.label ? <SidebarGroupLabel className="h-7 px-2.5 text-[11px] font-medium text-sidebar-foreground/55 group-data-[collapsible=icon]:hidden">
@@ -140,23 +171,7 @@ export function ControlPlaneSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={settingsActive}
-                tooltip={t("nav.settings")}
-                className="h-11 rounded-lg px-2.5 text-[13px] text-sidebar-foreground/80 data-[active=true]:bg-accent data-[active=true]:font-medium data-[active=true]:text-accent-foreground focus-visible:ring-1 focus-visible:ring-inset group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
-              >
-                <Link
-                  to="/settings/health"
-                  aria-label={state === "collapsed" ? t("nav.settings") : undefined}
-                  onClick={() => setOpenMobile(false)}
-                >
-                  <Settings className="size-4.5" strokeWidth={settingsActive ? 2.2 : 1.8} />
-                  <span className="group-data-[collapsible=icon]:hidden">{t("nav.settings")}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+
           </SidebarMenu>
         </SidebarFooter>
         <SidebarRail />

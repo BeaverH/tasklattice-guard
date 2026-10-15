@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ModelPricingPanel } from "@/components/model-pricing";
 import { FormalValidationSheet } from "@/components/formal-validation-sheet";
@@ -23,7 +24,6 @@ import { toast } from "@/components/ui/notifications";
 
 import { ConfirmationSheet } from "@/components/confirmation-sheet";
 import { ErrorNotice, PageHeader, StateBadge } from "@/components/product-shell";
-import { SettingsNavigation } from "@/components/settings-navigation";
 import { ValidationFailureEvidence } from "@/components/validation-failure-evidence";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +71,7 @@ export function ProvidersPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: configurationKey, queryFn: getModelConfiguration, refetchInterval: 10_000, retry: false });
-  const administrator = auth.user?.role === "admin";
+  const administrator = hasPermission(auth.user?.role, "models", "write");
   const refresh = async () => { await queryClient.invalidateQueries({ queryKey: configurationKey }); };
 
   if (query.isLoading) return <ModelsSkeleton />;
@@ -85,7 +85,6 @@ export function ProvidersPage() {
         title={t("modelSettings.providersTitle")}
         description={t("modelSettings.providersPageDescription")}
       />
-      <SettingsNavigation />
       {!administrator ? (
         <Alert className="mt-6"><CircleAlert /><AlertTitle>{t("modelSettings.readOnly")}</AlertTitle><AlertDescription>{t("modelSettings.readOnlyDescription")}</AlertDescription></Alert>
       ) : null}
@@ -101,7 +100,7 @@ export function ModelsPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: configurationKey, queryFn: getModelConfiguration, refetchInterval: 10_000, retry: false });
-  const administrator = auth.user?.role === "admin";
+  const administrator = hasPermission(auth.user?.role, "models", "write");
   const refresh = async () => { await queryClient.invalidateQueries({ queryKey: configurationKey }); };
 
   if (query.isLoading) return <ModelsSkeleton />;
@@ -112,7 +111,6 @@ export function ModelsPage() {
   return (
     <section className="py-6 sm:py-8">
       <PageHeader title={t("modelSettings.title")} description={t("modelSettings.description")} />
-      <SettingsNavigation />
       {!administrator ? (
         <Alert className="mt-6"><CircleAlert /><AlertTitle>{t("modelSettings.readOnly")}</AlertTitle><AlertDescription>{t("modelSettings.readOnlyDescription")}</AlertDescription></Alert>
       ) : null}
@@ -149,7 +147,7 @@ export function GuardrailCatalogPage() {
   const [activationReview, setActivationReview] = useState<ModelConfigurationView | null>(null);
   const [selectedBindings, setSelectedBindings] = useState<CapabilityBindingId[]>([]);
   const dirty = Boolean(assignments && query.data?.draft && JSON.stringify(assignments.bindings) !== JSON.stringify(query.data.draft.assignments.bindings));
-  const administrator = auth.user?.role === "admin";
+  const administrator = hasPermission(auth.user?.role, "models", "write");
   const refresh = async () => { await queryClient.invalidateQueries({ queryKey: configurationKey }); };
   const saveAssignmentMutation = useMutation({
     mutationFn: async ({ target, modelId }: { target: ModelAssignmentTarget; modelId: string | null }) => saveModelAssignment(target, modelId, validationReceipts.current[`${target}:${modelId}`]),
@@ -243,7 +241,6 @@ export function GuardrailCatalogPage() {
         description={t("modelSettings.catalogPageDescription")}
 
       />
-      <SettingsNavigation />
 
       {!administrator ? (
         <Alert className="mt-6"><CircleAlert /><AlertTitle>{t("modelSettings.readOnly")}</AlertTitle><AlertDescription>{t("modelSettings.readOnlyDescription")}</AlertDescription></Alert>

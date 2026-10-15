@@ -1,3 +1,4 @@
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";

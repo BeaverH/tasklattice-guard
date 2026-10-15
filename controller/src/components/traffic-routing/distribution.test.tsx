@@ -5,6 +5,8 @@ import type { DistributionReport, TrafficRouter } from '@/lib/traffic-routing-ap
 import i18n from '@/i18n';
 import { DistributionOverview } from './distribution';
 
+const identity = vi.hoisted(() => ({ role: 'user' }));
+vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { role: identity.role } }) }));
 const { queryReport } = vi.hoisted(() => ({ queryReport: vi.fn() }));
 vi.mock('@/lib/traffic-routing-api', () => ({
   getRouterDistribution: queryReport,
@@ -21,7 +23,7 @@ const report: DistributionReport = {
 function mount() {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DistributionOverview router={router} endpoints={[{ id: 'gateway', name: 'Corporate Gateway' }]} /></QueryClientProvider>);
 }
-beforeEach(async () => { await i18n.changeLanguage('en'); queryReport.mockReset().mockResolvedValue(report); });
+beforeEach(async () => { identity.role = 'user'; await i18n.changeLanguage('en'); queryReport.mockReset().mockResolvedValue(report); });
 afterEach(cleanup);
 describe('Router Monitoring', () => {
   it('keeps assignment and completion denominators distinct and opens the detail drawer', async () => {
@@ -36,6 +38,14 @@ describe('Router Monitoring', () => {
     expect(within(drawer).getByRole('link', { name: 'View call logs' }).getAttribute('href')).toContain('routerRevision=1');
     fireEvent.click(within(drawer).getAllByRole('button', { name: 'Close', exact: true })[0]);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('hides tenant log links from platform administrators', async () => {
+    identity.role = 'admin'; mount();
+    expect(await screen.findByText('5.00%')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'View errors' })).toBeNull();
+    fireEvent.click(within(screen.getByRole('table', { name: 'Route distribution' })).getByRole('button', { name: 'Support', exact: true }));
+    expect(screen.getByRole('dialog', { name: 'Support' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'View call logs' })).toBeNull();
   });
   it('links the error metric to logs with the selected endpoint, revision, and report window', async () => {
     mount();

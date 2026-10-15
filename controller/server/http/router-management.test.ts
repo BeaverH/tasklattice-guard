@@ -19,19 +19,19 @@ const config = loadConfig({
 });
 
 describe("Router management HTTP routes", () => {
-  it("requires an administrator to delete a Router", async () => {
-    const app = appWith({ user: { id: "member-1", role: "user" } }, {});
+  it("rejects an unknown role before deleting a Router", async () => {
+    const app = appWith({ user: { id: "member-1", role: "unknown" } }, {});
 
     expect((await app.request("/api/v1/routers/router-1", {
       method: "DELETE",
     })).status).toBe(403);
   });
 
-  it("removes an unbound Router and distributes the new desired state", async () => {
+  it.each(["user"])("lets %s remove an unbound Router and distribute the new desired state", async role => {
     const remove = vi.fn().mockResolvedValue(undefined);
     const distributeDesiredState = vi.fn().mockResolvedValue({ desiredGeneration: 8, distributionStatus: "ready" });
     const app = appWith(
-      { user: { id: "admin-1", role: "admin" } },
+      { user: { id: "admin-1", role } },
       { trafficRouting: { remove } },
       distributeDesiredState,
     );

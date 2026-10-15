@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { isValidationRunning } from "./validation-run-progress";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
@@ -101,7 +102,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       toast.success(t("guardrailPackage.baselineSet", { version }));
     },
   });
-  const isAdmin = auth.user?.role === "admin";
+  const canManage = hasPermission(auth.user?.role, "guardrails", "write");
   const releaseOf = (version: GuardrailVersion) => versionReleaseState(version, validationRuns);
   const testVersion = useMutation({
     mutationFn: (version: string) => testGuardrailVersion(guardrailId, version),
@@ -140,13 +141,13 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {/* Testing a version runs its own suite against its signed Artifact, here. */}
-        {isAdmin ? <DropdownMenuItem disabled={!version.test_suite_count || releaseOf(version).state === "testing" || testVersion.isPending} onSelect={() => testVersion.mutate(version.version)}><FlaskConical />{t("immutableVersions.runTests")}</DropdownMenuItem> : null}
-        {isAdmin && version.status === "pending" ? <DropdownMenuItem variant="edit" disabled={releaseOf(version).state !== "releasable"} onSelect={() => setAction({ kind: "release", version: version.version })}><Rocket />{t("immutableVersions.release")}</DropdownMenuItem> : null}
+        {canManage ? <DropdownMenuItem disabled={!version.test_suite_count || releaseOf(version).state === "testing" || testVersion.isPending} onSelect={() => testVersion.mutate(version.version)}><FlaskConical />{t("immutableVersions.runTests")}</DropdownMenuItem> : null}
+        {canManage && version.status === "pending" ? <DropdownMenuItem variant="edit" disabled={releaseOf(version).state !== "releasable"} onSelect={() => setAction({ kind: "release", version: version.version })}><Rocket />{t("immutableVersions.release")}</DropdownMenuItem> : null}
         <DropdownMenuItem onSelect={() => setAction({ kind: "export", version: version.version })}><Download />{t("guardrails.exportEllipsis")}</DropdownMenuItem>
         {/* The runtime baseline is pinned; switching it is always explicit. */}
-        {isAdmin && isDefault ?
+        {canManage && isDefault ?
           <DropdownMenuItem variant="edit" disabled={baseline.data?.version === version.version || version.status !== "ready"} onSelect={() => setAction({ kind: "baseline", version: version.version })}><ShieldCheck />{t("guardrailPackage.setBaseline")}</DropdownMenuItem> : null}
-        {auth.user?.role === "admin" ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
+        {hasPermission(auth.user?.role, "guardrails", "write") ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
         : null}
       </DropdownMenuContent>
     </DropdownMenu></div>
@@ -163,7 +164,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       </header>
       {error ? <div className="space-y-3 p-5"><ErrorNotice error={error} /><Button variant="outline" onClick={onRetry}>{t("immutableVersions.retry")}</Button></div> : null}
       {loading ? <div className="space-y-3 p-5" aria-label={t("immutableVersions.loading")}><Skeleton className="h-12" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
-        : !versions.length ? !error && <EmptyState title={t("guardrails.noPublishedVersion")} description={t("guardrails.noPublishedVersionDescription")} action={auth.user?.role === "admin" ? <Button onClick={onOpenDraft}>{t("guardrails.openDraftRelease")}</Button> : undefined} />
+        : !versions.length ? !error && <EmptyState title={t("guardrails.noPublishedVersion")} description={t("guardrails.noPublishedVersionDescription")} action={hasPermission(auth.user?.role, "guardrails", "write") ? <Button onClick={onOpenDraft}>{t("guardrails.openDraftRelease")}</Button> : undefined} />
           : <>
             <Table>
               <TableHeader><TableRow><TableHead>{t("immutableVersions.version")}</TableHead><TableHead>{t("immutableVersions.status")}</TableHead><TableHead>{t("immutableVersions.published")}</TableHead><TableHead>{t("immutableVersions.policies")}</TableHead><TableHead>{t("immutableVersions.tests")}</TableHead><TableHead className="w-16"><span className="sr-only">{t("immutableVersions.actions")}</span></TableHead></TableRow></TableHeader>
@@ -214,12 +215,12 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
                       <TabsTrigger value="files">{t("immutableVersions.files")}<Badge variant="outline">{currentDetail.artifacts.length}</Badge></TabsTrigger>
                     </TabsList>
                     <TabsContent value="overview" className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-7 pt-6">
-                      <ReleasePanel version={selectedVersion} release={releaseOf(selectedVersion)} canManage={isAdmin} testing={testVersion.isPending}
+                      <ReleasePanel version={selectedVersion} release={releaseOf(selectedVersion)} canManage={canManage} testing={testVersion.isPending}
                         onTest={() => testVersion.mutate(selectedVersion.version)} onRelease={() => setAction({ kind: "release", version: selectedVersion.version })}
                         onOpenRun={onOpenValidation} />
                       <ImmutablePosture detail={currentDetail} />
                       <ReleaseEnvironment version={selectedVersion}
-                        checking={environmentCheck.isPending} error={environmentCheck.error} canCheck={auth.user?.role === "admin"}
+                        checking={environmentCheck.isPending} error={environmentCheck.error} canCheck={hasPermission(auth.user?.role, "guardrails", "write")}
                         onCheck={() => environmentCheck.mutate(selectedVersion.version)} />
                       {selectedVersion.provenance ? <ReleaseSource version={selectedVersion} /> : null}
                       <section className="space-y-3 border-t pt-6">

@@ -36,7 +36,7 @@ const endpoint = {
 describe("Endpoint management HTTP routes", () => {
   it.each(["f5-scan", "litellm-generic-guardrail"])("uses the incoming origin across all %s setup responses", async (adapter) => {
     const resource = { ...endpoint, adapter, credential: "tg_one_time" };
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, {
+    const app = appWith({ user: { id: "admin-1", role: "user" } }, {
       listEndpoints: vi.fn().mockResolvedValue([resource]),
       getEndpoint: vi.fn().mockResolvedValue(resource),
       createEndpoint: vi.fn().mockResolvedValue(resource),
@@ -79,7 +79,7 @@ describe("Endpoint management HTTP routes", () => {
   it("retains an explicit false default during creation and updates", async () => {
     const createEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter: "f5-scan", scanFlagOnlyDefault: false });
     const updateEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter: "f5-scan", scanFlagOnlyDefault: false });
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { createEndpoint, updateEndpoint });
+    const app = appWith({ user: { id: "admin-1", role: "user" } }, { createEndpoint, updateEndpoint });
     const created = await app.request("/api/v1/endpoints", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Scan", adapter: "f5-scan", scanFlagOnlyDefault: false }),
@@ -95,7 +95,7 @@ describe("Endpoint management HTTP routes", () => {
 
   it.each([{}, { scanFlagOnlyDefault: "false" }, { scanFlagOnlyDefault: null }, { scanFlagOnlyDefault: 0 }])("rejects invalid Scan default updates %j", async body => {
     const updateEndpoint = vi.fn();
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { updateEndpoint });
+    const app = appWith({ user: { id: "admin-1", role: "user" } }, { updateEndpoint });
     expect((await app.request("/api/v1/endpoints/endpoint-1", {
       method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
     })).status).toBe(400);
@@ -103,7 +103,7 @@ describe("Endpoint management HTTP routes", () => {
   });
   it.each(["litellm-generic-guardrail", "f5-scan"])("creates the supported Endpoint adapter %s", async (adapter) => {
     const createEndpoint = vi.fn().mockResolvedValue({ ...endpoint, adapter });
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { createEndpoint });
+    const app = appWith({ user: { id: "admin-1", role: "user" } }, { createEndpoint });
     const response = await app.request("/api/v1/endpoints", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Supported endpoint", adapter }),
@@ -114,7 +114,7 @@ describe("Endpoint management HTTP routes", () => {
 
   it.each(["generic-http-guard", "a2a-guard", "http", "a2a", "scan", "unknown"])("rejects unsupported Endpoint adapter %s before creating anything", async (adapter) => {
     const createEndpoint = vi.fn();
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { createEndpoint });
+    const app = appWith({ user: { id: "admin-1", role: "user" } }, { createEndpoint });
     const response = await app.request("/api/v1/endpoints", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Invalid endpoint", adapter }),
@@ -138,8 +138,8 @@ describe("Endpoint management HTTP routes", () => {
     expect(JSON.stringify(body)).not.toContain("sha256");
   });
 
-  it("requires an administrator for status and credential mutations", async () => {
-    const app = appWith({ user: { id: "member-1", role: "user" } }, {});
+  it("rejects unknown roles before status and credential mutations", async () => {
+    const app = appWith({ user: { id: "member-1", role: "unknown" } }, {});
 
     expect((await app.request("/api/v1/endpoints/endpoint-1", {
       method: "PATCH",
@@ -157,12 +157,12 @@ describe("Endpoint management HTTP routes", () => {
     })).status).toBe(403);
   });
 
-  it("forwards the administrator actor and route parameters to the service", async () => {
+  it.each(["user"])("forwards the %s actor and route parameters to the service", async role => {
     const updateEndpoint = vi.fn().mockResolvedValue({ ...endpoint, status: "disabled" });
     const rotateEndpointCredential = vi.fn().mockResolvedValue({ ...endpoint, credential: "tg_one_time" });
     const revokeEndpointCredential = vi.fn().mockResolvedValue(undefined);
     const app = appWith(
-      { user: { id: "admin-1", role: "admin" } },
+      { user: { id: "admin-1", role } },
       { updateEndpoint, rotateEndpointCredential, revokeEndpointCredential },
     );
 

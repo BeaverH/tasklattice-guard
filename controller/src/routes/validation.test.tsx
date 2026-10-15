@@ -49,7 +49,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "user" } }) }));
 
 const result: TestCaseResult = {
   case_id: "validation-case-1",

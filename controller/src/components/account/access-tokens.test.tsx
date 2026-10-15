@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccessTokens } from "./access-tokens";
 import i18n from "@/i18n";
-const state = vi.hoisted(() => ({ role: "admin", list: vi.fn(), create: vi.fn(), revoke: vi.fn() }));
+const state = vi.hoisted(() => ({ role: "user", list: vi.fn(), create: vi.fn(), revoke: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { id: "owner", role: state.role } }) }));
 vi.mock("@/lib/access-tokens-api", () => ({ listAccessTokens: state.list, createAccessToken: state.create, revokeAccessToken: state.revoke }));
 const token = { id: "token", name: "CI", prefix: "tlg_pat_abcdefg", permissions: { routers: "read" }, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), lastUsedAt: null, revokedAt: null };
@@ -12,7 +12,7 @@ function mount() {
   render(<QueryClientProvider client={client}><AccessTokens /></QueryClientProvider>);
   return client;
 }
-beforeEach(async () => { await i18n.changeLanguage("en"); vi.clearAllMocks(); state.role = "admin"; state.list.mockResolvedValue({ items: [] }); state.create.mockResolvedValue({ token, secret: "synthetic-one-time-secret" }); state.revoke.mockResolvedValue(undefined); });
+beforeEach(async () => { await i18n.changeLanguage("en"); vi.clearAllMocks(); state.role = "user"; state.list.mockResolvedValue({ items: [] }); state.create.mockResolvedValue({ token, secret: "synthetic-one-time-secret" }); state.revoke.mockResolvedValue(undefined); });
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 describe("Access token management", () => {
   it("updates the open drawer when the language changes and preserves form values", async () => {
@@ -72,10 +72,11 @@ describe("Access token management", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Create token" }));
     await screen.findByText("Token created");
   });
-  it("offers only read access for members and for runtime/audit modules", async () => {
+  it("offers users workflow write scopes while hiding platform scopes", async () => {
     state.role = "user"; mount();
     fireEvent.click(screen.getByRole("button", { name: "Create token" }));
-    expect(screen.queryAllByRole("option", { name: "Read and write", exact: true })).toEqual([]);
+    expect(within(screen.getByLabelText("Routers", { exact: true })).getByRole("option", { name: "Read and write" })).toBeTruthy();
+    for (const label of ["Models", "Runners", "Audit log"]) expect(screen.queryByLabelText(label, { exact: true })).toBeNull();
   });
   it("confirms revocation, shows errors, then updates the list after success", async () => {
     state.list.mockResolvedValue({ items: [token] }); state.revoke.mockRejectedValueOnce(new Error("Revoke failed")); mount();

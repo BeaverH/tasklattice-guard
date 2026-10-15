@@ -331,7 +331,8 @@ See [revision lifecycles](revision-lifecycle.md) for the exact constraints.
 ## Identity, secrets, and retained data
 
 - Better Auth owns human identity, sessions, passwords, and roles. Local
-  OrbStack credentials are `admin` / `Password`; production requires a strong
+  OrbStack accounts are `admin` / `password` (admin) and `user` / `password`
+  (user); production requires a strong
   bootstrap Secret. Bootstrap creates a missing identity without resetting an
   existing password.
 - Management API clients can use personal Access Tokens with module permissions,

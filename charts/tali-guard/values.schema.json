@@ -642,6 +642,50 @@
               "type": "boolean"
             }
           }
+        },
+        "bootstrapUser": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "existingSecret": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "passwordHash": {
+              "type": "string",
+              "pattern": "^$|^[0-9a-f]{32}:[0-9a-f]{128}$"
+            },
+            "passwordHashKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "emailKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "nameKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "passwordKey": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     }

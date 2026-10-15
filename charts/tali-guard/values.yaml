@@ -185,6 +185,10 @@ security:
     # changing these values never resets an existing account's password.
     passwordHash: ""
     name: Administrator
+  # Optional second bootstrap account with the user role (disabled by default).
+  # bootstrapUser:
+  #   enabled: true
+  #   existingSecret: guard-bootstrap-user # email, name, password or password-hash
   # Optional private CA for outbound HTTPS model/provider connections:
   # customCa:
   #   existingSecret: company-model-ca

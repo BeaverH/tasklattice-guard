@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { GuardrailsPage } from "./guardrails";
 
-const session = vi.hoisted(() => ({ role: "admin" }));
+const session = vi.hoisted(() => ({ role: "user" }));
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", exists: () => false } }),
@@ -17,7 +17,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: session.role } }) }));
 vi.mock("@/routes/create-guardrail-wizard", () => ({ CreateGuardrailWizard: ({ open }: { open: boolean }) => open ? <div role="dialog" aria-label="create-wizard" /> : null }));
 vi.mock("@/components/guardrail-import-sheet", () => ({ ImportGuardrailSheet: () => <div role="dialog" aria-label="import-sheet" />, EnvironmentStatus: () => null }));
-afterEach(() => { cleanup(); vi.restoreAllMocks(); session.role = "admin"; });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); session.role = "user"; });
 
 function mount() {
   vi.spyOn(api, "getGuardrails").mockResolvedValue({ items: [], count: 0 });

@@ -195,6 +195,21 @@ describe("Controller config", () => {
 
 
 describe("bootstrap passwordHash configuration", () => {
+  it("keeps the user bootstrap opt-in and accepts its separate credentials", async () => {
+    expect(loadConfig(requiredEnvironment).bootstrapUser).toBeNull();
+    const passwordHash = await hashPassword("password");
+    expect(loadConfig({ ...requiredEnvironment, CONTROLLER_BOOTSTRAP_USER_EMAIL: "user@tasklattice.local", CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH: passwordHash }).bootstrapUser)
+      .toEqual({ email: "user@tasklattice.local", passwordHash, name: "User" });
+  });
+  it.each([
+    { CONTROLLER_BOOTSTRAP_USER_EMAIL: "user@tasklattice.local" },
+    { CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH: "invalid" },
+    { CONTROLLER_BOOTSTRAP_USER_EMAIL: "user@tasklattice.local", CONTROLLER_BOOTSTRAP_USER_PASSWORD: "password" },
+    { CONTROLLER_BOOTSTRAP_USER_EMAIL: "user@tasklattice.local", CONTROLLER_BOOTSTRAP_USER_PASSWORD: "long-enough-password", CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH: "a".repeat(32) + ":" + "b".repeat(128) },
+    { CONTROLLER_BOOTSTRAP_USER_EMAIL: "ADMIN@tasklattice.local", CONTROLLER_BOOTSTRAP_USER_PASSWORD: "long-enough-password", CONTROLLER_BOOTSTRAP_ADMIN_EMAIL: "admin@tasklattice.local", CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD: "long-enough-password" },
+  ])("rejects invalid or conflicting bootstrap user configuration: %j", environment => {
+    expect(() => loadConfig({ ...requiredEnvironment, ...environment })).toThrow();
+  });
   it("accepts a hash without a plaintext password", async () => {
     const passwordHash = await hashPassword("Password");
     const config = loadConfig({ ...requiredEnvironment,

@@ -23,7 +23,7 @@ describe("HTTP log body and download", () => {
       direction: "incoming", decision: "transform", metadata: { runtimeLogCaptured: true,
         contentAvailable: true, originalContentOnly: originalOnly } } as unknown as RuntimeEvent;
     const entry = runtimeLogInteractions([event])[0]!.entries[0]!;
-    render(<RuntimeCheckpoint entry={entry} admin loadContent={async () => entry} />);
+    render(<RuntimeCheckpoint entry={entry} canViewContent loadContent={async () => entry} />);
     expect(Boolean(screen.queryByRole("button", { name: "logs.transformedContent" }))).toBe(!originalOnly);
     expect(screen.getByRole("button", { name: "logs.requestContent" })).toBeTruthy();
   });
@@ -83,12 +83,12 @@ describe("HTTP log body and download", () => {
     expect(new TextDecoder().decode(download.mock.calls[0]![0])).toBe("retained text");
   });
 
-  it("maps encrypted-content detail and keeps HTTP bodies and download controls hidden from non-admins", () => {
+  it("maps encrypted-content detail and keeps HTTP bodies and download controls hidden without content permission", () => {
     const event = { id: "event", requestId: "request", guardrailId: "guard", occurredAt: "2026-09-19", direction: "incoming", decision: "block", metadata: { runtimeLogCaptured: true, contentAvailable: true, httpRequest: request } } as unknown as RuntimeEvent;
     const entry = runtimeLogInteractions([event])[0]!.entries[0]!;
     expect(entry.http_request).toEqual(request);
     expect(entry.content_available).toBe(true);
-    render(<RuntimeCheckpoint entry={entry} admin={false} />);
+    render(<RuntimeCheckpoint entry={entry} canViewContent={false} />);
     expect(screen.queryByText(/你好/)).toBeNull();
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
   });

@@ -65,10 +65,9 @@ describe("Runner telemetry channel", () => {
 
 describe("runtime content opt-in", () => {
   it.each([
-    ["admin", "", false],
-    ["admin", "?includeContent=false", false],
-    ["admin", "?includeContent=true", true],
-    ["user", "?includeContent=true", false],
+    ["user", "", false],
+    ["user", "?includeContent=false", false],
+    ["user", "?includeContent=true", true],
   ])("%s reading %s only decrypts when explicitly authorized", async (role, query, includeContent) => {
     const getRuntimeEvent = vi.fn().mockResolvedValue({ id: "event", metadata: {} });
     const app = createHttpApp({ config,
@@ -87,7 +86,7 @@ describe("Security Event multi-select filter", () => {
   it.each([["critical,high", 200], ["unclassified,informational", 200], ["high,invalid", 400], ["", 400]])("validates the complete filter %s", async (severity, status) => {
     const queryRuntimeEvents = vi.fn().mockResolvedValue({ items: [], count: 0 });
     const app = createHttpApp({ config,
-      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "reader", role: "admin" } }) } } as unknown as ControllerAuth,
+      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "reader", role: "user" } }) } } as unknown as ControllerAuth,
       service: { queryRuntimeEvents } as unknown as ControlPlaneService,
       runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics,
     });
@@ -102,7 +101,7 @@ describe("runtime log outcome filter", () => {
   it.each([["allow", 200], ["block", 200], ["transform", 200], ["error", 200], ["timeout", 400]])("accepts enforcement outcomes and the error log filter: %s", async (outcome, status) => {
     const queryRuntimeEvents = vi.fn().mockResolvedValue({ items: [], count: 0 });
     const app = createHttpApp({ config,
-      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "reader", role: "admin" } }) } } as unknown as ControllerAuth,
+      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "reader", role: "user" } }) } } as unknown as ControllerAuth,
       service: { queryRuntimeEvents } as unknown as ControlPlaneService,
       runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics,
     });

@@ -6,7 +6,7 @@ import { GuardrailRowActions } from './guardrail-row-actions';
 import type { Guardrail } from '@/lib/api';
 
 
-vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { role: 'admin' } }) }));
+vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { role: 'user' } }) }));
 vi.mock('./guardrail-duplicate', () => ({ DuplicateGuardrailSheet: () => <div role="dialog" aria-label="Duplicate Guardrail" /> }));
 vi.mock('./guardrail-delete-sheet', () => ({ DeleteGuardrailSheet: () => <div role="dialog" aria-label="Delete Guardrail" /> }));
 vi.mock('@/lib/api', () => ({ getGuardrailDeletionImpact: vi.fn().mockResolvedValue({}), deleteGuardrail: vi.fn() }));

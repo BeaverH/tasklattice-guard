@@ -1,3 +1,4 @@
+import { hasPermission } from "../../shared/rbac";
 import { AdvancedPlayground } from "@/components/playground/advanced-playground";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -51,7 +52,7 @@ export function PlaygroundPage() {
     url.searchParams.set("mode", mode);
     window.history.replaceState(window.history.state, "", url);
   };
-  const canTestDraft = auth.user?.role === "admin";
+  const canTestDraft = hasPermission(auth.user?.role, "playground", "write");
   const guardrailsQuery = useQuery({
     queryKey: queryKeys.guardrails,
     queryFn: getGuardrails,
@@ -170,7 +171,7 @@ export function PlaygroundPage() {
               <p>{t("resourceList.testUnavailable")}</p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Button variant="outline" disabled={modelsQuery.isFetching} onClick={() => void modelsQuery.refetch()}>{t("resourceList.retryTesting")}</Button>
-                {canTestDraft ? <Button asChild variant="outline"><a href="/settings/models">{t("resourceList.configureChatModel")}</a></Button> : null}
+                {hasPermission(auth.user?.role, "models", "write") ? <Button asChild variant="outline"><a href="/settings/models">{t("resourceList.configureChatModel")}</a></Button> : null}
                 <PlaygroundReturnLink />
               </div>
             </InfoNotice>
