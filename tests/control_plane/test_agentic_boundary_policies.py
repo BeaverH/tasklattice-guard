@@ -65,7 +65,7 @@ def test_memory_check_cannot_silently_run_as_output():
 
 def test_generated_cases_keep_untrusted_source_with_query(default_local_baseline):
     cases = [case for case in default_local_baseline['cases'] if case['policyId']=='builtin-indirect-prompt-injection']
-    assert len(cases)==6
+    assert len(cases)==7
     case = next(c for c in cases if c['sourceCaseId']=='retrieval-query-override')
     assert case['targetSource']=='retrieved_content' and case['query']
     from runner.validator import _test_content_view

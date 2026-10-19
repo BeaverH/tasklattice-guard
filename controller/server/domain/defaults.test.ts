@@ -76,7 +76,7 @@ describe("Default Guardrail baseline", () => {
     const cases = generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, policies);
 
     expect(draft.policyBindings).toHaveLength(36);
-    expect(cases).toHaveLength(394);
+    expect(cases).toHaveLength(395);
     for (const [id, ruleCount] of [
       ["advanced-au-pii-protection", 47], ["prompt-injection-protection", 29],
       ["baseline-pii-protection", 14], ["pattern-matching", 82],

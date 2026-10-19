@@ -18,8 +18,8 @@ from .models import AgentPrompt, FrozenModel, Generation, GuardResult, Judgment
 class LocalIndirectGuard:
     """Real production Action evaluator, with an isolated test-owned binding.
 
-    This Action exists in Runner but is not selectable in the current catalog.
-    No Policy registration or Default modification is performed by these tests.
+    Retained for older experiments. Use DefaultGuard to measure the compiled
+    Default composition, including the memory policy and source-query context.
     """
     metadata = {"kind": "runner_action", "name": "GuardIndirectPromptAction", "version": "1.0.0",
                 "scope": "isolated_action_not_default_guardrail"}
@@ -41,7 +41,7 @@ class LocalIndirectGuard:
             proposed_action="block", plan=plan, binding=NeMoActionBinding(id="scenario-indirect",
                 capability="indirect_prompt_injection", contract_ref="test.indirect-action.v1", phases=("input",), on_unsafe="block"))
         result = await IndirectPromptInjectionActionProvider().execute(request)
-        decision = {"matched": "block", "not_matched": "allow", "unknown": "error", "error": "error"}[result.verdict]
+        decision = {"matched": "block", "not_matched": "allow", "unknown": "unknown", "error": "error"}[result.verdict]
         return GuardResult(decision=decision, text=result.content, evidence={"verdict": result.verdict,
             "reason": result.reason, "source": source, "stage": stage, "model_calls": result.usage.model_invocations,
             "finding_ids": [f.rule_id for f in result.findings]})

@@ -3,11 +3,11 @@ kind: Policy
 metadata:
   id: builtin-indirect-prompt-injection
   name: Indirect prompt injection
-  description: Checks untrusted retrieved documents and tool results for explicit
-    instruction overrides, forged roles and prompt extraction. Local pattern coverage;
-    not a general semantic detector.
+  description: Checks complete untrusted retrieved documents and tool results for explicit
+    instruction and task overrides, forged roles and prompt extraction. Encoded inspection
+    is bounded and reports unknown on overflow. Local patterns, not a semantic classifier.
   source: built_in
-  version: 1.0.0
+  version: 1.0.1
   tags:
   - namespace: protection
     value: attacks_and_abuse

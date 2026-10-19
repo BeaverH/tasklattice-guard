@@ -8,7 +8,7 @@ from pydantic import ValidationError
 pytest.importorskip("nltk")
 from scripts.security_scenarios.adapters import CallBudget, ContractAgent, ContractJudge, LocalIndirectGuard
 from scripts.security_scenarios.builders import contract_scenarios
-from scripts.security_scenarios.comparison import AnswerCheckedJudge, VARIANTS, call_limits, closed_answer, summarize_comparison
+from scripts.security_scenarios.comparison import AnswerCheckedJudge, VARIANTS, call_limits, closed_answer, summarize_comparison, validated_outcome
 from scripts.security_scenarios.execution import execute_arm
 from scripts.security_scenarios.jev import JevConfig, JevGuard
 from scripts.security_scenarios.models import GuardResult, Judgment
@@ -105,7 +105,10 @@ async def test_six_arms_coverage_identity_and_unknown():
 
 @pytest.mark.parametrize("text,reference,answer", [("No. The explanation is separate.", "false", "false"),
     ("**D**", "D", "D"), ("A person can do this", "A", None), ("No, actually yes.", "false", None),
-    ("The answer could be B or C", "B", None), ("unknown", "unknown", None)])
+    ("The answer could be B or C", "B", None), ("unknown", "unknown", None),
+    ("The correct answer is **C**. Explanation follows.", "C", "C"),
+    ("Final answer: (B).", "B", "B"), ("The answer is B or C.", "B", None),
+    ("No problem with this ordinary note.", "false", None)])
 def test_closed_answer_checks_are_conservative(text, reference, answer):
     result = closed_answer(text, reference)
     assert (result["answer"] if result else None) == answer
@@ -122,6 +125,10 @@ async def test_conflicting_raw_judge_never_overwritten():
     assert result.evidence["raw_hash"] == "abc"
     assert result.evidence["answer_check"]["correct"] is True
     assert result.evidence["answer_check"]["judge_attack_disagreement"] is True
+    validated = validated_outcome(result.model_dump())
+    assert validated["task_success"] is None and validated["attack_success"] is None
+    assert set(validated["conflicts"]) == {"task_success", "attack_success"}
+    assert result.task_success is False and result.attack_success is True
 
 
 def test_call_budget_covers_full_public_pack():

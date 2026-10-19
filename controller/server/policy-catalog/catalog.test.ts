@@ -31,7 +31,7 @@ describe("Policy catalog", () => {
   it("documents every built-in Policy and separates implementation lineage from industry context", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list().filter(policy => policy.source === "built_in");
-    expect(policies).toHaveLength(71);
+    expect(policies).toHaveLength(73);
     for (const policy of policies) {
       expect(policy.compliance?.policy_version, policy.id).toBe(policy.version);
       expect(policy.compliance?.provenance.en, policy.id).toBeTruthy();
@@ -42,8 +42,8 @@ describe("Policy catalog", () => {
         expect(entry.rule_ids.every(id => ids.has(id)), policy.id).toBe(true);
       }
     }
-    expect(policies.filter(policy => policy.compliance).length).toBe(71);
-    expect(policies.filter(policy => policy.compliance?.references.length).length).toBe(61);
+    expect(policies.filter(policy => policy.compliance).length).toBe(policies.length);
+    expect(policies.filter(policy => policy.compliance?.references.length).length).toBe(62);
     expect(catalog.get("builtin-content-safety")?.compliance?.references[0]?.url).toContain("nist.gov");
     expect(catalog.get("filter-denied-medical-advice")?.compliance).toMatchObject({
       references: [expect.objectContaining({ url: expect.stringContaining("who.int") })],
@@ -104,7 +104,7 @@ describe("Policy catalog", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list();
 
-    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(71);
+    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(73);
     expect(new Set(policies.map((policy) => policy.id)).size).toBe(policies.length);
     expect(catalog.get("builtin-content-safety")).toMatchObject({ rails: ["input", "output"], test_count: 2 });
     expect(catalog.get("competitor-mention-detection")).toMatchObject({
