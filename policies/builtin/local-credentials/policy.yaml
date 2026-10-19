@@ -4,9 +4,9 @@ kind: Policy
 metadata:
   id: local-credentials
   name: Passwords & API credentials
-  description: Reject recognizable passwords and API credentials on input and output. No model is required.
+  description: Reject recognizable passwords, API credentials, bearer tokens, private key headers, and labelled hex secrets on input and output. No model is required.
   source: built_in
-  version: 2.0.0
+  version: 2.1.0
   tags:
   - namespace: protection
     value: privacy
@@ -29,7 +29,11 @@ rules:
 - rules/credentials-api-keys-github_token.yaml
 - rules/credentials-api-keys-slack_token.yaml
 - rules/credentials-api-keys-generic_api_key.yaml
+- rules/credential-bearer-token.yaml
+- rules/credential-private-key-header.yaml
+- rules/credential-hex-token.yaml
 - rules/credential-password.yaml
 tests:
 - tests/acceptance.yaml
 - tests/regression.yaml
+- tests/credential-patterns.yaml

@@ -14,7 +14,7 @@ export const rolePermissions: Readonly<Record<AccountRole, Readonly<Partial<Reco
   },
   user: {
     guardrails: "write", policies: "write", playground: "write", routers: "write", endpoints: "write",
-    runtime: "read",
+    runtime: "read", runners: "read",
   },
 };
 
@@ -35,14 +35,18 @@ export function isPlatformAdministrator(role: string | null | undefined): boolea
   return hasPermission(role, "settings", "write");
 }
 
-export function roleHome(role: string | null | undefined): "/settings/health" | "/guardrails" {
-  return isPlatformAdministrator(role) ? "/settings/health" : "/guardrails";
+export function roleHome(role: string | null | undefined): "/settings/providers" | "/guardrails" {
+  return isPlatformAdministrator(role) ? "/settings/providers" : "/guardrails";
 }
 
 export function pagePermission(pathname: string): { resource: PermissionResource; action: AccessAction } | null {
+  const path = pathname.replace(/\/$/, "");
+  if (["/settings", "/settings/health", "/settings/runner", "/settings/version"].includes(path)) {
+    return { resource: "runners", action: "read" };
+  }
   const routes: ReadonlyArray<readonly [string, PermissionResource, AccessAction]> = [
     ["/settings", "settings", "read"], ["/access", "users", "read"],
-    ["/logs", "runtime", "read"], ["/audit-log", "audit", "read"],
+    ["/billing", "runtime", "read"], ["/logs", "runtime", "read"], ["/audit-log", "audit", "read"],
     // Authoring workspaces belong to users; platform configuration retains
     // read access to business metadata without opening these workspaces.
     ["/guardrails", "guardrails", "write"], ["/policy-library", "policies", "write"],

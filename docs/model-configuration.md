@@ -1,9 +1,10 @@
 # Model Configuration
 
-The Default Guardrail runs locally without a detection-model setup. Configure
-models when your selected Policies require model-backed checks. Provider
-connectivity, model callability, and assignment to a protection check are
-separate steps.
+The Default Guardrail requires validated `jailbreak.input`, `content_safety.input`,
+and `content_safety.output` model bindings, followed by its local checks. Missing
+bindings prevent preparation; model failures fail closed. Provider connectivity,
+model callability, assignment to a protection check, and full Default validation
+are separate steps. See [Default requirements](guardrail-policies.md).
 
 ## Providers, Models, and Guardrail Catalog
 

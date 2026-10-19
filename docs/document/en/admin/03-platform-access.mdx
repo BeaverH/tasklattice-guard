@@ -17,13 +17,12 @@ Platform management controls both who can change configuration and how services 
 
 Users see Guardrail Design, Integration and Runtime observability, and land on Guardrails. Runtime logs contain requests, responses, enforcement results and execution steps, and belong to the tenant workflow. Captured request and response bodies load on demand; existing capture levels, redaction and retention rules still apply. Activity audit records describe who changed configuration and belong to the platform. Users cannot access audit records through pages, APIs or personal Tokens.
 
-Administrators land on Health and see three platform groups:
+Administrators land on Providers and see two platform groups:
 
-- Platform operations: Health, Runner and Version, for environment operations and software status.
 - Models & detection: Providers, Models (including pricing) and Guardrail Catalog, for shared model services and detector bindings.
 - Access & audit: Users & access and Audit log, for account authority and configuration activity review.
 
-Cross-page Settings tabs are removed; Models retains its local model/pricing tabs. Both roles retain their account, password, personal Access Tokens and documentation. Direct access to the other role's workspace shows an access explanation, and corresponding APIs deny access.
+Users open Settings from the sidebar footer to view Health, Runner and Version at their existing `/settings/*` paths. These operational pages and APIs are readable by users; changing Runner capacity or removing instances still requires an administrator. Runtime observability includes Billing, where users select a Guardrail to inspect its model usage and estimated costs. Old Guardrail usage links redirect to Billing; the Guardrail list no longer includes a monthly cost column. Models retains its local model/pricing tabs. Both roles retain their account, password, personal Access Tokens and documentation. Direct access to the other role's workspace shows an access explanation, and corresponding APIs deny access.
 
 Design workflows read a reduced model-capability projection without Provider addresses, credential hints, control-plane model configuration or test bodies.
 

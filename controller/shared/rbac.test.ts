@@ -8,7 +8,7 @@ describe("Account RBAC", () => {
     expect(hasPermission("user", resource, "read")).toBe(true);
     expect(hasPermission("user", resource, "write")).toBe(true);
   });
-  it.each(["models", "runners", "audit", "settings", "users"] as const)("reserves %s for administrators", resource => {
+  it.each(["models", "audit", "settings", "users"] as const)("reserves %s for administrators", resource => {
     expect(hasPermission("user", resource)).toBe(false);
     expect(hasPermission("user", resource, "write")).toBe(false);
     expect(hasPermission("admin", resource)).toBe(true);
@@ -16,13 +16,20 @@ describe("Account RBAC", () => {
   it.each(["guardrails", "policies", "playground", "routers", "endpoints"] as const)("prevents admin from configuring %s", resource => {
     expect(hasPermission("admin", resource, "write")).toBe(false);
   });
-  it.each(["/guardrails", "/guardrails/id", "/playground", "/policy-library", "/integration/routers", "/integration/routers/id", "/integration/endpoints", "/logs"])("reserves the %s workspace for users", path => {
+  it.each(["/guardrails", "/guardrails/id", "/playground", "/policy-library", "/integration/routers", "/integration/routers/id", "/integration/endpoints", "/logs", "/billing"])("reserves the %s workspace for users", path => {
     const permission = pagePermission(path)!;
     expect(hasPermission("admin", permission.resource, permission.action)).toBe(false);
     expect(hasPermission("user", permission.resource, permission.action)).toBe(true);
   });
+  it("allows operational reads without granting platform writes", () => {
+    expect(hasPermission("user", "runners", "read")).toBe(true);
+    expect(hasPermission("user", "runners", "write")).toBe(false);
+    for (const path of ["/settings", "/settings/health", "/settings/runner", "/settings/version", "/settings/runner/"]) {
+      expect(pagePermission(path)).toEqual({ resource: "runners", action: "read" });
+    }
+  });
   it("lands each role in its own workspace", () => {
-    expect(roleHome("admin")).toBe("/settings/health");
+    expect(roleHome("admin")).toBe("/settings/providers");
     expect(roleHome("user")).toBe("/guardrails");
   });
   it.each([undefined, null, "", "member", "viewer", "user,admin"])("denies unknown role %s", role => {
@@ -33,7 +40,7 @@ describe("Account RBAC", () => {
     expect(hasPermission("user", "runtime", "write")).toBe(false);
     expect(hasPermission("admin", "runtime")).toBe(false);
   });
-  it.each(["/settings", "/settings/models", "/settings/models/", "/settings/guardrail-catalog", "/access", "/audit-log"])("protects direct page access to %s", path => {
+  it.each(["/settings/models", "/settings/models/", "/settings/guardrail-catalog", "/access", "/audit-log"])("protects direct page access to %s", path => {
     const permission = pagePermission(path)!;
     expect(hasPermission("user", permission.resource, permission.action)).toBe(false);
   });

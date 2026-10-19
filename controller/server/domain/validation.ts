@@ -51,7 +51,7 @@ export function generatedTestCases(
         && (!test.covered_rule_ids.length || test.covered_rule_ids.some(id => enabledRules.has(id) || policy.definition!.rules.some(r => r.expand && enabledRules.has(r.id) && id.startsWith(`${r.id}/`)))))
         .map(test => ({ id: generatedCaseId(policy.id, test.id), guardrailId, name: test.name, policyId: policy.id, phase: test.phase, content: test.content,
           expectedDecision: test.expected_decision, origin: "generated" as const, trustedInstruction: test.context?.trusted_instruction ?? "",
-          targetSource: test.phase === "output" ? "model_output" as const : "user_input" as const, query: test.context?.query ?? "", groundingSources: test.context?.grounding_sources ?? [],
+          targetSource: test.context?.target_source ?? (test.phase === "output" ? "model_output" as const : "user_input" as const), query: test.context?.query ?? "", groundingSources: test.context?.grounding_sources ?? [],
           expectedReasoningResult: test.context?.expected_reasoning_result ?? null, caseType: test.kind, required: test.required, expectedFailure: null, concurrencyGroup: test.group || null,
           sourcePolicyId: policy.id, sourcePolicyVersion: policy.version, sourceCaseId: test.id, coveredRuleIds: test.covered_rule_ids,
         }));
@@ -88,7 +88,7 @@ export function generatedTestCases(
         expectedDecision: item.expected_decision,
         origin: "generated" as const,
         trustedInstruction: materialize(item.context?.trusted_instruction ?? "", binding.parameterValues),
-        targetSource: item.phase === "output" ? "model_output" as const : "user_input" as const,
+        targetSource: item.context?.target_source ?? (item.phase === "output" ? "model_output" as const : "user_input" as const),
         query: materialize(item.context?.query ?? "", binding.parameterValues),
         groundingSources: (item.context?.grounding_sources ?? []).map(source => materialize(source, binding.parameterValues)),
         expectedReasoningResult: item.context?.expected_reasoning_result ?? null,

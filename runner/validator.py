@@ -455,8 +455,8 @@ def _test_content_view(case: dict[str, Any], phase: str, content: str) -> Conten
     )
     blocks.append(GuardContentBlock(
         id=f"{case_id}:target", text=content,
-        role="model_output" if phase == "output" else "user_input",
-        trust="untrusted", source="model_output" if phase == "output" else "user_input",
+        role="model_output" if phase == "output" else _string(case.get("targetSource")) or "user_input",
+        trust="untrusted", source="model_output" if phase == "output" else _string(case.get("targetSource")) or "user_input",
         qualifiers=("guard_content",),
     ))
     return content_view(tuple(blocks), blocks[-1].id)

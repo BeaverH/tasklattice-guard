@@ -43,7 +43,7 @@ vi.mock("react-i18next", () => ({
       "nav.guardrailDesign": "Guardrail Design",
       "nav.guardrails": "Guardrails",
       "nav.platform": "Platform",
-      "nav.platformOperations": "Platform operations",
+      "nav.settings": "Settings",
       "nav.modelServices": "Models & detection",
       "nav.accessAudit": "Access & audit",
       "nav.runtimeObservations": "Observability",
@@ -58,14 +58,14 @@ describe("ControlPlaneLayout", () => {
 
   it("lands administrators in Platform", () => {
     render(<ControlPlaneLayout />);
-    expect(screen.getByText("Redirect /settings/health")).toBeTruthy();
+    expect(screen.getByText("Redirect /settings/providers")).toBeTruthy();
     expect(screen.queryByText("Page content")).toBeNull();
   });
 
-  it.each(["/guardrails", "/guardrails/id", "/playground", "/policy-library", "/integration/routers", "/integration/endpoints", "/logs"])("prevents administrators from mounting %s", path => {
+  it.each(["/guardrails", "/guardrails/id", "/playground", "/policy-library", "/integration/routers", "/integration/endpoints", "/logs", "/billing"])("prevents administrators from mounting %s", path => {
     pathname = path; render(<ControlPlaneLayout />);
     expect(screen.queryByText("Page content")).toBeNull();
-    expect(screen.getByRole("link", { name: "Platform" }).getAttribute("href")).toBe("/settings/health");
+    expect(screen.getByRole("link", { name: "Platform" }).getAttribute("href")).toBe("/settings/providers");
   });
 
   it("starts sidebar-page breadcrumbs at the navigation group", () => {
@@ -77,13 +77,13 @@ describe("ControlPlaneLayout", () => {
     expect(screen.queryByText("TaskLattice Guard")).toBeNull();
   });
 
-  it.each(["/settings", "/settings/models", "/settings/runner", "/settings/guardrail-catalog", "/access", "/audit-log"])("prevents a user from mounting %s", path => {
+  it.each(["/settings/models", "/settings/guardrail-catalog", "/access", "/audit-log"])("prevents a user from mounting %s", path => {
     role = "user"; pathname = path;
     render(<ControlPlaneLayout />);
     expect(screen.queryByText("Page content")).toBeNull();
     expect(screen.getByRole("link", { name: "Guardrails" }).getAttribute("href")).toBe("/guardrails");
   });
-  it.each(["/guardrails", "/playground", "/policy-library", "/integration/routers", "/integration/endpoints", "/logs", "/account"])("allows a user to mount %s", path => {
+  it.each(["/guardrails", "/playground", "/policy-library", "/integration/routers", "/integration/endpoints", "/logs", "/billing", "/account", "/settings", "/settings/health", "/settings/runner", "/settings/version"])("allows a user to mount %s", path => {
     role = "user"; pathname = path; render(<ControlPlaneLayout />);
     expect(screen.getByText("Page content")).toBeTruthy();
   });
@@ -97,7 +97,7 @@ describe("ControlPlaneLayout", () => {
     pathname = "/settings/runner";
     render(<ControlPlaneLayout />);
 
-    expect(screen.getByText("Platform operations")).toBeTruthy();
+    expect(screen.getByText("Settings")).toBeTruthy();
     expect(screen.getByText("Runner")).toBeTruthy();
   });
 

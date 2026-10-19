@@ -1,4 +1,9 @@
 export const declarativePolicyEn = {
+  "targetSource": "Content source",
+  "user_input": "User input",
+  "retrieved_content": "Retrieved content or memory",
+  "tool_output": "Tool output or memory write candidate",
+  "boundaryHint": "Checks external content before the model uses it. Select the actual content source in test cases. Local rules detect explicit instruction overrides; they do not verify facts stored in memory.",
   "modelCalls": "Model calls",
   "basics": "Basics",
   "basicsHint": "Name the Policy and identify who maintains it.",
@@ -100,6 +105,11 @@ export const declarativePolicyEn = {
   "detectorParameters": "Detector parameters"
 };
 export const declarativePolicyZh = {
+  "targetSource": "被检查内容来源",
+  "user_input": "用户输入",
+  "retrieved_content": "检索内容或记忆",
+  "tool_output": "工具输出或待写入记忆",
+  "boundaryHint": "在模型使用外部内容前执行检查。测试用例需选择实际内容来源。本地规则检测明确的指令操控，不验证记忆中的事实是否正确。",
   "modelCalls": "模型调用",
   "basics": "基本信息",
   "basicsHint": "定义 Policy 名称、用途和维护人。",

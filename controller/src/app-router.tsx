@@ -1,3 +1,4 @@
+import { runtimeMetricKeys, type RuntimeMetricKey } from "@/features/runtime-metrics";
 import { runtimeLogOutcomes, type RuntimeLogOutcome } from "../shared/runtime-outcome";
 import { auditLogSearch } from "../shared/audit-query";
 import { selectedSeverities } from "../shared/security-severity";
@@ -7,6 +8,7 @@ import { ControlPlaneLayout } from "@/routes/layout";
 import { GuardrailDetailPage, GuardrailsPage } from "@/routes/guardrails";
 import { RoutersPage } from "@/routes/routers";
 import { RouterDetailPage } from "@/routes/router-detail";
+import { BillingPage } from "@/routes/billing";
 import { LogsPage } from "@/routes/logs";
 import { EndpointsPage } from "@/routes/endpoints";
 import { PlaygroundPage } from "@/routes/playground";
@@ -29,15 +31,24 @@ const rootRoute = createRootRoute({ component: ControlPlaneLayout });
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => <Navigate to="/dashboard" replace /> });
 const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: "/dashboard", component: DashboardPage });
 const guardrailsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/guardrails", component: GuardrailsPage });
-const guardrailDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/guardrails/$guardrailId", validateSearch: (search: Record<string, unknown>): { tab?: string; version?: string; window?: "1h" | "24h" | "7d" | "15d" | "30d"; severity?: string; pageSize?: 25 | 50 } => ({
+const guardrailDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/guardrails/$guardrailId", validateSearch: (search: Record<string, unknown>): { tab?: string; version?: string; window?: "1h" | "24h" | "7d" | "15d" | "30d"; severity?: string; pageSize?: 25 | 50; metric?: RuntimeMetricKey } => ({
   version: typeof search.version === "string" ? search.version : undefined,
   tab: ["runtime", "event", "immutable", "testing", "draft", "usage"].includes(String(search.tab)) ? String(search.tab) : undefined,
   window: ["1h", "24h", "7d", "15d", "30d"].includes(String(search.window)) ? search.window as "1h" | "24h" | "7d" | "15d" | "30d" : undefined,
+  metric: runtimeMetricKeys.includes(search.metric as RuntimeMetricKey) ? search.metric as RuntimeMetricKey : undefined,
   severity: selectedSeverities(search.severity).join(",") || undefined,
   pageSize: Number(search.pageSize) === 50 ? 50 : undefined,
-}), component: GuardrailDetailPage });
+}), beforeLoad: ({ params, search }) => {
+  if (search.tab === "usage") throw redirect({ to: "/billing", search: { guardrail: params.guardrailId }, replace: true });
+}, component: GuardrailDetailPage });
 const policyLibraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/policy-library", validateSearch: policyLibrarySearch, component: PolicyLibraryPage });
 const guardrailSearch = (search: Record<string, unknown>) => ({ guardrail: typeof search.guardrail === "string" ? search.guardrail : undefined });
+const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/billing", validateSearch: guardrailSearch, component: BillingRoutePage });
+function BillingRoutePage() {
+  const { guardrail } = billingRoute.useSearch();
+  const navigate = billingRoute.useNavigate();
+  return <BillingPage guardrailId={guardrail} onGuardrailChange={id => void navigate({ search: { guardrail: id } })} />;
+}
 const playgroundSearch = (search: Record<string, unknown>): { guardrail?: string; target?: "draft"; version?: string; mode?: "advanced"; router?: string; endpoint?: string } => {
   return {
     ...guardrailSearch(search),
@@ -125,6 +136,7 @@ export const routeTree = rootRoute.addChildren([
   routerDetailRoute,
   endpointsRoute,
   logsRoute,
+  billingRoute,
   auditLogRoute,
   usersRoute,
   accountRoute.addChildren([accountSecurityRoute, accountTokensRoute, accountGeneralRoute]),

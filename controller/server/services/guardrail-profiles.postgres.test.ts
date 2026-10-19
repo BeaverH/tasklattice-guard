@@ -24,6 +24,7 @@ describe.skipIf(!url)("Database-backed Guardrail Profiles", () => {
     await pool.query(readFileSync(new URL("../db/migrations/0013_guardrail_profiles.sql", import.meta.url), "utf8"));
     await pool.query(readFileSync(new URL("../db/migrations/0015_china_mainland_guardrail_profiles.sql", import.meta.url), "utf8"));
     await pool.query(readFileSync(new URL("../db/migrations/0016_retire_unverified_singapore_financial_policies.sql", import.meta.url), "utf8"));
+    await pool.query(readFileSync(new URL("../db/migrations/0042_credential_policy_profile_version.sql", import.meta.url), "utf8"));
   });
   afterAll(async () => {
     await pool?.end();
@@ -37,7 +38,7 @@ describe.skipIf(!url)("Database-backed Guardrail Profiles", () => {
     expect(profiles.every(profile => profile.isDefault)).toBe(true);
     for (const profile of profiles) expect(expandProtectionPreset(profile, catalog.list()).map(binding => binding.policyId)).toEqual(profile.policies.map(policy => policy.policyId));
     const singapore = profiles.find(profile => profile.id === "singapore-financial-assistant")!;
-    expect(singapore.version).toBe("1.0.1");
+    expect(singapore.version).toBe("1.0.2");
     expect(singapore.policies.some(policy => policy.policyId === "singapore-financial-conduct")).toBe(false);
     expect(singapore.limitations.join(" ")).toContain("No MAS-specific control");
   });

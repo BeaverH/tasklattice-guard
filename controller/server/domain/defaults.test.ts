@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
 import { defaultGuardrailDraft, DEFAULT_GUARDRAIL_ID } from "./defaults.js";
 import { buildGuardrailPlan } from "./guardrail-plan.js";
+import { isModelIndependent, publishedProtectionCoverage } from "./protection-readiness.js";
 import { generatedTestCases } from "./validation.js";
 
 const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
 const expectedPolicyIds = [
+  "builtin-indirect-prompt-injection",
+  "builtin-memory-poisoning",
+  "builtin-jailbreak",
+  "builtin-content-safety",
   "filter-denied-insults",
   "filter-harm-toxic-abuse",
   "filter-harmful-violence",
@@ -44,24 +49,24 @@ const expectedPolicyIds = [
 ];
 
 describe("Default Guardrail baseline", () => {
-  it("requires no external Model and explicitly buffers complete output for PII transformations", () => {
+  it("requires input jailbreak and input/output safety models, while buffering complete output", () => {
     const draft = defaultGuardrailDraft(policies);
+    const plan = buildGuardrailPlan({ guardrailId: DEFAULT_GUARDRAIL_ID,
+      guardrailVersion: "20261019-000000.001Z", draft, policies });
+    const coverage = publishedProtectionCoverage(plan)!;
     expect(draft.outputDelivery).toBe("full_buffered");
-    for (const binding of draft.policyBindings) {
-      const policy = policies.find((item) => item.id === binding.policyId)!;
-      expect(policy.protection.execution).toBe("local");
-      expect(policy.protection.modelCapabilities).toEqual([]);
-    }
+    expect(coverage.requiredModelBindings).toEqual(["jailbreak.input", "content_safety.input", "content_safety.output"]);
+    expect(coverage.hasUnknownDependencies).toBe(false);
+    expect(isModelIndependent(coverage)).toBe(false);
   });
 
-  it("rejects a catalog change that introduces a Model or an unverifiable custom flow into Default", () => {
-    for (const change of ["model", "local_then_model", "custom", "hidden-model", "flow"] as const) {
+  it("rejects an unverifiable custom flow in Default", () => {
+    for (const change of ["custom", "flow"] as const) {
       const catalog = structuredClone(policies);
       const policy = catalog.find((item) => item.id === "local-government-identifiers")!;
-      if (change === "hidden-model") policy.protection.modelCapabilities = ["content_safety"];
-      else if (change === "flow") policy.rules[0]!.implementation.execution = "programmable";
+      if (change === "flow") policy.rules[0]!.implementation.execution = "programmable";
       else policy.protection.execution = change;
-      expect(() => defaultGuardrailDraft(catalog)).toThrow(/must execute locally without a Model/);
+      expect(() => defaultGuardrailDraft(catalog)).toThrow(/verified local or platform Model/);
     }
   });
 
@@ -70,8 +75,8 @@ describe("Default Guardrail baseline", () => {
     const draft = defaultGuardrailDraft(policies);
     const cases = generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, policies);
 
-    expect(draft.policyBindings).toHaveLength(32);
-    expect(cases).toHaveLength(336);
+    expect(draft.policyBindings).toHaveLength(36);
+    expect(cases).toHaveLength(394);
     for (const [id, ruleCount] of [
       ["advanced-au-pii-protection", 47], ["prompt-injection-protection", 29],
       ["baseline-pii-protection", 14], ["pattern-matching", 82],
@@ -168,7 +173,7 @@ describe("Default Guardrail baseline", () => {
       .toThrow("Default Guardrail Policy local-government-identifiers has no Rules");
   });
 
-  it("compiles locally while retaining every Policy binding for runtime inspection", () => {
+  it("compiles model checks before local transformations while retaining every Policy binding", () => {
     const draft = defaultGuardrailDraft(policies);
     const plan = buildGuardrailPlan({
       guardrailId: DEFAULT_GUARDRAIL_ID,
@@ -180,13 +185,20 @@ describe("Default Guardrail baseline", () => {
 
     expect(steps).toHaveLength(expectedPolicyIds.length);
     expect(steps).toEqual(draft.policyBindings.map((binding) => expect.objectContaining({
-      capability: "builtin_content_filter",
-      contract_ref: "tali.guard.content-filter.rules.v1",
+      capability: binding.policyId === "builtin-jailbreak" ? "jailbreak"
+        : binding.policyId === "builtin-indirect-prompt-injection" ? "indirect_prompt_injection"
+        : binding.policyId === "builtin-memory-poisoning" ? "memory_poisoning"
+        : binding.policyId === "builtin-content-safety" ? "content_safety" : "builtin_content_filter",
+      contract_ref: binding.policyId === "builtin-jailbreak" ? "tali.guard.jailbreak.v1"
+        : binding.policyId === "builtin-indirect-prompt-injection" ? "tali.guard.indirect-prompt-injection.v1"
+        : binding.policyId === "builtin-memory-poisoning" ? "tali.guard.memory-poisoning.v1"
+        : binding.policyId === "builtin-content-safety" ? "tali.guard.content-safety.v1" : "tali.guard.content-filter.rules.v1",
       phases: binding.enabledRails,
     })));
     steps.forEach((step, index) => {
       const binding = draft.policyBindings[index]!;
       const parameters = Object.fromEntries(step.parameters);
+      if (step.capability !== "builtin_content_filter") return;
       expect(parameters.policy_ids).toBe(binding.policyId);
       expect(JSON.parse(parameters.enabled_rules_json!)).toEqual({ [binding.policyId]: binding.enabledRuleIds });
       expect(parameters).not.toHaveProperty("custom_rules_json");

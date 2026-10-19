@@ -20,7 +20,7 @@ _ATTACK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "instruction_override",
         re.compile(
-            r"\b(?:ignore|disregard|forget|override)\s+(?:all\s+)?"
+            r"\b(?:ignore|disregard|forget|override)\s+(?:(?:all|the)\s+)?"
             r"(?:(?:previous|prior|above)(?:\s+(?:system|developer|user))?|"
             r"system|developer|user)\s+"
             r"(?:instructions?|rules?|messages?|prompts?)\b",

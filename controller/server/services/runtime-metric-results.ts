@@ -271,6 +271,7 @@ export function assembleMetrics(
       guardrail: distribution("guardrail")
         .filter((r) => r.key)
         .map((r) => ({
+          guardrailId: String(r.key),
           name: guardNames.get(r.key) ?? r.key,
           points: points(r.key),
         })),

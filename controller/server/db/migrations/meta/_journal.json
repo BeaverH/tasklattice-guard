@@ -295,6 +295,13 @@
       "when": 1791760000007,
       "tag": "0041_security_event_pagination",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791760000008,
+      "tag": "0042_credential_policy_profile_version",
+      "breakpoints": true
     }
   ]
 }

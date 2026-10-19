@@ -102,6 +102,7 @@ class PolicyRuleSpec:
 
 @dataclass(frozen=True, slots=True)
 class PolicyTestContextSpec:
+    target_source: str | None = None
     trusted_instruction: str = ""
     query: str = ""
     grounding_sources: tuple[str, ...] = ()

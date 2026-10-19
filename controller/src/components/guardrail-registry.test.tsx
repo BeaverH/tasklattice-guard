@@ -12,8 +12,8 @@ function renderRegistry(onOpen = vi.fn(), row: Guardrail = guardrail) {
 }
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ params, search, to: _to, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { params: { guardrailId?: string; routerId?: string }; search?: Record<string, string>; to?: string; children: ReactNode }) => (
-    <a href={`${params.routerId ? `/integration/routers/${params.routerId}` : `/guardrails/${params.guardrailId}`}${search ? `?${new URLSearchParams(search)}` : ""}`} {...props}>{children}</a>
+  Link: ({ params, search, hash, to: _to, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { params: { guardrailId?: string; routerId?: string }; search?: Record<string, string>; hash?: string; to?: string; children: ReactNode }) => (
+    <a href={`${params.routerId ? `/integration/routers/${params.routerId}` : `/guardrails/${params.guardrailId}`}${search ? `?${new URLSearchParams(search)}` : ""}${hash ? `#${hash}` : ""}`} {...props}>{children}</a>
   ),
 }));
 
@@ -30,7 +30,8 @@ vi.mock("react-i18next", () => ({
         "modelPricing.openCosts": "View costs for {{name}}",
         "modelPricing.incomplete": "{{count}} calls unaccounted",
         "modelPricing.unpriced": "Unaccounted",
-        "guardrails.registryTraffic": "Traffic versions",
+        "guardrails.registryTraffic": "Traffic",
+        "guardrails.requestRateOpen": "View Request rate for {{name}}",
         "guardrails.guardrail": "Guardrail",
         "guardrails.notRun": "Not run",
         "guardrails.openNamedGuardrail": "Open {{name}}",
@@ -75,17 +76,18 @@ const guardrail = {
 describe("GuardrailRegistry", () => {
   afterEach(cleanup);
 
-  it("shows resource readiness, USD cost and exact traffic references instead of draft Policy or latest-report summaries", () => {
+  it("shows resource readiness and traffic without cost or version columns", () => {
     renderRegistry();
 
     expect(screen.getByRole("table").className).toContain("table-fixed");
     expect(screen.getByRole("columnheader", { name: "Readiness" })).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Policies" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Versions" })).toBeNull();
-    expect(screen.getByRole("columnheader", { name: "Month cost (USD)" })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "Month cost (USD)" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Testing Report" })).toBeNull();
-    expect(screen.getByRole("columnheader", { name: "Traffic versions" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Traffic" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Updated" })).toBeTruthy();
+    expect(screen.queryByText("guardrails.registryUnrouted")).toBeNull();
   });
 
   it("supports a real detail link and whole-row pointer navigation", () => {
@@ -99,26 +101,24 @@ describe("GuardrailRegistry", () => {
     expect(onOpen).toHaveBeenCalledWith("guardrail-default");
   });
 
-  it("links costs to usage and each traffic version to its own detail, without triggering row navigation", () => {
+  it("links Request rate to Runtime metrics and omits routing references", () => {
     const onOpen = vi.fn();
     renderRegistry(onOpen, { ...guardrail, monthly_cost: { currency: "USD", cost: 0.00026, calls: 2, unpriced: 1, since: "2026-10-01", until: "2026-10-14" }, version_summary: { total: 3, released: 2, pending: 1, missingEvidence: 0 }, traffic_versions: [
       { version: "20261009-090837.640Z", baseline: false, routers: [{ id: "router-a", name: "Bank traffic", status: "distributing" }] },
       { version: "20261009-090835.526Z", baseline: true, routers: [] },
     ] });
-    const costs = screen.getByRole("link", { name: "View costs for Default Guardrail" });
-    expect(costs.textContent).toBe("USD 0.00026");
-    expect(costs.getAttribute("href")).toBe("/guardrails/guardrail-default?tab=usage");
-    expect(screen.getByText("1 calls unaccounted")).toBeTruthy();
-    fireEvent.click(costs);
-    const version = screen.getByRole("link", { name: "20261009-090835.526Z" });
-    expect(version.getAttribute("href")).toBe("/guardrails/guardrail-default?tab=immutable&version=20261009-090835.526Z");
-    expect(screen.getByRole("link", { name: "Bank traffic" }).getAttribute("href")).toBe("/integration/routers/router-a");
-    fireEvent.click(version);
+    const rate = screen.getByRole("link", { name: "View Request rate for Default Guardrail" });
+    expect(rate.getAttribute("href")).toBe("/guardrails/guardrail-default?tab=runtime&window=1h&metric=request_rate#runtime-metrics");
+    fireEvent.click(rate);
+    expect(screen.queryByText("20261009-090835.526Z")).toBeNull();
+    expect(screen.queryByText("20261009-090837.640Z")).toBeNull();
+    expect(screen.queryByText("guardrailPackage.baselineCurrent")).toBeNull();
+    expect(screen.queryByText("Bank traffic")).toBeNull();
     expect(onOpen).not.toHaveBeenCalled();
   });
-  it("never displays unknown usage as a zero cost", () => {
+  it("keeps costs out of the registry even when usage data is present", () => {
     renderRegistry(vi.fn(), { ...guardrail, monthly_cost: { currency: "USD", cost: null, calls: 3, unpriced: 3, since: "2026-10-01", until: "2026-10-14" } });
-    expect(screen.getByRole("link", { name: "View costs for Default Guardrail" }).textContent).toBe("Unaccounted");
+    expect(screen.queryByRole("link", { name: "View costs for Default Guardrail" })).toBeNull();
     expect(screen.queryByText("USD 0.00")).toBeNull();
   });
 

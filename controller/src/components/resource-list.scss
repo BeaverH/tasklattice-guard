@@ -38,9 +38,15 @@
 .resource-related-link:hover { text-decoration: underline; }
 .resource-related-link:focus-visible { outline: 2px solid var(--cds-focus); outline-offset: 2px; }
 .resource-pending-link { color: var(--warning); }
-.resource-lifecycle { margin-block-start: 0.5rem; font-size: 0.75rem; line-height: 1.5; color: var(--cds-text-secondary); }
-.resource-list .resource-guardrail-table .resource-name-column { width: 25%; }
-.resource-list .resource-guardrail-table .resource-protection-column { width: 12%; }
-.resource-list .resource-guardrail-table .resource-cost-column { width: 16%; }
-.resource-list .resource-guardrail-table .resource-traffic-column { width: 23%; }
+.resource-list .resource-guardrail-table .resource-name-column { width: 29%; }
+.resource-list .resource-guardrail-table .resource-protection-column { width: 16%; }
+.resource-list .resource-guardrail-table .resource-traffic-column { width: 31%; }
 .resource-list .resource-endpoint-table .resource-name-column { width: 24%; }
+
+.guardrail-request-rate { display: grid; flex-shrink: 0; width: 10rem; gap: 0.125rem; padding: 0.25rem; color: var(--cds-text-primary); text-decoration: none; }
+.guardrail-request-rate:hover { background: var(--cds-layer-hover-01); }
+.guardrail-request-rate:focus-visible { outline: 2px solid var(--cds-focus); outline-offset: 2px; }
+.guardrail-request-rate-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; font-size: 0.75rem; line-height: 1.5; }
+.guardrail-request-rate-heading > :last-child, .guardrail-request-rate-caption { color: var(--cds-text-secondary); font-size: 0.6875rem; line-height: 1.5; }
+.guardrail-request-rate svg { display: block; width: 100%; height: 2.375rem; }
+.guardrail-request-rate-unavailable { display: flex; align-items: center; min-height: 3.5rem; color: var(--cds-text-secondary); font-size: 0.75rem; }

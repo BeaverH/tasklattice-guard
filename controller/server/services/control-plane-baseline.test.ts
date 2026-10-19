@@ -98,10 +98,18 @@ function harness(reads: unknown[][], config: Partial<ControllerConfig> = {}, upd
 }
 
 describe("Default baseline validation gate", () => {
-  it.each(["missing", "failed"])("migrates the system-owned mixed Default through validation, retaining the old release (%s validation)", async (validationStatus) => {
-    const stored = { ...legacyBaseline(), status: "active" };
+  it.each(["mixed", "local-focused"].flatMap(previous => ["missing", "failed"].map(validationStatus => [previous, validationStatus])))
+  ("migrates the system-owned %s Default through model validation, retaining the old release (%s validation)", async (previous, validationStatus) => {
+    const stored = { ...(previous === "mixed" ? legacyBaseline() : baseline()), status: "active" };
+    if (previous === "local-focused") {
+      stored.draftConfig.policyBindings = stored.draftConfig.policyBindings.filter(binding =>
+        !["builtin-jailbreak", "builtin-content-safety"].includes(binding.policyId));
+      expect(stored.draftConfig.policyBindings).toHaveLength(34);
+    }
     const upgraded = { ...stored, draftRevision: 3, draftConfig: baseline().draftConfig };
     const cases = generatedTestCases(stored.id, upgraded.draftConfig, policies);
+    expect(cases.filter(item => ["builtin-jailbreak", "builtin-content-safety"].includes(item.policyId)))
+      .toHaveLength(3);
     // Reads: Default, user edits, last published version, validation, ...
     const reads: unknown[][] = [[stored], [], [{ sourceDraftRevision: 2, artifactId: "legacy-artifact" }], validationStatus === "failed" ? [{ status: "failed" }] : []];
     if (validationStatus === "missing") reads.push(cases, [{ id: "new-validation" }]);

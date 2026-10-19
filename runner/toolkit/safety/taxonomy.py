@@ -191,6 +191,7 @@ _EVALUATOR_DEFAULTS = {
     "pii": "TALI-PRIVACY-PII",
     "prompt_injection": "TALI-MODEL-SECURITY-PROMPT-INJECTION",
     "indirect_prompt_injection": "TALI-MODEL-SECURITY-INDIRECT-PROMPT-INJECTION",
+    "memory_poisoning": "TALI-MODEL-SECURITY-INDIRECT-PROMPT-INJECTION",
     "jailbreak": "TALI-MODEL-SECURITY-JAILBREAK",
     "system_prompt_leakage": "TALI-MODEL-SECURITY-PROMPT-LEAKAGE",
     "topic_control": "TALI-BUSINESS-POLICY-OFF-TOPIC",

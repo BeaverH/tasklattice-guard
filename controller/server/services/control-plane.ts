@@ -1326,7 +1326,7 @@ export class ControlPlaneService {
     });
   }
 
-  /** Shared by user validation and the model-free baseline bootstrap. */
+  /** Shared by user validation and the baseline bootstrap, including model checks. */
   private async enqueueGuardrailValidation(
     tx: Parameters<Parameters<ControllerDatabase["transaction"]>[0]>[0],
     guardrail: typeof guardrails.$inferSelect,
@@ -2534,7 +2534,7 @@ export class ControlPlaneService {
         actorId: null,
         resourceType: "guardrail",
         resourceId: DEFAULT_GUARDRAIL_ID,
-        detail: { localOnly: true, phases: ["input", "output"], policies: desiredDraft.policyBindings.map((item) => item.policyId) },
+        detail: { localOnly: false, phases: ["input", "output"], policies: desiredDraft.policyBindings.map((item) => item.policyId) },
       });
     } else if (stored.deletedAt || stored.status === "disabled") {
       const published = await this.lastPublishedVersion(tx, DEFAULT_GUARDRAIL_ID);

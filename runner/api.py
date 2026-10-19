@@ -42,11 +42,19 @@ _TRACER = trace.get_tracer("tasklattice.guard-runner.api")
 GUARDRAIL_VERSION_PATTERN = r"^\d{8}-\d{6}\.\d{3}Z$"
 
 
+class MemoryBoundaryContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["read", "write"]
+    source_query: str = Field(default="", max_length=100_000)
+
+
 class GuardrailContext(BaseModel):
     """Explicit untrusted evidence; callers cannot promote it to instructions."""
 
     model_config = ConfigDict(extra="forbid")
     query: str = Field(default="", max_length=100_000)
+    target_source: Literal["user_input", "retrieved_content", "tool_output"] | None = None
+    memory: MemoryBoundaryContext | None = None
     grounding_sources: list[str] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
@@ -58,8 +66,15 @@ class GuardrailContext(BaseModel):
 
 def _request_content(phase, texts, context: GuardrailContext | None, source="user_input"):
     if context is None:
-        return ()
+        return text_blocks(phase, tuple(texts or ()), source) if source != "user_input" else ()
+    source = context.target_source or source
+    if context.memory:
+        source = "tool_output" if context.memory.operation == "write" else "retrieved_content"
     blocks = list(text_blocks(phase, tuple(texts or ()), source))
+    if context.memory:
+        from dataclasses import replace
+        blocks = [replace(block, metadata=(("memory.operation", context.memory.operation),
+            ("memory.source_query", context.memory.source_query))) for block in blocks]
     if context.query.strip():
         blocks.append(GuardContentBlock(id="context:query", text=context.query, role="query", trust="untrusted",
             source="request", qualifiers=("query",)))
@@ -86,6 +101,8 @@ class InternalEvaluationRequest(BaseModel):
         expected = "input" if self.input_type == "request" else "output"
         if self.phase is not None and self.input_type is not None and self.phase != expected:
             raise ValueError("phase and input_type describe different protection phases.")
+        if self.guardrail_context and self.guardrail_context.memory and self.resolved_phase != "input":
+            raise ValueError("Memory read/write checks use the input phase before consuming or storing the record.")
         return self
 
     @property
@@ -137,6 +154,12 @@ class LiteLLMGuardrailRequest(BaseModel):
     additional_provider_specific_params: dict[str, Any] | None = None
     tool_calls: list[dict[str, Any]] | None = None
     model: str | None = None
+
+    @model_validator(mode="after")
+    def memory_boundary_phase(self):
+        if self.guardrail_context and self.guardrail_context.memory and self.input_type != "request":
+            raise ValueError("Memory read/write checks use input_type=request before consuming or storing the record.")
+        return self
 
 
 class LiteLLMGuardrailResponse(BaseModel):

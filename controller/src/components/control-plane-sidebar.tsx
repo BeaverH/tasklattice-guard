@@ -1,7 +1,7 @@
 import { hasPermission, isPlatformAdministrator, roleHome } from "../../shared/rbac";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Bot, Cable, CircleHelp, FlaskConical, GitBranch, History, LibraryBig, Rocket, ScrollText, Server, ServerCog, ShieldCheck, UsersRound } from "lucide-react";
+import { Bot, Cable, CircleHelp, FlaskConical, History, LibraryBig, ReceiptText, Rocket, ScrollText, ServerCog, Settings, ShieldCheck, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -48,15 +48,7 @@ const navigation = [
     label: "nav.runtimeObservations",
     items: [
       { label: "nav.logs", to: "/logs", icon: ScrollText },
-    ],
-  },
-  {
-    scope: "platform",
-    label: "nav.platformOperations",
-    items: [
-      { label: "nav.health", to: "/settings/health", icon: Activity },
-      { label: "nav.runner", to: "/settings/runner", icon: Server },
-      { label: "nav.version", to: "/settings/version", icon: GitBranch },
+      { label: "nav.billing", to: "/billing", icon: ReceiptText },
     ],
   },
   {
@@ -171,7 +163,15 @@ export function ControlPlaneSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-
+            {workflowUser && <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")} tooltip={t("nav.settings")}
+                className="h-11 rounded-lg px-2.5 text-[13px] text-sidebar-foreground/80 data-[active=true]:bg-accent data-[active=true]:font-medium data-[active=true]:text-accent-foreground group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!">
+                <Link to="/settings/health" aria-label={state === "collapsed" ? t("nav.settings") : undefined} onClick={() => setOpenMobile(false)}>
+                  <Settings className="size-4.5" strokeWidth={pathname.startsWith("/settings") ? 2.2 : 1.8} />
+                  <span className="group-data-[collapsible=icon]:hidden">{t("nav.settings")}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>}
           </SidebarMenu>
         </SidebarFooter>
         <SidebarRail />

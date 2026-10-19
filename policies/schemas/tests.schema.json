@@ -3,6 +3,24 @@
     "TestContext": {
       "additionalProperties": false,
       "properties": {
+        "target_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "user_input",
+                "retrieved_content",
+                "tool_output",
+                "model_output"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Source"
+        },
         "trusted_instruction": {
           "default": "",
           "title": "Trusted Instruction",

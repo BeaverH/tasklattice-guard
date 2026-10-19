@@ -1,3 +1,4 @@
+import { SettingsNavigation } from "@/components/settings-navigation";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +31,7 @@ export function RunnerPage() {
           </Button>
         )}
       />
+      <SettingsNavigation />
       <div className="mt-6">
         <RunnerCapacitySection showHeader={false} />
       </div>

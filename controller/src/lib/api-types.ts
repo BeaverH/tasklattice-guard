@@ -951,6 +951,7 @@ export type MetricTrendPoint = {
 };
 
 export type MetricTrendSeries = {
+  guardrailId?: string;
   name: string;
   points: MetricTrendPoint[];
 };

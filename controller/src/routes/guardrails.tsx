@@ -1,5 +1,6 @@
+import { guardrailRequestRatesQuery } from "@/features/guardrail-request-rates";
+import type { RuntimeMetricKey } from "@/features/runtime-metrics";
 import { hasPermission } from "../../shared/rbac";
-import { GuardrailUsageCosts } from "@/components/guardrail-usage-costs";
 import { GuardrailProtectionMode, useGuardrailProtectionActions } from "@/components/guardrail-protection-mode";
 import { MAX_GUARDRAIL_VERSIONS } from "../../shared/guardrail-version-limit";
 import { ImmutableVersionView } from "@/components/guardrail-immutable-versions";
@@ -109,6 +110,7 @@ export function GuardrailsPage() {
   // Both sheets return focus to the control that opened them.
   const opener = useRef<HTMLElement | null>(null);
   const guardrails = query.data?.items ?? [];
+  const requestRates = useQuery({ ...guardrailRequestRatesQuery(), enabled: guardrails.length > 0 && hasPermission(auth.user?.role, "runtime") });
   const canManage = hasPermission(auth.user?.role, "guardrails", "write");
   // The same entry in every environment: create here, or import a released package from the arrow.
   const actions = canManage ? <CreateSplitButton label={t("guardrails.create")} importLabel={t("guardrailPackage.importPackage")}
@@ -120,10 +122,10 @@ export function GuardrailsPage() {
       <PageHeader title={t("pages.guardrails.title")} description={t("guardrails.description")} />
       <ResourceList items={guardrails} label={t("pages.guardrails.title")} searchPlaceholder={t("resourceList.searchGuardrails")} searchText={item => `${item.name} ${item.id}`}
         filter={{ label: t("common.status"), options: [{ value: "", label: t("resourceList.allStatuses") }, ...[...new Set(guardrails.map(item => item.status))].sort().map(value => ({ value, label: t(`states.${value}`, { defaultValue: value.replaceAll("_", " ") }) }))], matches: (item, value) => item.status === value }}
-        loading={query.isPending} refreshing={query.isFetching} error={query.error} onRefresh={() => void query.refetch()}
+        loading={query.isPending} refreshing={query.isFetching || requestRates.isFetching} error={query.error} onRefresh={() => { void query.refetch(); if (guardrails.length) void requestRates.refetch(); }}
         emptyTitle={t("guardrails.emptyTitle")} emptyDescription={t("guardrails.emptyDescription")}
         action={actions}>
-        {items => <GuardrailRegistry guardrails={items} onOpen={guardrailId => navigate({ to: "/guardrails/$guardrailId", params: { guardrailId } })} />}
+        {items => <GuardrailRegistry guardrails={items} requestRates={requestRates.data} ratesLoading={requestRates.isPending} ratesError={requestRates.isError} onOpen={guardrailId => navigate({ to: "/guardrails/$guardrailId", params: { guardrailId } })} />}
       </ResourceList>
       {importOpen ? <ImportGuardrailSheet returnFocusRef={opener} onClose={() => setImportOpen(false)} /> : null}
       <CreateGuardrailWizard open={createOpen} returnFocusRef={opener} onOpenChange={setCreateOpen} onCreated={async (id) => { setCreateOpen(false); await queryClient.invalidateQueries({ queryKey: queryKeys.guardrails }); navigate({ to: "/guardrails/$guardrailId", params: { guardrailId: id }, search: { tab: "testing" } }); }} />
@@ -362,13 +364,12 @@ export function GuardrailDetailPage() {
           <TabsList className="min-w-max" aria-label={t("guardrails.detailViews")}>
             <TabsTrigger value="runtime"><Activity aria-hidden="true" />{t("guardrails.runtimeTab")}</TabsTrigger>
             <TabsTrigger value="event"><ShieldAlert aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.eventTab")}{metricsQuery.data?.findings_summary?.total ? <Badge variant="outline" className={metricsQuery.data?.findings_summary?.critical ? "border-red-200 bg-red-50 font-mono text-[10px] text-red-700" : "font-mono text-[10px]"}>{metricsQuery.data?.findings_summary?.total}</Badge> : null}</span></TabsTrigger>
-            <TabsTrigger value="usage">{t("modelPricing.tab")}</TabsTrigger>
             <TabsTrigger value="immutable"><History aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.versions")}{versionsQuery.data ? <Badge variant="outline" className="font-mono text-[10px]">{guardrailVersions.length}/{MAX_GUARDRAIL_VERSIONS}</Badge> : null}</span></TabsTrigger>
             <TabsTrigger value="testing"><FileText aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.validationHistoryTab")}{validationRunsQuery.data?.count ? <Badge variant="outline" className="font-mono text-[10px]">{validationRunsQuery.data.count}</Badge> : null}</span></TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="runtime" className="space-y-5 pt-5">
-          <GuardrailRuntimeView guardrailId={guardrail.id} metrics={metricsQuery.data} loading={metricsQuery.isLoading} error={metricsQuery.error} routers={routers} versions={guardrailVersions} window={window} onWindowChange={setWindow} />
+          <GuardrailRuntimeView guardrailId={guardrail.id} metrics={metricsQuery.data} loading={metricsQuery.isLoading} error={metricsQuery.error} routers={routers} versions={guardrailVersions} window={window} onWindowChange={setWindow} metric={search.metric ?? "p95_latency"} onMetricChange={metric => void navigate({ search: previous => ({ ...previous, metric }) })} />
         </TabsContent>
         <TabsContent value="event" className="space-y-5 pt-5">
           <GuardrailFindingsView guardrailId={guardrailId} data={findingsQuery.data} loading={findingsQuery.isLoading} error={findingsQuery.error} policies={policies} routers={routers} endpoints={endpointsQuery.data?.items ?? []} window={window} onWindowChange={setWindow} summary={metricsQuery.data?.findings_summary} summaryLoading={metricsQuery.isFetching} summaryError={metricsQuery.error} onRetrySummary={() => { void metricsQuery.refetch(); }} severities={findingSeverities} onSeveritiesChange={setFindingSeverities} onRetry={() => { void findingsQuery.refetch(); }} collectionStatus={metricsQuery.data ? !metricsQuery.data.total_decisions ? "no_events" : metricsQuery.data.data_availability?.execution_evidence === "collected" ? "collected" : "not_collected" : undefined} />
@@ -408,7 +409,6 @@ export function GuardrailDetailPage() {
             onCloseCompare={() => setCompareBaseVersionNumber(null)}
           />
         </TabsContent>
-        <TabsContent value="usage" className="pt-5"><GuardrailUsageCosts guardrailId={guardrail.id} /></TabsContent>
         <TabsContent value="testing" className="pt-5">
           <GuardrailValidationHistory
             pagination={<EventPagination page={reportPagination.page} busy={validationRunsQuery.isFetching} nextCursor={validationRunsQuery.data?.nextCursor} onNext={reportPagination.next} onPrevious={reportPagination.previous} onLatest={reportPagination.latest} />}
@@ -449,7 +449,7 @@ export function GuardrailDetailPage() {
   );
 }
 
-export function GuardrailRuntimeView({ guardrailId, metrics, loading, error, routers, versions = [], window, onWindowChange }: { guardrailId: string; metrics?: Metrics; loading: boolean; error: unknown; routers: Awaited<ReturnType<typeof getRouters>>["items"]; versions?: GuardrailVersion[]; window: MetricWindow; onWindowChange: (window: MetricWindow) => void }) {
+export function GuardrailRuntimeView({ guardrailId, metrics, loading, error, routers, versions = [], window, onWindowChange, metric, onMetricChange }: { guardrailId: string; metrics?: Metrics; loading: boolean; error: unknown; routers: Awaited<ReturnType<typeof getRouters>>["items"]; versions?: GuardrailVersion[]; window: MetricWindow; onWindowChange: (window: MetricWindow) => void; metric?: RuntimeMetricKey; onMetricChange?: (metric: RuntimeMetricKey) => void }) {
   const { t, i18n } = useTranslation();
   if (loading) return <Skeleton className="h-[38rem] rounded-xl" />;
   if (error || !metrics) return <ErrorNotice error={error ?? new Error(t("guardrails.runtimeUnavailable"))} />;
@@ -467,7 +467,7 @@ export function GuardrailRuntimeView({ guardrailId, metrics, loading, error, rou
         <RuntimeStat label={t("dashboard.p95Latency")} value={metrics.total_decisions ? `${metrics.runtime_p95_ms} ms` : "—"} detail={t("guardrails.runtimeLatencyDetail")} />
         <RuntimeStat label={t("dashboard.errorRate")} value={metrics.total_decisions ? `${metrics.error_rate}%` : "—"} detail={t("guardrails.errorsInWindow", { count: metrics.errors })} />
       </dl>
-      <RuntimeMetricChart metrics={metrics} />
+      <div id="runtime-metrics" className="scroll-mt-20"><RuntimeMetricChart metrics={metrics} metric={metric} onMetricChange={onMetricChange} /></div>
       <CallerDistribution metrics={metrics} routers={routers} versions={versions} />
     </div>
   );

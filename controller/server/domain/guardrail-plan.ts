@@ -76,6 +76,7 @@ const contracts = {
   contentFilter: "tali.guard.content-filter.rules.v1",
   promptInjection: "tali.guard.prompt-injection.v1",
   indirectPromptInjection: "tali.guard.indirect-prompt-injection.v1",
+  memoryPoisoning: "tali.guard.memory-poisoning.v1",
   jailbreak: "tali.guard.jailbreak.v1",
   systemPromptLeakage: "tali.guard.system-prompt-leakage.v1",
   contentSafety: "tali.guard.content-safety.v1",
@@ -98,6 +99,7 @@ const capabilities: RuntimeCapability[] = [
   capability("pii", "builtin-pii", ["input", "output"], "transform", [always("exact", contracts.piiExact), always("semantic", contracts.piiSemantic, true)], "data_protection"),
   capability("prompt_injection", "builtin-prompt-injection", ["input"], "block", [always("primary", contracts.promptInjection)], "interaction_safety"),
   capability("indirect_prompt_injection", "builtin-indirect-prompt-injection", ["input"], "block", [always("exact", contracts.indirectPromptInjection)], "interaction_safety"),
+  capability("memory_poisoning", "builtin-memory-poisoning", ["input"], "block", [always("exact", contracts.memoryPoisoning)], "interaction_safety"),
   capability("jailbreak", "builtin-jailbreak", ["input"], "block", [always("primary", contracts.jailbreak, true)], "interaction_safety"),
   capability("system_prompt_leakage", "builtin-system-prompt-leakage", ["output"], "block", [always("exact", contracts.systemPromptLeakage)], "data_protection"),
   capability("content_safety", "builtin-content-safety", ["input", "output"], "block", [always("primary", contracts.contentSafety, true)], "interaction_safety"),
@@ -191,7 +193,15 @@ export function buildGuardrailPlan(input: {
         const enabledRails = binding.enabledRails.filter(rail => rule.rails.includes(rail));
         if (!enabledRails.length) continue;
         const scoped = { ...binding, enabledRuleIds: [rule.id], enabledRails };
-        if (rule.implementation.execution === "local") {
+        const boundaryDetector = ({
+          "agent/indirect-injection": ["indirect_prompt_injection", contracts.indirectPromptInjection],
+          "agent/memory-poisoning": ["memory_poisoning", "tali.guard.memory-poisoning.v1"],
+        } as Record<string, [string, string]>)[rule.detector.ref];
+        if (boundaryDetector) {
+          resolved.push({ capability: { capability: boundaryDetector[0], policyId: "", defaultPhases: ["input"],
+            defaultAction: "block", evaluations: [always("boundary", boundaryDetector[1])], module: "interaction_safety" },
+            binding: scoped, authoredRule: rule, authoredParameters: [["rule_id", rule.id]] });
+        } else if (rule.implementation.execution === "local") {
           resolved.push({ capability: { capability: "builtin_content_filter", policyId: "", defaultPhases: ["input", "output"], defaultAction: "block", evaluations: [always("rules", contracts.contentFilter)], module: "interaction_safety" }, binding: scoped, policy, authoredRule: rule });
         } else {
           const profile = String(rule.detector_options.profile ?? "");
@@ -366,6 +376,11 @@ function validateNativeDetectorContract(policy: PolicyDto, capability: string): 
     content_safety: "safety-classification", jailbreak: "jailbreak-classification", pii: "pii-classification",
   };
   for (const rule of policy.rules) {
+    const boundaryRef = capability === "indirect_prompt_injection" ? "agent/indirect-injection"
+      : capability === "memory_poisoning" ? "agent/memory-poisoning" : null;
+    if (boundaryRef && (rule.detector.ref !== boundaryRef || rule.implementation.execution !== "local")) {
+      throw new Error(`Policy ${policy.id} requires detector ${boundaryRef}.`);
+    }
     if (rule.implementation.execution !== "platform") continue;
     const expected = profiles[capability];
     if (expected && (rule.detector.ref !== "model/classifier" || rule.detector_options.profile !== expected)) {

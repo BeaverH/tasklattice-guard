@@ -55,6 +55,8 @@ collections:
   - builtin/builtin-automated-reasoning
 - asset: focused_policies.json
   policies:
+  - builtin/builtin-indirect-prompt-injection
+  - builtin/builtin-memory-poisoning
   - builtin/local-credentials
   - builtin/local-prompt-manipulation
   - builtin/local-sql-injection

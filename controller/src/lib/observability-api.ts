@@ -193,6 +193,32 @@ export async function getMetrics(filters: {
   return { ...metrics, system_status: status.status === "healthy" ? "healthy" : "degraded", system_reasons: status.reasons };
 }
 
+export type RequestRatePoint = { timestamp: string; total: number };
+export type GuardrailRequestRates = {
+  byGuardrail: Record<string, RequestRatePoint[]>;
+  zeroPoints: RequestRatePoint[];
+};
+
+/** One shared snapshot for the registry; no extra system-status request per row. */
+export async function getGuardrailRequestRates(signal?: AbortSignal): Promise<GuardrailRequestRates> {
+  const metrics = await controllerApi.requestController<Metrics>("/api/v1/telemetry/metrics?window=1h", signal ? { signal } : undefined);
+  const all = metrics?.trend_series?.none;
+  const grouped = metrics?.trend_series?.guardrail;
+  if (metrics?.window !== "1h" || metrics.interval !== "1m"
+    || !validMetricSeries(all) || all.length !== 1 || !all[0].points.length
+    || !validMetricSeries(grouped)
+    || grouped.some(series => !series.guardrailId || series.points.length !== all[0].points.length
+      || series.points.some((point, index) => point.total < 0 || point.timestamp !== all[0].points[index].timestamp))
+    || new Set(grouped.map(series => series.guardrailId)).size !== grouped.length) {
+    throw new Error("Guardrail request rates are unavailable or incomplete.");
+  }
+  return {
+    byGuardrail: Object.fromEntries(grouped.map(series => [series.guardrailId!, series.points.map(({ timestamp, total }) => ({ timestamp, total }))])),
+    // Successful snapshots omit Guardrails with no recorded requests.
+    zeroPoints: all[0].points.map(({ timestamp }) => ({ timestamp, total: 0 })),
+  };
+}
+
 function validMetricSeries(series: MetricTrendSeries[] | undefined): boolean {
   return Array.isArray(series) && series.every(item => item && typeof item.name === "string"
     && Array.isArray(item.points) && item.points.every(point => point

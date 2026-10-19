@@ -1,5 +1,27 @@
 schema_version: 2
 detectors:
+  agent/indirect-injection:
+    version: 1.0.0
+    adapter:
+      engine: nemo-guardrails
+      detector: null
+      flow_name: null
+      action_name: GuardIndirectPromptAction
+      execution: local
+    parameters: []
+    required_parameters: []
+    supports_replacement: false
+  agent/memory-poisoning:
+    version: 1.0.0
+    adapter:
+      engine: nemo-guardrails
+      detector: null
+      flow_name: null
+      action_name: GuardMemoryPoisoningAction
+      execution: local
+    parameters: []
+    required_parameters: []
+    supports_replacement: false
   text/regex:
     version: 1.0.0
     adapter:

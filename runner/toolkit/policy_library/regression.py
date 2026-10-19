@@ -35,8 +35,9 @@ async def run_packages(packages: list[PolicyPackage], registry: dict, assets: Pa
     from runner.compiler import DefaultRunnerCompiler
     from runner.draft_preview import DraftPreviewRuntime
     from runner.toolkit.nemo.action_registry import action_providers
-    from runner.toolkit.nemo.actions.content_filter import ContentFilterActionProvider
+    from runner.toolkit.nemo.actions import local_action_providers
     from runner.toolkit.runtime.contracts import ProtectionRequest, RequestContext
+    from runner.api import GuardrailContext, _request_content
 
     report = {"schema_version": 1, "engine": "controller-plan+nemo-runtime", "policies": [], "summary": {"passed": 0, "failed": 0, "not_run": 0}}
     jobs = []
@@ -80,7 +81,7 @@ async def run_packages(packages: list[PolicyPackage], registry: dict, assets: Pa
         plans = json.loads(compiled_plans.stdout)
 
     for (package, _, values, result, _, cases), plan in zip(jobs, plans, strict=True):
-        runtime = DraftPreviewRuntime(DefaultRunnerCompiler(), action_providers(ContentFilterActionProvider()))
+        runtime = DraftPreviewRuntime(DefaultRunnerCompiler(), action_providers(*local_action_providers()))
         identity = dict(preview_id=package.checksum, guardrail_id=plan["guardrail_id"], draft_revision=1,
                         candidate_version=plan["guardrail_version"], plan=plan, runtime_profile="auto")
         completed = 0
@@ -93,7 +94,13 @@ async def run_packages(packages: list[PolicyPackage], registry: dict, assets: Pa
                 case = {"id": test.id, "phase": test.phase, "scope": test.scope, "status": "passed"}
                 try:
                     text = materialize_test_text(test.content, tuple(test.parameter_names), values)
-                    decision = await runtime.evaluate(ProtectionRequest(phase=test.phase, texts=(text,), context=RequestContext(protocol="policy-regression")), **identity)
+                    context = test.context
+                    blocks = _request_content(test.phase, (text,), GuardrailContext(
+                        query=context.query, grounding_sources=context.grounding_sources,
+                        target_source=context.target_source if context.target_source != "model_output" else None,
+                    ) if context else None)
+                    decision = await runtime.evaluate(ProtectionRequest(phase=test.phase, texts=(text,), content_blocks=blocks,
+                        context=RequestContext(protocol="policy-regression")), **identity)
                     matched = list(dict.fromkeys(f.rule_id for f in decision.findings
                         if f.policy_id == package.definition.metadata.id and f.verdict == "matched"))
                     expected = decision.decision != "allow" if test.expected_decision == "intervene" else decision.decision == test.expected_decision

@@ -1,3 +1,8 @@
+"""Local component and historical migration regressions.
+
+Model-dependent Default behavior is tested in test_default_model_runtime.py.
+This explicit projection cannot establish a full Default validation pass.
+"""
 from __future__ import annotations
 
 from tests.policy_snapshots import library_definitions
@@ -25,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def default_baseline() -> dict:
+def default_local_baseline() -> dict:
     # Exercise the actual Controller selection and plan builder, not a second
     # hand-written copy of the Default policy list. Draft compilation/validation
     # belongs to the control-plane suite; Runner-only tests still use artifacts.
@@ -38,7 +43,10 @@ def default_baseline() -> dict:
         import { loadSync } from '@grpc/proto-loader';
         import { loadPackageDefinition } from '@grpc/grpc-js';
         const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
-        const draft = defaultGuardrailDraft(policies);
+        const fullDraft = defaultGuardrailDraft(policies);
+        // Deliberate component regression, never a deployable Default fallback.
+        const draft = { ...fullDraft, policyBindings: fullDraft.policyBindings.filter(binding =>
+            policies.find(policy => policy.id === binding.policyId).protection.execution === 'local') };
         const buildPlan = (bindings) => buildGuardrailPlan({
             guardrailId: DEFAULT_GUARDRAIL_ID,
             guardrailVersion: "20260904-010000.001Z",
@@ -70,14 +78,14 @@ def default_baseline() -> dict:
 
 
 @pytest.fixture(scope="module")
-def default_plan(default_baseline: dict) -> dict:
-    return default_baseline["plan"]
+def default_local_plan(default_local_baseline: dict) -> dict:
+    return default_local_baseline["plan"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["input", "output"])
-async def test_default_complete_policies_compile_and_run_without_models(
-    default_plan: dict, phase: str, monkeypatch: pytest.MonkeyPatch,
+async def test_default_local_components_compile_and_run_without_models(
+    default_local_plan: dict, phase: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name in (
         "OPENAI_API_KEY", "NVIDIA_API_KEY", "DEEPSEEK_API_KEY",
@@ -93,7 +101,7 @@ async def test_default_complete_policies_compile_and_run_without_models(
         "guardrail_id": "guardrail-default",
         "draft_revision": 1,
         "candidate_version": "20260904-010000.001Z",
-        "plan": default_plan,
+        "plan": default_local_plan,
         "runtime_profile": "auto",
     }
     samples = [
@@ -160,8 +168,8 @@ async def test_default_complete_policies_compile_and_run_without_models(
             assert decision.texts == ()
             assert decision.usage is not None
             assert decision.usage.model_invocations == 0
-            assert [step.policy_id for step in decision.trace if step.kind == "action"] == [
-                binding["policy_id"] for binding in default_plan["policy_bindings"] if phase in binding["enabled_rails"]
+            assert [step.policy_id for step in decision.trace if step.kind == "action" and step.policy_id is not None] == [
+                binding["policy_id"] for binding in default_local_plan["policy_bindings"] if phase in binding["enabled_rails"]
             ]
     finally:
         await previews.shutdown()
@@ -178,20 +186,20 @@ async def test_default_complete_policies_compile_and_run_without_models(
     ("output", "Passport: E12345678", "transform", "Passport: [passport_china_REDACTED]", "local-passport-formats"),
 ])
 async def test_focused_default_retains_tax_ids_credentials_and_passports(
-    default_plan: dict, phase: str, content: str, expected_decision: str,
+    default_local_plan: dict, phase: str, content: str, expected_decision: str,
     expected_text: str | None, expected_policy: str,
 ) -> None:
     # Guard the approved Policy-selection change without rewriting any source
     # Policy acceptance case or relaxing the Validator's source-Rule contract.
     assert "advanced-au-pii-protection" not in {
-        binding["policy_id"] for binding in default_plan["policy_bindings"]
+        binding["policy_id"] for binding in default_local_plan["policy_bindings"]
     }
     previews = DraftPreviewRuntime(DefaultRunnerCompiler(), action_providers(*local_action_providers()))
     try:
         result = await previews.evaluate(
             ProtectionRequest(phase=phase, texts=(content,), context=RequestContext(protocol="playground")),
             preview_id="reduced-default", guardrail_id="guardrail-default",
-            draft_revision=1, candidate_version="20260904-010000.001Z", plan=default_plan, runtime_profile="auto",
+            draft_revision=1, candidate_version="20260904-010000.001Z", plan=default_local_plan, runtime_profile="auto",
         )
         assert result.decision == expected_decision, result.reason
         if expected_text is not None:
@@ -203,11 +211,15 @@ async def test_focused_default_retains_tax_ids_credentials_and_passports(
         await previews.shutdown()
 
 
-def test_inherited_rule_acceptance_is_independent_of_composition(default_baseline: dict) -> None:
+def test_inherited_rule_acceptance_is_independent_of_composition(default_local_baseline: dict) -> None:
     # Test each original detector/action in isolation, with the source contract
     # unchanged. The separate full-chain test below exercises composition.
     engine = BuiltinContentFilter()
-    for case in default_baseline["cases"]:
+    for case in default_local_baseline["cases"]:
+        # These boundary Actions are tested via their complete NeMo package
+        # regressions and test_agentic_boundary_policies, not the text filter.
+        if case["policyId"] in {"builtin-indirect-prompt-injection", "builtin-memory-poisoning"}:
+            continue
         result = engine.evaluate(definitions=library_definitions([case["policyId"]]),
             text=case["content"], phase=case["phase"], policies=[case["policyId"]],
             enabled_rules={case["policyId"]: case["coveredRuleIds"]} if case["coveredRuleIds"] else None,
@@ -215,13 +227,15 @@ def test_inherited_rule_acceptance_is_independent_of_composition(default_baselin
         actions = {f.recommended_action for f in result.findings}
         actual = "block" if "block" in actions else "transform" if actions else "allow"
         assert actual == case["expectedDecision"], case["sourceCaseId"]
-        if case["coveredRuleIds"]:
+        if case["coveredRuleIds"] and case["expectedDecision"] != "allow":
             assert set(case["coveredRuleIds"]) & {f.rule_id for f in result.findings}
+        elif case["expectedDecision"] == "allow":
+            assert not result.findings, case["sourceCaseId"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["input", "output"])
-async def test_default_records_insults_and_still_enforces_later_policies(default_plan: dict, phase: str) -> None:
+async def test_default_records_insults_and_still_enforces_later_policies(default_local_plan: dict, phase: str) -> None:
     previews = DraftPreviewRuntime(DefaultRunnerCompiler(), action_providers(*local_action_providers()))
     try:
         for text, expected in (
@@ -233,7 +247,7 @@ async def test_default_records_insults_and_still_enforces_later_policies(default
             result = await previews.evaluate(
                 ProtectionRequest(phase=phase, texts=(text,), context=RequestContext(protocol="playground")),
                 preview_id=f"default-observe-{phase}", guardrail_id="guardrail-default", draft_revision=1,
-                candidate_version="20260904-010000.001Z", plan=default_plan, runtime_profile="auto",
+                candidate_version="20260904-010000.001Z", plan=default_local_plan, runtime_profile="auto",
             )
             assert result.decision == expected, result.reason
             observed = [f for f in result.findings if f.policy_id == "filter-denied-insults"]
@@ -251,18 +265,18 @@ async def test_default_records_insults_and_still_enforces_later_policies(default
 
 
 @pytest.mark.asyncio
-async def test_default_validation_passes_all_reviewed_composition_cases(default_baseline: dict) -> None:
-    cases = default_baseline["cases"]
+async def test_default_local_components_pass_reviewed_composition_cases(default_local_baseline: dict) -> None:
+    cases = default_local_baseline["cases"]
     # Exercise the real TS codec -> Protobuf bytes -> Python codec boundary,
     # including nested expectations, before running the entire candidate.
-    envelope = protocol.ControllerMessage.FromString(base64.b64decode(default_baseline["wireRequest"]))
+    envelope = protocol.ControllerMessage.FromString(base64.b64decode(default_local_baseline["wireRequest"]))
     status, metrics, results = await DefaultRunnerValidator(
         DefaultRunnerCompiler(), action_providers(*local_action_providers()),
     ).validate(envelope.validation_request)
     conflicts = [item for item in results if not item["passed"]]
     assert status == "passed", conflicts
-    assert metrics["total"] == len(cases) == 336
-    assert metrics["passed"] == 336
+    assert metrics["total"] == len(cases) == 391
+    assert metrics["passed"] == 391
     assert not conflicts
     assert all(case["required"] for case in cases)
     cases_by_id = {case["id"]: case for case in cases}
@@ -278,7 +292,7 @@ async def test_default_validation_passes_all_reviewed_composition_cases(default_
 
 
 @pytest.mark.asyncio
-async def test_focused_default_replays_every_frozen_legacy_case(default_plan: dict) -> None:
+async def test_focused_default_replays_every_frozen_legacy_case(default_local_plan: dict) -> None:
     migration = json.loads((ROOT / "tests/fixtures/default-policy-migration.json").read_text())
     assert len(migration["cases"]) == 140
     assert len(migration["policyIds"]) == 18
@@ -307,7 +321,7 @@ async def test_focused_default_replays_every_frozen_legacy_case(default_plan: di
                 ProtectionRequest(phase=case["phase"], texts=(case["content"],),
                     context=RequestContext(protocol="playground")),
                 preview_id="legacy-default-migration", guardrail_id="guardrail-default", draft_revision=1,
-                candidate_version="20260904-010000.001Z", plan=default_plan, runtime_profile="auto",
+                candidate_version="20260904-010000.001Z", plan=default_local_plan, runtime_profile="auto",
             )
             identity = (case["policyId"], case["caseId"])
             # The frozen migration fixture remains unchanged; insults now has
@@ -317,7 +331,7 @@ async def test_focused_default_replays_every_frozen_legacy_case(default_plan: di
             if result.decision == "transform":
                 assert result.texts == (expected_output,), (identity, result.texts, expected_output)
             assert result.findings and all(finding.policy_id in {
-                binding["policy_id"] for binding in default_plan["policy_bindings"]
+                binding["policy_id"] for binding in default_local_plan["policy_bindings"]
             } for finding in result.findings), identity
             assert result.usage.model_invocations == 0 and not result.usage.fail_closed, identity
     finally:

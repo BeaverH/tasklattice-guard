@@ -76,7 +76,8 @@ describe("Access token management", () => {
     state.role = "user"; mount();
     fireEvent.click(screen.getByRole("button", { name: "Create token" }));
     expect(within(screen.getByLabelText("Routers", { exact: true })).getByRole("option", { name: "Read and write" })).toBeTruthy();
-    for (const label of ["Models", "Runners", "Audit log"]) expect(screen.queryByLabelText(label, { exact: true })).toBeNull();
+    expect(within(screen.getByLabelText("Runners", { exact: true })).getAllByRole("option").map(option => option.getAttribute("value"))).toEqual(["none", "read"]);
+    for (const label of ["Models", "Audit log"]) expect(screen.queryByLabelText(label, { exact: true })).toBeNull();
   });
   it("confirms revocation, shows errors, then updates the list after success", async () => {
     state.list.mockResolvedValue({ items: [token] }); state.revoke.mockRejectedValueOnce(new Error("Revoke failed")); mount();

@@ -6,15 +6,25 @@ Validate the current draft before publishing an executable version; deployment
 readiness is a separate step. See [revision lifecycles](revision-lifecycle.md)
 for publication and rollback.
 
-## Default local protection
+## Default protection and model requirements
 
-The Default Guardrail currently composes **32 complete local Policies** and
-requires no model configuration. The authoritative selection is in
+The Default Guardrail composes **34 complete Policies**: two model Policies
+followed by 32 local Policies. This supersedes the former model-free baseline.
+It requires compatible, validated assignments for `jailbreak.input`,
+`content_safety.input`, and `content_safety.output`. The Jailbreak binding may
+use the dedicated NemoGuard JailbreakDetect profile or another supported
+Jailbreak profile; the baseline does not hard-code a vendor or credentials. The authoritative selection is in
 [defaults.ts](../controller/server/domain/defaults.ts). Focused Policies cover
 credentials, payment data, tax/health/government/travel identifiers, contact and
 network data, harmful phrases, and prompt/code injection. Each retains its Rules,
 actions, Rail scope, and inherited test cases; Default owns their composition
-order and reviewed test expectations.
+order and reviewed test expectations. `builtin-jailbreak` runs first on Input;
+`builtin-content-safety` follows on Input and runs first on Output. Models see the
+original content before local redaction. A blocking verdict stops the chain.
+Missing required bindings reject runtime preparation; an unavailable or malformed
+model response fails closed and is recorded as an error, never a successful detection.
+Model support alone does not establish accuracy or multi-turn coverage; those
+remain properties of the configured model/profile and its measured behavior.
 
 The older mixed `Baseline PII Protection`, `Pattern Matching`, and advanced PII
 collections have been replaced in Default by focused bindings. Local checks
@@ -25,8 +35,12 @@ complete response.
 ## Default reconciliation
 
 On Controller startup, an uncustomized Default is reconciled against the bundled
-Policy catalog and recompiled if its bindings change, including Policy versions
-or Rule membership. User-customized Defaults are preserved. Publishing a custom
+Policy catalog when its bindings change, including Policy versions or Rule
+membership. The system queues the full inherited validation suite (currently
+339 cases) and publishes only its passed compiled candidate. Missing models or
+failed validation leave the old published version intact; on a fresh installation
+there is no new executable Default until validation passes. There is no automatic
+local-only downgrade. After fixing model configuration, rerun validation. User-customized Defaults are preserved. Publishing a custom
 Policy does not currently hot-update existing Guardrails.
 
 ## Policy and Rule execution order
@@ -53,10 +67,16 @@ is inferred from an observed runtime result. Editing the draft invalidates the
 previous Validation/release gate.
 
 The [Default tests](../tests/control_plane/test_default_guardrail.py) cover the
-current composition and replay a frozen migration baseline of 140 cases from
+local components and replay a frozen migration baseline of 140 cases from
 18 legacy Policies at version `1.95.0`. Those numbers describe the historical
 baseline, not the current Policy count or a current test-run result. Runner-only
-tests consume the signed `default-local-v1` artifact without compiling it.
+tests consume the signed `default-local-v1` artifact without compiling it; its
+generator explicitly selects local components. It is a historical fixture, not
+the current Default. [Model runtime tests](../tests/control_plane/test_default_model_runtime.py)
+exercise the actual Default through HTTP transport doubles to verify model ordering,
+Policy attribution, missing bindings and provider failures. These contract tests
+are not live model quality evidence. Full model acceptance and public-reference
+comparisons must run against real configured models before claiming improvements.
 
 ## Routing and output delivery
 

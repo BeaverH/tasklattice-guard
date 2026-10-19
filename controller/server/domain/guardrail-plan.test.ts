@@ -5,8 +5,27 @@ import { buildGuardrailPlan } from "./guardrail-plan.js";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
 import { programmablePolicyDraftSchema, type ProgrammablePolicySnapshot } from "../policy-studio/model.js";
 import { defaultGuardrailDraft } from "./defaults.js";
+import { DeclarativeCompiler } from "../policy-studio/declarative.js";
 
 describe("Controller Guardrail plan", () => {
+  it.each([
+    ["builtin-indirect-prompt-injection", "indirect_prompt_injection", "tali.guard.indirect-prompt-injection.v1"],
+    ["builtin-memory-poisoning", "memory_poisoning", "tali.guard.memory-poisoning.v1"],
+  ])("keeps the boundary Action when %s is authored as a custom Policy", (id, capability, contract) => {
+    const compiler = new DeclarativeCompiler(resolve("../runner/toolkit/policy_library/assets"));
+    const definition = compiler.shipped(id!)!;
+    definition.metadata.id = `custom-${capability}`;
+    const policy = compiler.compile(definition);
+    const rule = policy.rules[0]!;
+    const binding = { ...nativeBinding(policy.id), policyVersion: policy.version,
+      enabledRuleIds: [rule.id], enabledRails: ["input"], ruleActions: { [rule.id]: "allow" as const } };
+    const plan = buildGuardrailPlan({ guardrailId: "custom-boundary", guardrailVersion: "20261019-010000.001Z", policies: [policy],
+      draft: { allowedTopics: [], restrictedTopics: [], safetyLevel: "balanced", outputDelivery: "full_buffered", policyBindings: [binding] } });
+    expect(plan.steps).toEqual([expect.objectContaining({ capability, contract_ref: contract, phases: ["input"], on_unsafe: "allow",
+      parameters: expect.arrayContaining([["rule_id", rule.id]]) })]);
+    expect(policy.definition!.tests[0]!.context!.target_source).toBe("retrieved_content");
+    expect(policy.protection.modelCapabilities).toEqual([]);
+  });
   it("rejects a classifier change that the native adapter cannot execute", () => {
     const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
     const policy = policies.find(item => item.id === "builtin-content-safety")!;

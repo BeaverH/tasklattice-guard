@@ -34,7 +34,7 @@ copied into Rule names as a claim that the entire standard is automated.
 
 `china-mainland-runtime@1.0.0` pins:
 
-- `local-credentials@2.0.0`
+- `local-credentials@2.1.0`
 - `local-passports@2.0.0`
 - `china-personal-identifiers@1.0.0`
 - `china-prompt-manipulation@1.0.0` on the Input Rail

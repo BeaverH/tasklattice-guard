@@ -2,13 +2,13 @@ import { z } from "zod";
 import { patternValidatorSchema } from "./pattern-validator.js";
 import { riskSeverities } from "./security-severity.js";
 
-export const detectorRefs = ["text/keyword", "text/regex", "text/conditions", "code/fenced-block", "model/classifier", "model/grounding", "service/formal-verification"] as const;
-export const localDetectorRefs = detectorRefs.slice(0, 4);
+export const detectorRefs = ["text/keyword", "text/regex", "text/conditions", "code/fenced-block", "agent/indirect-injection", "agent/memory-poisoning", "model/classifier", "model/grounding", "service/formal-verification"] as const;
+export const localDetectorRefs = detectorRefs.slice(0, 6);
 const phase = z.enum(["input", "output"]);
 const action = z.enum(["allow", "block", "transform"]);
 const text = z.string().max(500_000);
 const identifier = z.string().min(1).max(256);
-export const policyTestContextSchema = z.object({ trusted_instruction: text.default(""), query: text.default(""), grounding_sources: z.array(text).default([]), expected_reasoning_result: z.string().nullable().default(null) });
+export const policyTestContextSchema = z.object({ target_source: z.enum(["user_input", "retrieved_content", "tool_output", "model_output"]).nullable().optional(), trusted_instruction: text.default(""), query: text.default(""), grounding_sources: z.array(text).default([]), expected_reasoning_result: z.string().nullable().default(null) });
 const tag = z.object({ namespace: z.string(), value: z.string(), label: z.string(), source: z.enum(["declared", "derived"]).default("declared") });
 
 /** Portable authoring data. Environment permissions and engine identities never travel here. */
@@ -65,6 +65,10 @@ export function definitionIssues(definition: PolicyDefinition): string[] {
     add(!rule.name.trim() || !rule.stages.length || new Set(rule.stages).size !== rule.stages.length, `Rule ${rule.id}: provide a name and unique stages.`);
     for (const stage of rule.stages) add(!definition.tests.some(t => t.required && t.kind === "rule_acceptance" && t.scope === "rule" && t.phase === stage && t.covered_rule_ids.includes(rule.id)), `Rule ${rule.name || rule.id}: add a required ${stage} Rule acceptance test.`);
     const params = rule.detector.parameters;
+    if (rule.detector.ref.startsWith("agent/")) {
+      add(rule.stages.some(stage => stage !== "input"), `Rule ${rule.id}: agent boundary checks only support input.`);
+      add(Object.keys(params).length > 0, `Rule ${rule.id}: this Detector has no configurable parameters.`);
+    }
     if (["model/grounding", "service/formal-verification"].includes(rule.detector.ref)) {
       add(rule.stages.some(stage => stage !== "output"), `Rule ${rule.id}: this Detector only supports output.`);
     }

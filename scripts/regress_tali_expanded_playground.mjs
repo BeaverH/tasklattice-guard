@@ -1,4 +1,4 @@
-// Four bounded Controller requests; only Default's model-free protections.
+// Historical smoke for a pinned local Default; the assertion below rejects the current model-dependent baseline.
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {existsSync,writeFileSync} from 'node:fs';

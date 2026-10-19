@@ -1,3 +1,4 @@
+import { SettingsNavigation } from "@/components/settings-navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, CircleCheck, CircleHelp, CircleX, RefreshCw } from "lucide-react";
@@ -65,6 +66,7 @@ export function HealthPage() {
           </Button>
         )}
       />
+      <SettingsNavigation />
       <div className="health-panel mt-6 bg-card px-6 pb-3" aria-busy={refreshing}>
         <section className="health-summary" aria-labelledby="system-health-label">
           <div className="min-w-0 flex-1">

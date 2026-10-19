@@ -19,16 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getMetricInterval } from "@/features/dashboard";
 import type { Metrics, MetricTrendPoint, MetricTrendSeries } from "@/lib/api";
 
-export type RuntimeMetricKey =
-  | "p50_latency"
-  | "p95_latency"
-  | "p99_latency"
-  | "request_rate"
-  | "intervention_rate"
-  | "block_rate"
-  | "transform_rate"
-  | "error_rate"
-  | "timeout_rate";
+import { runtimeMetricKeys, type RuntimeMetricKey } from "@/features/runtime-metrics";
 
 const colors = [
   "var(--chart-1)",
@@ -39,9 +30,11 @@ const colors = [
   "var(--chart-6)",
 ];
 
-export function RuntimeMetricChart({ metrics }: { metrics: Metrics }) {
+export function RuntimeMetricChart({ metrics, metric: selectedMetric, onMetricChange }: { metrics: Metrics; metric?: RuntimeMetricKey; onMetricChange?: (metric: RuntimeMetricKey) => void }) {
   const { t, i18n } = useTranslation();
-  const [metric, setMetric] = useState<RuntimeMetricKey>("p95_latency");
+  const [localMetric, setLocalMetric] = useState<RuntimeMetricKey>("p95_latency");
+  const metric = selectedMetric ?? localMetric;
+  const setMetric = onMetricChange ?? setLocalMetric;
   const series = metrics.trend_series.none;
   const visibleSeries = series.slice(0, colors.length);
   const definition = t(`dashboard.metricDefinitions.${metric}`);
@@ -69,7 +62,7 @@ export function RuntimeMetricChart({ metrics }: { metrics: Metrics }) {
             <Select value={metric} onValueChange={(value) => setMetric(value as RuntimeMetricKey)}>
               <SelectTrigger className="field:h-9 min-w-0 flex-1 field:bg-card sm:w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {metricKeys.map((key) => <SelectItem key={key} value={key}>{t(`dashboard.metrics.${key}`)}</SelectItem>)}
+                {runtimeMetricKeys.map((key) => <SelectItem key={key} value={key}>{t(`dashboard.metrics.${key}`)}</SelectItem>)}
               </SelectContent>
             </Select>
           </label>
@@ -191,15 +184,3 @@ function displaySeriesName(name: string, t: ReturnType<typeof useTranslation>["t
   if (name === "Unassigned") return t("dashboard.unassigned");
   return name[0]?.toUpperCase() + name.slice(1);
 }
-
-const metricKeys: RuntimeMetricKey[] = [
-  "p50_latency",
-  "p95_latency",
-  "p99_latency",
-  "request_rate",
-  "intervention_rate",
-  "block_rate",
-  "transform_rate",
-  "error_rate",
-  "timeout_rate",
-];

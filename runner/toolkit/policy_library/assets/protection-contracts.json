@@ -5,6 +5,7 @@
     "builtin-secrets": {"capability": "secrets", "rails": ["input", "output"], "modelCapabilities": [], "requiredContext": [], "execution": "local", "outputStreaming": "complete_response"},
     "builtin-prompt-injection": {"capability": "prompt_injection", "rails": ["input"], "modelCapabilities": [], "requiredContext": [], "execution": "local", "outputStreaming": "not_applicable"},
     "builtin-indirect-prompt-injection": {"capability": "indirect_prompt_injection", "rails": ["input"], "modelCapabilities": [], "requiredContext": [], "execution": "local", "outputStreaming": "not_applicable"},
+    "builtin-memory-poisoning": {"capability": "memory_poisoning", "rails": ["input"], "modelCapabilities": [], "requiredContext": [], "execution": "local", "outputStreaming": "not_applicable"},
     "builtin-system-prompt-leakage": {"capability": "system_prompt_leakage", "rails": ["output"], "modelCapabilities": [], "requiredContext": [], "execution": "local", "outputStreaming": "complete_response"},
     "builtin-content-safety": {"capability": "content_safety", "rails": ["input", "output"], "modelCapabilities": ["content_safety"], "requiredContext": [], "execution": "model", "outputStreaming": "incremental_check"},
     "builtin-jailbreak": {"capability": "jailbreak", "rails": ["input"], "modelCapabilities": ["jailbreak"], "requiredContext": [], "execution": "model", "outputStreaming": "not_applicable"},

@@ -4,7 +4,7 @@ title: "配置 Provider、Model 与保护能力"
 summary: "连接 Provider、注册并测试 Model，再把兼容模型分配给需要它的 Rail。"
 order: 1
 ---
-默认 Guardrail 的本地检查不要求先配置检测模型。只有选用的 Policy 依赖模型判断时，才需要完成 Provider、Model 和保护能力绑定。**模型能调用**与**某个 Rail 已使用它**是两件事。
+默认 Guardrail 同时依赖模型检测与本地检查。首次启用前，需要配置并验证 `jailbreak.input`、`content_safety.input` 和 `content_safety.output` 三个能力绑定，再完成 Default 草稿验证。缺少绑定或模型验证失败时不会发布新版，也不会自动退回仅本地检查。**模型能调用**与**某个 Rail 已使用它**是两件事。
 
 <a id="platform-model-steps" />
 

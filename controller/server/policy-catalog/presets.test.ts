@@ -45,7 +45,7 @@ describe("Protection presets", () => {
       expect(preset.optionalPolicyIds.some(policyId => retired.has(policyId))).toBe(false);
     }
     const singapore = protectionPresets.find(preset => preset.id === "singapore-financial-assistant")!;
-    expect(singapore.version).toBe("1.0.1");
+    expect(singapore.version).toBe("1.0.2");
     expect(singapore.limitations.join(" ")).toContain("No MAS-specific control");
   });
 

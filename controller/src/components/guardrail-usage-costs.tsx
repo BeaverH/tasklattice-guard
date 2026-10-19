@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
@@ -13,7 +13,7 @@ import { formatCost } from "./model-pricing";
 import { getGuardrailCosts } from "@/lib/model-pricing-api";
 import type { CostQuery, GuardrailCostView } from "../../shared/model-pricing";
 
-export function GuardrailUsageCosts({ guardrailId }: { guardrailId: string }) {
+export function GuardrailUsageCosts({ guardrailId, guardrailFilter }: { guardrailId: string; guardrailFilter?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [window, setWindow] = useState<CostQuery["window"]>("month");
   const [source, setSource] = useState<CostQuery["source"]>("all");
@@ -21,12 +21,13 @@ export function GuardrailUsageCosts({ guardrailId }: { guardrailId: string }) {
   const data = query.data;
   const count = (value: number) => value.toLocaleString(i18n.language);
   return <div className="space-y-5">
-    <p className="max-w-3xl text-sm text-muted-foreground">{t("modelPricing.description")}</p>
     <div className="flex items-center gap-4">
-      <label className="flex items-center gap-2 text-sm">{t("modelPricing.period")}<Select value={window} onValueChange={value => setWindow(value as CostQuery["window"])}><SelectTrigger className="w-36" aria-label={t("modelPricing.period")}><SelectValue /></SelectTrigger><SelectContent>{(["month", "7d", "30d"] as const).map(value => <SelectItem key={value} value={value}>{t(`modelPricing.${value}`)}</SelectItem>)}</SelectContent></Select></label>
-      <label className="flex items-center gap-2 text-sm">{t("modelPricing.source")}<Select value={source} onValueChange={value => setSource(value as CostQuery["source"])}><SelectTrigger className="w-52" aria-label={t("modelPricing.source")}><SelectValue /></SelectTrigger><SelectContent>{(["all", "runtime", "testing"] as const).map(value => <SelectItem key={value} value={value}>{t(`modelPricing.${value}`)}</SelectItem>)}</SelectContent></Select></label>
-      <span className="text-xs text-muted-foreground">UTC</span><Button className="ml-auto" variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw className={query.isFetching ? "animate-spin" : ""} />{t("modelPricing.refresh")}</Button>
+      {guardrailFilter}
+      <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm">{t("modelPricing.period")}<Select value={window} onValueChange={value => setWindow(value as CostQuery["window"])}><SelectTrigger className="w-36" aria-label={t("modelPricing.period")}><SelectValue /></SelectTrigger><SelectContent>{(["month", "7d", "30d"] as const).map(value => <SelectItem key={value} value={value}>{t(`modelPricing.${value}`)}</SelectItem>)}</SelectContent></Select></label>
+      <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm">{t("modelPricing.source")}<Select value={source} onValueChange={value => setSource(value as CostQuery["source"])}><SelectTrigger className="w-52" aria-label={t("modelPricing.source")}><SelectValue /></SelectTrigger><SelectContent>{(["all", "runtime", "testing"] as const).map(value => <SelectItem key={value} value={value}>{t(`modelPricing.${value}`)}</SelectItem>)}</SelectContent></Select></label>
+      <span className="shrink-0 text-xs text-muted-foreground">UTC</span><Button className="ml-auto shrink-0" variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw className={query.isFetching ? "animate-spin" : ""} />{t("modelPricing.refresh")}</Button>
     </div>
+    <p className="max-w-3xl text-sm text-muted-foreground">{t("modelPricing.description")}</p>
     {query.isPending && <Skeleton className="h-64" />}
     {query.error && <ErrorNotice error={query.error} />}
     {data && <>

@@ -4,7 +4,7 @@ title: "Configure Providers, Models, and protection capabilities"
 summary: "Connect a Provider, register and test a Model, then assign a compatible Model to the Rail that needs it."
 order: 1
 ---
-The default Guardrail's local checks do not require a detection model. Configure one when a selected Policy depends on model-backed evaluation. **A callable Model** and **a Rail actively using it** are different states.
+The Default Guardrail requires both model detection and local checks. Before first activation, configure and validate `jailbreak.input`, `content_safety.input`, and `content_safety.output`, then validate the Default draft. Missing bindings or failed model validation prevent a new publication; there is no automatic fallback to local checks alone. **A callable Model** and **a Rail actively using it** are different states.
 
 <a id="platform-model-steps" />
 

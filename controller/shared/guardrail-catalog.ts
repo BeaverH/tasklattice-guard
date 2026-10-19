@@ -182,6 +182,7 @@ export const localCapabilitySurfaces = [
   { id: "pii_exact.output", categoryId: "pii_detection", capabilityRef: "pii", railType: "output", contractRef: "tali.guard.pii.exact.v1" },
   { id: "prompt_injection.input", categoryId: "jailbreak_protection", capabilityRef: "prompt_injection", railType: "input", contractRef: "tali.guard.prompt-injection.v1" },
   { id: "indirect_prompt_injection.input", categoryId: "jailbreak_protection", capabilityRef: "indirect_prompt_injection", railType: "input", contractRef: "tali.guard.indirect-prompt-injection.v1" },
+  { id: "memory_poisoning.input", categoryId: "agentic_security", capabilityRef: "memory_poisoning", railType: "input", contractRef: "tali.guard.memory-poisoning.v1" },
   { id: "system_prompt_leakage.output", categoryId: "pii_detection", capabilityRef: "system_prompt_leakage", railType: "output", contractRef: "tali.guard.system-prompt-leakage.v1" },
   { id: "content_filter.input", categoryId: "content_safety", capabilityRef: "content_filter", railType: "input", contractRef: "tali.guard.content-filter.rules.v1" },
   { id: "content_filter.output", categoryId: "content_safety", capabilityRef: "content_filter", railType: "output", contractRef: "tali.guard.content-filter.rules.v1" },

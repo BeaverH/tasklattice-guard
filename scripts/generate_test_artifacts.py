@@ -166,14 +166,19 @@ def _topic_plan() -> dict[str, object]:
 
 
 def _default_plan() -> dict[str, object]:
+    # Historical default-local-v1 fixture: deliberately keep only local components.
+    # This artifact is not the current deployable, model-dependent Default.
     # Control-plane generation only. Runner-only tests never import the builder.
     source = """
       import {defaultGuardrailDraft} from './server/domain/defaults.ts';
       import {buildGuardrailPlan} from './server/domain/guardrail-plan.ts';
       import {PolicyCatalog} from './server/policy-catalog/catalog.ts';
       const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
+      const fullDraft = defaultGuardrailDraft(policies);
+      const draft = {...fullDraft, policyBindings: fullDraft.policyBindings.filter(binding =>
+        policies.find(policy => policy.id === binding.policyId).protection.execution === 'local')};
       console.log(JSON.stringify(buildGuardrailPlan({guardrailId:'fixture-secrets', guardrailVersion:"20260904-010000.001Z",
-        draft:defaultGuardrailDraft(policies), policies})));
+        draft, policies})));
     """
     return json.loads(subprocess.run(
         ["node", "--import", "tsx", "--input-type=module", "-e", source],

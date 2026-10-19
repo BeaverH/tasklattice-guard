@@ -1,0 +1,24 @@
+schema_version: 2
+kind: Policy
+metadata:
+  id: builtin-indirect-prompt-injection
+  name: Indirect prompt injection
+  description: Checks untrusted retrieved documents and tool results for explicit
+    instruction overrides, forged roles and prompt extraction. Local pattern coverage;
+    not a general semantic detector.
+  source: built_in
+  version: 1.0.0
+  tags:
+  - namespace: protection
+    value: attacks_and_abuse
+    label: Attacks and abuse
+    source: declared
+  - namespace: guardrail_category
+    value: agentic_security
+    label: Agentic Security
+    source: declared
+parameters: []
+rules:
+- rules/boundary.yaml
+tests:
+- tests/acceptance.yaml

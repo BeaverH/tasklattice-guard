@@ -60,7 +60,7 @@ const platformRoutes = [
   ...protectedRoutes.filter(([, path]) => /^\/(model|runner)/.test(path)),
   ["GET", "/model-pricing"], ["GET", "/model-pricing/catalog?q=model"],
   ["GET", "/model-configuration"], ["GET", "/model-providers"], ["GET", "/models"],
-  ["GET", "/system/health"], ["GET", "/system/version"], ["GET", "/runner-pools"], ["GET", "/audit-events"],
+  ["GET", "/audit-events"],
 ] as const;
 
 function setup(role: string | null) {
@@ -89,6 +89,13 @@ describe.each([null, "unknown-role"])("Product API authorization for role %s", (
 });
 
 describe("User platform boundary", () => {
+  it.each(["/system/health", "/system/version", "/runner-pools"])("allows tenant operational reads at %s", async path => {
+    const app = createHttpApp({ config,
+      auth: { api: { getSession: vi.fn().mockResolvedValue({ user: { id: "actor", role: "user" } }) } } as unknown as ControllerAuth,
+      service: { listRunnerHeartbeats: vi.fn().mockResolvedValue([]), listRunnerPoolsWithCapacity: vi.fn().mockResolvedValue([]) } as unknown as ControlPlaneService,
+      runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics });
+    expect((await app.request(`/api/v1${path}`)).status).toBe(200);
+  });
   it.each(platformRoutes)("denies %s %s before reading settings or parsing a write", async (method, path) => {
     const { app, unexpected } = setup("user");
     const response = await app.request(`/api/v1${path}`, { method, headers: { "content-type": "application/json" }, ...(method === "GET" ? {} : { body: "not-json" }) });

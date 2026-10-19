@@ -5372,6 +5372,8 @@
           },
           "ref": {
             "enum": [
+              "agent/indirect-injection",
+              "agent/memory-poisoning",
               "code/fenced-block",
               "model/classifier",
               "model/grounding",
@@ -5605,6 +5607,29 @@
           },
           "query": {
             "type": "string"
+          },
+          "target_source": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "const": "model_output",
+                "type": "string"
+              },
+              {
+                "const": "retrieved_content",
+                "type": "string"
+              },
+              {
+                "const": "tool_output",
+                "type": "string"
+              },
+              {
+                "const": "user_input",
+                "type": "string"
+              }
+            ]
           },
           "trusted_instruction": {
             "type": "string"
@@ -10964,6 +10989,9 @@
       },
       "getTelemetryMetricsResponseTrend_seriesGuardrailItem": {
         "properties": {
+          "guardrailId": {
+            "type": "string"
+          },
           "name": {
             "description": "Application-defined JSON value."
           },
@@ -10975,6 +11003,7 @@
           }
         },
         "required": [
+          "guardrailId",
           "name",
           "points"
         ],
@@ -21712,6 +21741,8 @@
                             "text/regex",
                             "text/conditions",
                             "code/fenced-block",
+                            "agent/indirect-injection",
+                            "agent/memory-poisoning",
                             "model/classifier",
                             "model/grounding",
                             "service/formal-verification"
@@ -21908,6 +21939,22 @@
                           "default": "",
                           "maxLength": 500000,
                           "type": "string"
+                        },
+                        "target_source": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "user_input",
+                                "retrieved_content",
+                                "tool_output",
+                                "model_output"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "trusted_instruction": {
                           "default": "",
@@ -40873,7 +40920,7 @@
     },
     "/api/v1/runner-pools": {
       "get": {
-        "description": "Reads current state without creating resources or advancing a lifecycle. Requires runners:read for personal access tokens. Allowed account roles: admin. Token access covers all resources in the selected module.",
+        "description": "Reads current state without creating resources or advancing a lifecycle. Requires runners:read for personal access tokens. Allowed account roles: admin, user. Token access covers all resources in the selected module.",
         "operationId": "getRunnerPools",
         "responses": {
           "200": {
@@ -40989,9 +41036,10 @@
         "tags": [
           "runners"
         ],
-        "x-account-role": "admin",
+        "x-account-role": "user",
         "x-account-roles": [
-          "admin"
+          "admin",
+          "user"
         ],
         "x-idempotency": {
           "mode": "safe-read"
@@ -40999,7 +41047,7 @@
         "x-product-area": "Platform Settings",
         "x-retry-policy": "Repeat the same request; the response may reflect newer state or absence.",
         "x-source": "server/http/app.ts#949",
-        "x-token-account-role": "admin",
+        "x-token-account-role": "user",
         "x-token-permission": {
           "access": "read",
           "module": "runners"
@@ -41442,7 +41490,7 @@
     },
     "/api/v1/system/health": {
       "get": {
-        "description": "Reads current state without creating resources or advancing a lifecycle. Checks Controller storage access and connection/heartbeat evidence for all registered Runners. Guardrail publication, model bindings, assignments, configuration generation and desired pool capacity do not affect this component-liveness result. HTTP 200 returns the completed snapshot even when a component is unhealthy; a failed Controller storage check leaves data-plane health unknown. Requires runners:read for personal access tokens. Allowed account roles: admin. Token access covers all resources in the selected module.",
+        "description": "Reads current state without creating resources or advancing a lifecycle. Checks Controller storage access and connection/heartbeat evidence for all registered Runners. Guardrail publication, model bindings, assignments, configuration generation and desired pool capacity do not affect this component-liveness result. HTTP 200 returns the completed snapshot even when a component is unhealthy; a failed Controller storage check leaves data-plane health unknown. Requires runners:read for personal access tokens. Allowed account roles: admin, user. Token access covers all resources in the selected module.",
         "operationId": "getSystemHealth",
         "responses": {
           "200": {
@@ -41558,9 +41606,10 @@
         "tags": [
           "system"
         ],
-        "x-account-role": "admin",
+        "x-account-role": "user",
         "x-account-roles": [
-          "admin"
+          "admin",
+          "user"
         ],
         "x-idempotency": {
           "mode": "safe-read"
@@ -41568,7 +41617,7 @@
         "x-product-area": "Platform Settings",
         "x-retry-policy": "Repeat the same request; the response may reflect newer state or absence.",
         "x-source": "server/http/app.ts#930",
-        "x-token-account-role": "admin",
+        "x-token-account-role": "user",
         "x-token-permission": {
           "access": "read",
           "module": "runners"
@@ -41681,7 +41730,7 @@
     },
     "/api/v1/system/version": {
       "get": {
-        "description": "Reads current state without creating resources or advancing a lifecycle. Requires runners:read for personal access tokens. Allowed account roles: admin. Token access covers all resources in the selected module.",
+        "description": "Reads current state without creating resources or advancing a lifecycle. Requires runners:read for personal access tokens. Allowed account roles: admin, user. Token access covers all resources in the selected module.",
         "operationId": "getSystemVersion",
         "responses": {
           "200": {
@@ -41797,9 +41846,10 @@
         "tags": [
           "system"
         ],
-        "x-account-role": "admin",
+        "x-account-role": "user",
         "x-account-roles": [
-          "admin"
+          "admin",
+          "user"
         ],
         "x-idempotency": {
           "mode": "safe-read"
@@ -41807,7 +41857,7 @@
         "x-product-area": "Platform Settings",
         "x-retry-policy": "Repeat the same request; the response may reflect newer state or absence.",
         "x-source": "server/http/app.ts#937",
-        "x-token-account-role": "admin",
+        "x-token-account-role": "user",
         "x-token-permission": {
           "access": "read",
           "module": "runners"

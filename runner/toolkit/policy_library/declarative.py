@@ -107,6 +107,7 @@ class ParameterDefinition(StrictModel):
 
 
 class TestContext(StrictModel):
+    target_source: Literal["user_input", "retrieved_content", "tool_output", "model_output"] | None = None
     trusted_instruction: str = ""
     query: str = ""
     grounding_sources: list[str] = Field(default_factory=list)
@@ -236,6 +237,8 @@ def compile_policy(definition: PolicyDefinition, registry: dict[str, Any]) -> di
             validate_custom_detector(definition, rule, detector, params)
         validate_detector_parameters(rule, detector, params)
         adapter = deepcopy(detector["adapter"])
+        if rule.detector.ref.startswith("agent/") and rule.stages != ["input"]:
+            raise ValueError("Agent boundary detectors support only the input stage")
         identity = rule.runtime_adapter.model_dump() if rule.runtime_adapter else {
             "binding_id": definition.metadata.id, "implementation_rule_id": rule.id,
         }

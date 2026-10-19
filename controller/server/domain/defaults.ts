@@ -5,7 +5,7 @@ import { defaultTestCaseOverrides } from "./default-expectations.js";
 export const DEFAULT_GUARDRAIL_ID = "guardrail-default";
 export const DEFAULT_GUARDRAIL_NAME = "Default Guardrail";
 
-// Default is a composition of complete, model-free Policies, not a separate
+// Default is a composition of complete local and model Policies, not a separate
 // Rule collection. Policy definitions own their Rules, phases, and actions;
 // reviewed Default-local overrides can retain findings without enforcement.
 // Focused bindings replace the three mixed legacy collections. Credentials
@@ -13,6 +13,12 @@ export const DEFAULT_GUARDRAIL_NAME = "Default Guardrail";
 // contextual bank/travel/government identifiers precede broad contact formats.
 // This is an authored Policy order, never an action/severity ranking.
 const DEFAULT_POLICY_IDS = [
+  "builtin-indirect-prompt-injection",
+  "builtin-memory-poisoning",
+  // Inspect the original content before local transformations. Model bindings
+  // are required; missing/unavailable models must never downgrade this chain.
+  "builtin-jailbreak",
+  "builtin-content-safety",
   "filter-denied-insults",
   "filter-harm-toxic-abuse",
   "filter-harmful-violence",
@@ -60,9 +66,9 @@ export function defaultGuardrailDraft(policies: readonly PolicyDto[]): Guardrail
     const policy = byId.get(policyId);
     if (!policy) throw new Error(`Default Guardrail Policy ${policyId} is missing from the Runner catalog.`);
     if (!policy.rules.length) throw new Error(`Default Guardrail Policy ${policyId} has no Rules.`);
-    if (policy.protection.execution !== "local" || policy.protection.modelCapabilities.length
-      || policy.rules.some((rule) => rule.implementation.execution !== "local")) {
-      throw new Error(`Default Guardrail Policy ${policyId} must execute locally without a Model or an unverified custom flow.`);
+    if (!["local", "model", "local_then_model"].includes(policy.protection.execution)
+      || policy.rules.some((rule) => !["local", "platform"].includes(rule.implementation.execution))) {
+      throw new Error(`Default Guardrail Policy ${policyId} must use verified local or platform Model implementations.`);
     }
     return {
       policyId: policy.id,

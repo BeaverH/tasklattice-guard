@@ -102,6 +102,7 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
   function addTest(stage: "input" | "output") {
     if (!rule) return;
     const test: DefinitionTest = { id: `test-${uid()}`, name: `${rule.name} · ${stage}`, description: "", phase: stage, content: "", expected_decision: rule.on_match.action, covered_rule_ids: [rule.id], kind: "rule_acceptance", scope: "rule", required: true, parameter_names: [], group: "Policy tests", ...(rule.on_match.action === "transform" ? { expected_text: "" } : {}) };
+    if (rule.detector.ref.startsWith("agent/")) test.context = { target_source: "retrieved_content", trusted_instruction: "", query: "", grounding_sources: [], expected_reasoning_result: null };
     change({ ...definition, tests: [...definition.tests, test] });
   }
   function updateTest(next: DefinitionTest) { change({ ...definition, tests: definition.tests.map(t => t.id === next.id ? next : t) }); }
@@ -172,7 +173,7 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
                   const ref = e.target.value as DefinitionRule["detector"]["ref"];
                   changeRule({ ...rule, detector: { ref, version: "1.0.0", parameters: detectorDefaults(ref) }, stages: [ref === "model/grounding" || ref === "service/formal-verification" ? "output" : "input"], on_match: { action: "block" } });
                 }}>{detectorRefs.map(ref => <option key={ref}>{ref}</option>)}</NativeSelect></Field>
-                <fieldset><legend className="text-xs font-medium">{l("checkStages")}</legend><div className="mt-2 flex h-11 items-center gap-5">{(["input", "output"] as const).map(stage => <label key={stage} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={rule.stages.includes(stage)} onChange={e => changeRule({ ...rule, stages: e.target.checked ? [...rule.stages, stage] : rule.stages.filter(s => s !== stage) })} />{l(stage)}</label>)}</div></fieldset>
+                <fieldset><legend className="text-xs font-medium">{l("checkStages")}</legend><div className="mt-2 flex h-11 items-center gap-5">{(["input", "output"] as const).map(stage => <label key={stage} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={rule.stages.includes(stage)} disabled={rule.detector.ref.startsWith("agent/")} onChange={e => changeRule({ ...rule, stages: e.target.checked ? [...rule.stages, stage] : rule.stages.filter(s => s !== stage) })} />{l(stage)}</label>)}</div></fieldset>
                 <Field label={l("onMatch")}><NativeSelect className="field:h-11 w-full" value={rule.on_match.action} onChange={e => changeRule({ ...rule, on_match: { ...rule.on_match, action: e.target.value as DefinitionRule["on_match"]["action"] } })}>{["block", "allow", ...(["text/keyword", "text/regex"].includes(rule.detector.ref) || rule.on_match.action === "transform" ? ["transform"] : [])].map(action => <option key={action}>{action}</option>)}</NativeSelect></Field>
               </div>
               <DetectorFields rule={rule} change={changeRule} l={l} onError={setDetectorError} />
@@ -202,6 +203,8 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
 
 function detectorDefaults(ref: DefinitionRule["detector"]["ref"]): Record<string, unknown> {
   switch (ref) {
+    case "agent/indirect-injection":
+    case "agent/memory-poisoning": return {};
     case "text/regex": return { expression: "" };
     case "text/conditions": return { detector_options: { match: { contains: [] } } };
     case "code/fenced-block": return { detector_options: { languages: ["python", "javascript"] } };
@@ -215,13 +218,15 @@ function detectorDefaults(ref: DefinitionRule["detector"]["ref"]): Record<string
 function TestEditor({ test, rule, update, remove, l }: { test: DefinitionTest; rule: DefinitionRule; update: (test: DefinitionTest) => void; remove: () => void; l: (key: string) => string }) {
   const context = test.context ?? { trusted_instruction: "", query: "", grounding_sources: [], expected_reasoning_result: null };
   const external = rule.detector.ref.startsWith("model/") || rule.detector.ref.startsWith("service/");
+  const boundary = rule.detector.ref.startsWith("agent/");
   return <section className="space-y-4 rounded-lg border p-4">
     <div className="flex items-center gap-3"><Input className="field:h-11" aria-label={l("testName")} value={test.name} onChange={e => update({ ...test, name: e.target.value })} /><Badge variant="outline">{test.phase}</Badge><Button className="size-11 shrink-0" size="icon" variant="ghost" aria-label={l("deleteTest")} onClick={remove}><Trash2 /></Button></div>
     <div className="grid grid-cols-2 gap-4"><Field label={l("inputText")}><Textarea value={test.content} onChange={e => update({ ...test, content: e.target.value })} /></Field><div className="space-y-3"><Field label={l("expectedDecision")}><NativeSelect className="field:h-11 w-full" value={test.expected_decision} onChange={e => update({ ...test, expected_decision: e.target.value as DefinitionTest["expected_decision"] })}>{["allow", "block", "transform", "intervene"].map(action => <option key={action}>{action}</option>)}</NativeSelect></Field><label className="flex min-h-11 items-center gap-2 text-xs"><input type="checkbox" checked={test.kind === "rule_acceptance"} onChange={e => update({ ...test, kind: e.target.checked ? "rule_acceptance" : "scenario", scope: e.target.checked ? "rule" : "policy" })} />{l("ruleAcceptanceMustMatch")}</label></div></div>
     {test.expected_decision === "transform" || test.expected_text != null ? <Field label={l("expectedCompleteOutput")}><Textarea value={test.expected_text ?? ""} onChange={e => update({ ...test, expected_text: e.target.value })} /></Field> : null}
-    {external ? <details open={["model/grounding", "service/formal-verification"].includes(rule.detector.ref)} className="border-t pt-3"><summary className="cursor-pointer text-xs font-medium">{l("testContext")}</summary><div className="mt-4 space-y-4">
-      <Field label={l("trustedInstruction")}><Textarea value={context.trusted_instruction} onChange={e => update({ ...test, context: { ...context, trusted_instruction: e.target.value } })} /></Field>
-      {["model/grounding", "service/formal-verification"].includes(rule.detector.ref) ? <Field label={l("query")}><Input className="field:h-11" value={context.query} onChange={e => update({ ...test, context: { ...context, query: e.target.value } })} /></Field> : null}
+    {external || boundary ? <details open={boundary || ["model/grounding", "service/formal-verification"].includes(rule.detector.ref)} className="border-t pt-3"><summary className="cursor-pointer text-xs font-medium">{l("testContext")}</summary><div className="mt-4 space-y-4">
+      {boundary ? <Field label={l("targetSource")}><NativeSelect className="field:h-11 w-full" value={context.target_source ?? "user_input"} onChange={e => update({ ...test, context: { ...context, target_source: e.target.value as "user_input" | "retrieved_content" | "tool_output" } })}>{["user_input", "retrieved_content", "tool_output"].map(source => <option key={source} value={source}>{l(source)}</option>)}</NativeSelect></Field> : null}
+      {external ? <Field label={l("trustedInstruction")}><Textarea value={context.trusted_instruction} onChange={e => update({ ...test, context: { ...context, trusted_instruction: e.target.value } })} /></Field> : null}
+      {boundary || ["model/grounding", "service/formal-verification"].includes(rule.detector.ref) ? <Field label={l("query")}><Input className="field:h-11" value={context.query} onChange={e => update({ ...test, context: { ...context, query: e.target.value } })} /></Field> : null}
       {rule.detector.ref === "model/grounding" ? <><Field label={l("groundingSources")}><Textarea value={context.grounding_sources.join("\n")} onChange={e => update({ ...test, context: { ...context, grounding_sources: e.target.value.split("\n") } })} /></Field></> : null}
       {rule.detector.ref === "service/formal-verification" ? <Field label={l("expectedReasoningResult")}><NativeSelect className="field:h-11 w-full" value={context.expected_reasoning_result ?? ""} onChange={e => update({ ...test, context: { ...context, expected_reasoning_result: e.target.value || null } })}><option value="">{l("selectProofResult")}</option>{["valid", "invalid", "satisfiable", "impossible", "translation_ambiguous", "too_complex", "no_translations"].map(value => <option key={value}>{value}</option>)}</NativeSelect></Field> : null}
     </div></details> : null}
@@ -238,6 +243,7 @@ function DetectorFields({ rule, change, l, onError }: { rule: DefinitionRule; ch
   const p = rule.detector.parameters;
   const options = (p.detector_options ?? {}) as Record<string, unknown>;
   const update = (parameters: Record<string, unknown>) => change({ ...rule, detector: { ...rule.detector, parameters } });
+  if (rule.detector.ref.startsWith("agent/")) return <p className="text-xs leading-5 text-muted-foreground">{l("boundaryHint")}</p>;
   if (rule.detector.ref === "model/classifier" || rule.detector.ref === "model/grounding" || rule.detector.ref === "service/formal-verification") return <div className="space-y-4">
     <p className="text-xs leading-5 text-muted-foreground">{l("externalBindingHint")}</p>
     {rule.detector.ref === "model/classifier" ? <>

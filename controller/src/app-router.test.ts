@@ -42,7 +42,32 @@ describe("Integration navigation", () => {
     expect(router.state.matches.at(-1)?.search.tab).toBe(expected);
   });
 
+  it("preserves the request-rate deep link and metric selection through history", async () => {
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ["/guardrails/guardrail-default?tab=runtime&window=1h&metric=request_rate#runtime-metrics"] }) });
+    await router.load();
+    expect(router.state.matches.at(-1)?.search).toMatchObject({ tab: "runtime", window: "1h", metric: "request_rate" });
+    expect(router.state.location.hash).toBe("runtime-metrics");
+    await router.navigate({ to: "/guardrails/$guardrailId", params: { guardrailId: "guardrail-default" }, search: { metric: "p95_latency" } });
+    router.history.back(); await router.load();
+    expect(router.state.matches.at(-1)?.search.metric).toBe("request_rate");
+  });
+
+  it("redirects old cost bookmarks to billing and preserves the selected Guardrail", async () => {
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ["/guardrails/guardrail-default?tab=usage"] }) });
+    await router.load();
+    expect(router.state.location.pathname).toBe("/billing");
+    expect(router.state.matches.at(-1)?.search).toEqual({ guardrail: "guardrail-default" });
+    await router.navigate({ to: "/billing", search: { guardrail: "another" } });
+    router.history.back();
+    await router.load();
+    expect(router.state.matches.at(-1)?.search.guardrail).toBe("guardrail-default");
+  });
+
   it.each([
+    ["/billing", "/billing", {}],
+    ["/settings/health", "/settings/health", {}],
+    ["/settings/runner", "/settings/runner", {}],
+    ["/settings/version", "/settings/version", {}],
     ["/account", "/account", {}],
     ["/account/security", "/account/security", {}],
     ["/account/access-tokens", "/account/access-tokens", {}],
