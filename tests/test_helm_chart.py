@@ -12,7 +12,7 @@ CHART = ROOT / "charts" / "tali-guard"
 DEV_VALUES = CHART / "values-dev-uat.yaml"
 DEFAULT_VALUES = CHART / "values.yaml"
 REQUIRED = (
-    "--set", "database.url=postgresql://guard:guard@postgres:5432/guard",
+    "--set", "database.existingSecret=guard-database",
     "--set", "security.artifactSigning.existingSecret=artifact-signing",
     "--set", "security.controlTls.existingSecret=control-tls",
     "--set", "security.bootstrapAdmin.existingSecret=bootstrap-admin",
@@ -148,13 +148,13 @@ def test_controller_and_runner_have_distinct_images_ports_and_responsibilities()
         "http://contract-tali-guard-runtime.default.svc.cluster.local:8091"
     )
     assert controller_env["CONTROLLER_RUNTIME_PUBLIC_URL"]["value"] == ""
-    assert controller_env["BETTER_AUTH_MIN_PASSWORD_LENGTH"]["value"] == "12"
+    assert controller_env["CONTROLLER_MIN_LOGIN_LENGTH"]["value"] == "12"
     assert controller_env["CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS"]["value"] == "false"
     assert "GUARD_CONTROLLER_TARGET" in runner_env
     assert runner_env["GUARD_URL"]["value"] == "http://contract-tali-guard-controller:8080"
     assert "GUARD_ACCESS_TOKEN" not in runner_env
-    assert controller_env["CONTROLLER_METRICS_TOKEN"]["valueFrom"]["secretKeyRef"]["name"] == "contract-tali-guard-metrics"
-    assert runner_env["GUARD_METRICS_TOKEN"]["valueFrom"]["secretKeyRef"]["name"] == "contract-tali-guard-metrics"
+    assert controller_env["CONTROLLER_METRICS_TOKEN"]["valueFrom"]["secretKeyRef"]["name"] == "contract-tali-guard-metrics-init"
+    assert runner_env["GUARD_METRICS_TOKEN"]["valueFrom"]["secretKeyRef"]["name"] == "contract-tali-guard-metrics-init"
     assert "CONTROLLER_DATABASE_URL" not in runner_env
     assert runner_env["GUARD_RUNNER_COMPILER_CAPABLE"]["value"] == "true"
     assert runner_env["GUARD_RUNNER_ID"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.name"
@@ -417,7 +417,7 @@ def test_shared_public_url_updates_ui_auth_and_runtime_without_changing_internal
 
 
 def test_shared_public_url_overrides_local_ui_addresses_and_derives_ingress_host():
-    documents = render_dev("--set-string", "publicUrl=https://guard-uat.example.com:8443", "--set", "ingress.enabled=true")
+    documents = render_dev("--set", "security.bootstrapAdmin.localDefault=false", "--set", "security.bootstrapUser.localDefault=false", "--set-string", "publicUrl=https://guard-uat.example.com:8443", "--set", "ingress.enabled=true")
     config = controller_config(documents)["data"]
     assert config["CONTROLLER_PUBLIC_URL"] == config["CONTROLLER_RUNTIME_PUBLIC_URL"] == "https://guard-uat.example.com:8443"
     assert config["BETTER_AUTH_TRUSTED_ORIGINS"] == "https://guard-uat.example.com:8443"
@@ -464,9 +464,8 @@ def test_shared_host_virtualservice_example_matches_rendered_services(tmp_path):
     assert controller_env["CONTROLLER_DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
         "name": "tali-guard-uat-database", "key": "database-url",
     }
-    assert controller_env["CONTROLLER_BOOTSTRAP_ADMIN_EMAIL"]["valueFrom"]["secretKeyRef"] == {
-        "name": "tali-guard-uat-bootstrap-admin", "key": "email",
-    }
+    assert controller_env["CONTROLLER_BOOTSTRAP_ADMIN_DIRECTORY"]["value"] == "/var/run/tasklattice/bootstrap-admin"
+    assert next(volume for volume in controller_deployment["spec"]["template"]["spec"]["volumes"] if volume["name"] == "bootstrap-admin")["secret"]["secretName"] == "tali-guard-uat-bootstrap-admin"
     runner = next(doc for doc in documents if doc["kind"] == "StatefulSet")
     assert runner["spec"]["replicas"] == 2
     runner_env = {entry["name"]: entry.get("value") for entry in runner["spec"]["template"]["spec"]["containers"][0]["env"]}
@@ -636,7 +635,7 @@ def test_development_values_are_self_contained_and_keep_two_app_components():
     assert controller_env["CONTROLLER_RUNTIME_SERVICE_URL"]["value"] == (
         "http://tali-guard-runtime.tali.svc.cluster.local:8091"
     )
-    assert controller_env["BETTER_AUTH_MIN_PASSWORD_LENGTH"]["value"] == "12"
+    assert controller_env["CONTROLLER_MIN_LOGIN_LENGTH"]["value"] == "12"
     assert controller_env["CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS"]["value"] == "false"
     assert controller_pod["initContainers"][0]["name"] == "wait-for-postgresql"
     services = {item["metadata"]["name"]: item for item in documents if item.get("kind") == "Service"}
@@ -662,17 +661,15 @@ def test_development_values_are_self_contained_and_keep_two_app_components():
     assert runner_public_service["spec"]["type"] == "LoadBalancer"
     assert runner_public_service["spec"]["sessionAffinity"] == "None"
     assert runner_public_service["spec"]["ports"][0]["port"] == 38082
-    assert "tali-guard-bootstrap-admin" in secrets
-    assert secrets["tali-guard-bootstrap-admin"]["stringData"] == {
-        "email": "admin@tasklattice.local",
-        "password-hash": load_values(DEV_VALUES)["security"]["bootstrapAdmin"]["passwordHash"],
-        "name": "Local Administrator",
-    }
-    assert "tali-guard-artifact-signing" not in secrets
+    assert not secrets
+    specs = bootstrap_specs(documents)
+    assert any(spec["kind"] == "database" for spec in specs)
+    assert any(spec["kind"] == "account" and spec["email"] == "admin@tasklattice.local" for spec in specs)
+    assert "tali-guard-artifact-signing-init" not in secrets
     for pod in (controller_pod, runner_pod):
         signing_volume = next(volume for volume in pod["volumes"] if volume["name"] == "artifact-signing")
-        assert signing_volume["secret"]["secretName"] == "tali-guard-artifact-signing"
-    assert "tali-guard-control-tls" not in secrets
+        assert signing_volume["secret"]["secretName"] == "tali-guard-artifact-signing-init"
+    assert "tali-guard-control-tls-init" not in secrets
     assert controller_env["CONTROLLER_GRPC_TRANSPORT"]["value"] == "mtls"
     assert any(item.get("kind") == "Job" and item["metadata"]["name"] == "tali-guard-bootstrap" for item in documents)
 
@@ -709,7 +706,7 @@ def test_initialization_reuses_the_controller_image_including_registry_overrides
         for container in item["spec"]["template"]["spec"].get(field, [])
     }
     images.update(container["image"] for item in documents if item["kind"] == "Pod" for container in item["spec"]["containers"])
-    assert len(images) == 4  # Including Helm test: Controller, Runner, PostgreSQL and Redis only.
+    assert len(images) == 4  # Controller, Runner, PostgreSQL and Redis; no helper image.
 
 
 def test_production_profile_does_not_install_development_postgresql():
@@ -922,7 +919,7 @@ def test_observability_bundle_scrapes_with_auth_and_provisions_rules_and_dashboa
         endpoint = monitor["spec"]["endpoints"][0]
         assert endpoint["path"] == "/metrics"
         assert endpoint["authorization"]["credentials"] == {
-            "name": "contract-tali-guard-metrics",
+            "name": "contract-tali-guard-metrics-init",
             "key": "metrics-token",
         }
     group_rules = [rule for group in rules["spec"]["groups"] for rule in group["rules"]]
@@ -1185,60 +1182,37 @@ def test_external_secrets_render_references_without_private_keys():
     assert all(item.get("kind") != "Secret" for item in documents)
 
 
-def test_upgrade_preserves_helm_owned_signing_secret(tmp_path: Path):
-    import base64
-    import secrets
-    import shutil
-
-    chart = tmp_path / "chart"
-    shutil.copytree(CHART, chart)
-    template = chart / "templates/secret.yaml"
-    # Substitute cluster lookup results only; execute the real template branches.
-    source = template.read_text()
-    for variable in ("$name", "$signingName"):
-        source = source.replace(f'lookup "v1" "Secret" .Release.Namespace {variable}', f'get .Values.testSecrets {variable}')
-    template.write_text(source)
-    password = secrets.token_urlsafe(24)
-    encoded = base64.b64encode(password.encode()).decode()
-    existing = {
-        "tali-guard-artifact-signing": {
-            "metadata": {"annotations": {"meta.helm.sh/release-name": "tali-guard", "meta.helm.sh/release-namespace": "tali"}},
-            "data": {"private-key.pem": encoded, "public-key.pem": encoded},
-        },
-    }
-    values = tmp_path / "lookup.json"
-    values.write_text(json.dumps({"testSecrets": existing}))
-    result = subprocess.run(
-        ["helm", "template", "tali-guard", str(chart), "-n", "tali", "-f", str(DEV_VALUES), "-f", str(values)],
-        capture_output=True, text=True, check=True,
-    )
-    rendered = {item["metadata"]["name"]: item for item in yaml.safe_load_all(result.stdout) if item and item.get("kind") == "Secret"}
-    signing = rendered["tali-guard-artifact-signing"]
-    assert signing["metadata"]["annotations"]["helm.sh/resource-policy"] == "keep"
-    assert signing["data"] == existing["tali-guard-artifact-signing"]["data"]
+def bootstrap_specs(documents):
+    job = next(item for item in documents if item["kind"] == "Job")
+    env = {item["name"]: item.get("value") for item in job["spec"]["template"]["spec"]["containers"][0]["env"]}
+    return json.loads(env["BOOTSTRAP_SECRETS"])
 
 
-def test_bootstrap_hash_has_a_separate_optional_secret_key():
+def test_upgrade_uses_distinct_managed_names_and_grants_read_access_to_legacy_names():
     documents = render_dev()
-    deployment = next(item for item in documents if item.get("kind") == "Deployment" and item["metadata"]["name"] == "tali-guard-controller")
-    environment = {item["name"]: item for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]}
-    assert environment["CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH"]["valueFrom"]["secretKeyRef"] == {
-        "name": "tali-guard-bootstrap-admin", "key": "password-hash", "optional": True,
-    }
-    # A retained legacy password key must not be injected alongside an inline hash.
-    assert "CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD" not in environment
-    assert not load_values(DEV_VALUES)["security"]["bootstrapAdmin"].get("password")
+    specs = bootstrap_specs(documents)
+    role = next(item for item in documents if item["kind"] == "Role")
+    names = role["rules"][0]["resourceNames"]
+    assert not any(item["kind"] == "Secret" for item in documents)
+    for spec in specs:
+        assert spec["name"] != spec["legacyName"]
+        assert spec["name"] in names and spec["legacyName"] in names
+    assert next(spec for spec in specs if spec["kind"] == "database")["legacyName"] == "tali-guard-postgresql"
 
 
-def test_bootstrap_rejects_malformed_or_ambiguous_hash():
-    for password_hash, password, expected in [
-        ("invalid", "", "pattern"),
-        (load_values(DEV_VALUES)["security"]["bootstrapAdmin"]["passwordHash"], "another-password", "mutually exclusive"),
-    ]:
-        error = render_error("--set", "security.bootstrapAdmin.existingSecret=", "--set", "security.bootstrapAdmin.email=admin@example.test",
-                             "--set-string", f"security.bootstrapAdmin.passwordHash={password_hash}",
-                             "--set-string", f"security.bootstrapAdmin.password={password}")
-        assert expected.lower() in error.lower()
+def test_bootstrap_accounts_are_mounted_without_protocol_environment_names():
+    documents = render_dev()
+    pod = next(item for item in documents if item["kind"] == "Deployment")["spec"]["template"]["spec"]
+    env = {item["name"]: item for item in pod["containers"][0]["env"]}
+    assert env["CONTROLLER_BOOTSTRAP_ADMIN_DIRECTORY"]["value"] == "/var/run/tasklattice/bootstrap-admin"
+    assert next(volume for volume in pod["volumes"] if volume["name"] == "bootstrap-admin")["secret"]["secretName"] == "tali-guard-bootstrap-admin-init"
+    assert not any("PASSWORD" in name for name in env)
+
+
+@pytest.mark.parametrize("field", ["password", "passwordHash"])
+def test_bootstrap_rejects_inline_login_material(field):
+    error = render_error("--set", f"security.bootstrapAdmin.{field}=unsupported")
+    assert "additional" in error.lower()
 
 
 def test_plaintext_bootstrap_renders_no_private_keys_or_random_secret_material():
@@ -1257,12 +1231,12 @@ def test_plaintext_bootstrap_renders_no_private_keys_or_random_secret_material()
         assert all(volume["name"] != "control-tls" for volume in pod["volumes"])
         assert all(mount["name"] != "control-tls" for mount in pod["containers"][0]["volumeMounts"])
         token = "CONTROLLER_RUNNER_TOKEN" if workload["kind"] == "Deployment" else "GUARD_CONTROLLER_TOKEN"
-        assert environment[token]["valueFrom"]["secretKeyRef"]["name"] == "tali-guard-control"
+        assert environment[token]["valueFrom"]["secretKeyRef"]["name"] == "tali-guard-control-init"
     job = next(item for item in first if item.get("kind") == "Job")
     assert job["metadata"]["annotations"]["helm.sh/hook"] == "pre-install,pre-upgrade,pre-rollback"
     env = {entry["name"]: entry.get("value") for entry in job["spec"]["template"]["spec"]["containers"][0]["env"]}
     generated = {spec["name"] for spec in json.loads(env["BOOTSTRAP_SECRETS"])}
-    assert generated == {"tali-guard-control", "tali-guard-artifact-signing", "tali-guard-metrics", "tali-guard-runtime-logs"}
+    assert generated == {"tali-guard-control-init", "tali-guard-artifact-signing-init", "tali-guard-metrics-init", "tali-guard-runtime-logs-init", "tali-guard-postgresql-init", "tali-guard-bootstrap-admin-init", "tali-guard-bootstrap-user-init"}
     assert not generated.intersection(item["metadata"]["name"] for item in first if item.get("kind") == "Secret")
 
 
@@ -1271,11 +1245,11 @@ def test_mtls_is_initialized_by_the_same_job_without_rendering_private_keys():
     documents = render_dev(*options)
     assert documents == render_dev(*options)
     assert "BEGIN" not in json.dumps(documents)
-    assert not any(item["kind"] == "Secret" and item["metadata"]["name"] == "tali-guard-control-tls" for item in documents)
+    assert not any(item["kind"] == "Secret" and item["metadata"]["name"] == "tali-guard-control-tls-init" for item in documents)
     job = next(item for item in documents if item["kind"] == "Job")
     env = {entry["name"]: entry.get("value") for entry in job["spec"]["template"]["spec"]["containers"][0]["env"]}
     specs = json.loads(env["BOOTSTRAP_SECRETS"])
-    assert len(specs) == 5
+    assert len(specs) == 8
     tls = next(spec for spec in specs if spec["kind"] == "mtls")
     assert tls["serverDnsNames"] == ["tali-guard-controller", "tali-guard-controller.tali", "tali-guard-controller.tali.svc", "tali-guard-controller.tali.svc.cluster.local"]
     config = controller_config(documents)
@@ -1294,7 +1268,7 @@ def test_mtls_is_initialized_by_the_same_job_without_rendering_private_keys():
 
 
 def test_mtls_autogenerate_works_without_bootstrapping_other_credentials():
-    documents = render("--set", "security.bootstrap.enabled=false", "--set", "security.controlTls.existingSecret=", "--set", "security.controlTls.autoGenerate=true")
+    documents = render("--set", "security.bootstrap.enabled=false", "--set", "security.controlSecret.existingSecret=control", "--set", "security.metrics.existingSecret=metrics", "--set", "security.runtimeLogs.existingSecret=logs", "--set", "security.controlTls.existingSecret=", "--set", "security.controlTls.autoGenerate=true")
     job = next(item for item in documents if item["kind"] == "Job")
     env = {entry["name"]: entry.get("value") for entry in job["spec"]["template"]["spec"]["containers"][0]["env"]}
     assert [spec["kind"] for spec in json.loads(env["BOOTSTRAP_SECRETS"])] == ["mtls"]
@@ -1302,7 +1276,7 @@ def test_mtls_autogenerate_works_without_bootstrapping_other_credentials():
 
 def test_controller_config_changes_trigger_rollout_without_replacing_owner():
     original = render_dev()
-    changed = render_dev("--set", "controller.auth.minPasswordLength=14")
+    changed = render_dev("--set", "controller.auth.minLoginLength=14")
     configs = [controller_config(docs) for docs in (original, changed)]
     assert configs[0]["metadata"] == configs[1]["metadata"]
     assert configs[0]["data"] != configs[1]["data"]
@@ -1435,43 +1409,82 @@ def test_local_endpoint_address_uses_runtime_load_balancer_port(host):
     ("--set-json", 'controller.publicUrl=["https://console.example.com"]'),
 ])
 def test_runtime_address_is_not_inferred_without_local_load_balancer(overrides):
-    assert controller_config(render_dev(*overrides))["data"]["CONTROLLER_RUNTIME_PUBLIC_URL"] == ""
+    assert controller_config(render_dev("--set", "security.bootstrapAdmin.localDefault=false", "--set", "security.bootstrapUser.localDefault=false", *overrides))["data"]["CONTROLLER_RUNTIME_PUBLIC_URL"] == ""
 
 
 def test_development_bootstraps_both_roles_with_separate_secrets():
     documents = render_dev()
-    secrets = {item['metadata']['name']: item for item in documents if item.get('kind') == 'Secret'}
-    deployment = next(item for item in documents if item.get('kind') == 'Deployment' and item['metadata']['name'] == 'tali-guard-controller')
-    env = {item['name']: item for item in deployment['spec']['template']['spec']['containers'][0]['env']}
-    values = load_values(DEV_VALUES)['security']
-    assert values['bootstrapAdmin']['passwordHash'] != values['bootstrapUser']['passwordHash']
-    for role in ('admin', 'user'):
-        account = values[f'bootstrap{role.title()}']
-        secret = f'tali-guard-bootstrap-{role}'
-        assert secrets[secret]['stringData'] == {'email': f'{role}@tasklattice.local', 'password-hash': account['passwordHash'], 'name': account['name']}
-        assert env[f'CONTROLLER_BOOTSTRAP_{role.upper()}_PASSWORD_HASH']['valueFrom']['secretKeyRef'] == {'name': secret, 'key': 'password-hash', 'optional': True}
-        assert f'CONTROLLER_BOOTSTRAP_{role.upper()}_PASSWORD' not in env
+    accounts = [spec for spec in bootstrap_specs(documents) if spec["kind"] == "account"]
+    assert len(accounts) == 2
+    for role in ("admin", "user"):
+        account = next(spec for spec in accounts if spec["email"] == f"{role}@tasklattice.local")
+        assert account["name"] == f"tali-guard-bootstrap-{role}-init"
+        assert account["localDefault"] is True
+        assert not any("password" in key.lower() for key in account)
 
 
 def test_optional_bootstrap_user_is_disabled_in_production_and_supports_existing_secrets():
     documents = render()
-    deployment = next(item for item in documents if item.get('kind') == 'Deployment' and item['metadata']['name'].endswith('-controller'))
-    assert not any(item['name'].startswith('CONTROLLER_BOOTSTRAP_USER_') for item in deployment['spec']['template']['spec']['containers'][0]['env'])
-    assert not any(item['kind'] == 'Secret' and item['metadata']['name'].endswith('-bootstrap-user') for item in documents)
-    documents = render('--set', 'security.bootstrapUser.enabled=true', '--set', 'security.bootstrapUser.existingSecret=tenant-bootstrap')
-    deployment = next(item for item in documents if item.get('kind') == 'Deployment' and item['metadata']['name'].endswith('-controller'))
-    env = {item['name']: item for item in deployment['spec']['template']['spec']['containers'][0]['env']}
-    assert env['CONTROLLER_BOOTSTRAP_USER_EMAIL']['valueFrom']['secretKeyRef']['name'] == 'tenant-bootstrap'
-    assert not any(item['kind'] == 'Secret' and item['metadata']['name'] == 'tenant-bootstrap' for item in documents)
+    deployment = next(item for item in documents if item.get("kind") == "Deployment")
+    assert not any(item["name"].startswith("CONTROLLER_BOOTSTRAP_USER_") for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"])
+    documents = render("--set", "security.bootstrapUser.enabled=true", "--set", "security.bootstrapUser.existingSecret=tenant-bootstrap")
+    pod = next(item for item in documents if item["kind"] == "Deployment")["spec"]["template"]["spec"]
+    assert next(volume for volume in pod["volumes"] if volume["name"] == "bootstrap-user")["secret"]["secretName"] == "tenant-bootstrap"
+    assert not any(spec["kind"] == "account" for spec in bootstrap_specs(documents))
 
 
-@pytest.mark.parametrize('settings,error', [
-    ([], 'configure bootstrapUser'),
-    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.password=short'], 'at least 12'),
-    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.passwordHash=invalid'], 'pattern'),
-    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.existingSecret=existing'], 'cannot be combined'),
-    (['--set', 'security.bootstrapUser.email=user@example.test', '--set', 'security.bootstrapUser.password=long-enough-password', '--set-string', 'security.bootstrapUser.passwordHash=' + 'a' * 32 + ':' + 'b' * 128], 'mutually exclusive'),
-    (['--set', 'security.bootstrapUser.email=same@example.test', '--set', 'security.bootstrapUser.password=long-enough-password', '--set', 'security.bootstrapAdmin.existingSecret=', '--set', 'security.bootstrapAdmin.email=SAME@example.test', '--set', 'security.bootstrapAdmin.password=long-enough-password'], 'different email'),
+@pytest.mark.parametrize("settings,error", [
+    ([], "configure bootstrapUser"),
+    (["--set", "security.bootstrapUser.email=user@example.test", "--set", "security.bootstrapUser.password=short"], "additional"),
+    (["--set", "security.bootstrapUser.email=user@example.test", "--set", "security.bootstrapUser.existingSecret=existing"], "cannot be combined"),
+    (["--set", "security.bootstrapUser.email=same@example.test", "--set", "security.bootstrapAdmin.existingSecret=", "--set", "security.bootstrapAdmin.email=SAME@example.test"], "different email"),
 ])
 def test_bootstrap_user_rejects_invalid_configuration(settings, error):
-    assert error.lower() in render_error('--set', 'security.bootstrapUser.enabled=true', *settings).lower()
+    assert error.lower() in render_error("--set", "security.bootstrapUser.enabled=true", *settings).lower()
+
+
+def test_both_charts_contain_no_secret_manifests_or_login_keywords():
+    import re
+    for chart in (CHART, ROOT / "charts/tali-litellm-dev"):
+        for path in chart.rglob("*"):
+            if not path.is_file():
+                continue
+            assert not re.search(r"password|passwd|\bpwd\b", path.read_text(), re.I), str(path)
+        profile = chart / ("values-dev-uat.yaml" if chart == CHART else "values-dev.yaml")
+        output = subprocess.run(["helm", "template", "scan", str(chart), "-f", str(profile)], capture_output=True, text=True, check=True).stdout
+        assert not re.search(r"password|passwd|\bpwd\b", output, re.I)
+        assert not any(item and item["kind"] == "Secret" for item in yaml.safe_load_all(output))
+
+
+def test_database_workload_uses_the_initialized_secret_and_job_runs_before_workloads():
+    documents = render_dev()
+    spec = next(spec for spec in bootstrap_specs(documents) if spec["kind"] == "database")
+    postgres = next(item for item in documents if item["kind"] == "StatefulSet" and item["metadata"]["name"].endswith("-postgresql"))
+    assert postgres["spec"]["template"]["spec"]["containers"][0]["envFrom"] == [{"secretRef": {"name": spec["name"]}}]
+    job = next(item for item in documents if item["kind"] == "Job")
+    assert job["metadata"]["annotations"]["helm.sh/hook"] == "pre-install,pre-upgrade,pre-rollback"
+    assert job["spec"]["activeDeadlineSeconds"] == 120
+
+
+def test_local_account_defaults_cannot_be_used_with_an_external_public_url():
+    result = subprocess.run([
+        "helm", "template", "tali-guard", str(CHART), "-f", str(DEV_VALUES),
+        "--set", "publicUrl=https://guard.example.com",
+    ], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "loopback" in result.stderr
+
+
+def test_long_managed_secret_names_are_unique_and_fit_kubernetes_limits():
+    specs = bootstrap_specs(render_dev("--set", "fullnameOverride=" + "guard-" + "x" * 50))
+    names = [spec["name"] for spec in specs]
+    assert len(names) == len(set(names))
+    assert all(len(name) <= 63 for name in names)
+    assert all(spec["name"] != spec["legacyName"] for spec in specs)
+
+
+def test_local_profile_never_pulls_any_workload_or_helper_image():
+    for item in render_dev():
+        pod = item["spec"] if item["kind"] == "Pod" else item.get("spec", {}).get("template", {}).get("spec", {})
+        for field in ("containers", "initContainers"):
+            assert all(container["imagePullPolicy"] == "Never" for container in pod.get(field, []))

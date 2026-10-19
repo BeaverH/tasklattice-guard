@@ -15,8 +15,11 @@ Endpoint that URL points at; this chart only carries the gateway.
 Call the guarded model alias:
 
   curl -sS http://localhost:{{ .Values.service.port }}/v1/chat/completions \
-    -H "Authorization: Bearer {{ .Values.masterKey }}" -H "content-type: application/json" \
+    -H "Authorization: Bearer $LITELLM_DEV_MASTER_KEY" -H "content-type: application/json" \
     -d '{"model":"{{ .Values.model.name }}","messages":[{"role":"user","content":"Hello"}]}'
 
-LiteLLM UI: http://localhost:{{ .Values.service.port }}/ui ({{ .Values.ui.username }} / {{ .Values.ui.password }})
+LiteLLM UI: http://localhost:{{ .Values.service.port }}/ui
 Smoke test: npm run litellm:smoke
+
+Runtime credentials are initialized once by the bootstrap Job.
+Read Secret {{ include "tali-litellm-dev.runtimeSecretName" . }} when needed.

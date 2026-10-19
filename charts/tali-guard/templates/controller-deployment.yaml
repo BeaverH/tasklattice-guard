@@ -72,31 +72,13 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ include "tali-guard.controlSecretName" . }}, key: {{ .Values.security.controlSecret.betterAuthSecretKey }} } }
             - name: MODEL_GUARDRAILS_RUNTIME_LOG_ENCRYPTION_KEY
               valueFrom: { secretKeyRef: { name: {{ include "tali-guard.runtimeLogSecretName" . }}, key: {{ .Values.security.runtimeLogs.encryptionKeyKey }} } }
-            - name: CONTROLLER_BOOTSTRAP_ADMIN_EMAIL
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapAdminSecretName" . }}, key: {{ .Values.security.bootstrapAdmin.emailKey }} } }
-            {{- if or .Values.security.bootstrapAdmin.existingSecret (not .Values.security.bootstrapAdmin.passwordHash) }}
-            - name: CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapAdminSecretName" . }}, key: {{ .Values.security.bootstrapAdmin.passwordKey }}, optional: true } }
+            {{- range $role, $account := dict "Admin" .Values.security.bootstrapAdmin "User" .Values.security.bootstrapUser }}
+            {{- if or (eq $role "Admin") $account.enabled }}
+            - name: CONTROLLER_BOOTSTRAP_{{ upper $role }}_DIRECTORY
+              value: /var/run/tasklattice/bootstrap-{{ lower $role }}
+            - name: CONTROLLER_BOOTSTRAP_{{ upper $role }}_FIELDS
+              value: {{ dict "emailKey" $account.emailKey "nameKey" $account.nameKey "credentialKey" $account.credentialKey "digestKey" $account.digestKey | toJson | quote }}
             {{- end }}
-            {{- if or .Values.security.bootstrapAdmin.existingSecret .Values.security.bootstrapAdmin.passwordHash }}
-            - name: CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapAdminSecretName" . }}, key: {{ .Values.security.bootstrapAdmin.passwordHashKey }}, optional: true } }
-            {{- end }}
-            - name: CONTROLLER_BOOTSTRAP_ADMIN_NAME
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapAdminSecretName" . }}, key: {{ .Values.security.bootstrapAdmin.nameKey }} } }
-            {{- if .Values.security.bootstrapUser.enabled }}
-            - name: CONTROLLER_BOOTSTRAP_USER_EMAIL
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.emailKey }} } }
-            {{- if or .Values.security.bootstrapUser.existingSecret (not .Values.security.bootstrapUser.passwordHash) }}
-            - name: CONTROLLER_BOOTSTRAP_USER_PASSWORD
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.passwordKey }}, optional: true } }
-            {{- end }}
-            {{- if or .Values.security.bootstrapUser.existingSecret .Values.security.bootstrapUser.passwordHash }}
-            - name: CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.passwordHashKey }}, optional: true } }
-            {{- end }}
-            - name: CONTROLLER_BOOTSTRAP_USER_NAME
-              valueFrom: { secretKeyRef: { name: {{ include "tali-guard.bootstrapUserSecretName" . }}, key: {{ .Values.security.bootstrapUser.nameKey }} } }
             {{- end }}
             - { name: CONTROLLER_ARTIFACT_SIGNING_KEY_PATH, value: /var/run/tasklattice/artifact/private-key.pem }
             {{- with .Values.controller.promotion }}
@@ -112,6 +94,10 @@ spec:
             - { name: CONTROLLER_PROTO_PATH, value: /opt/tasklattice/guard-controller/proto/tasklattice/guard/control/v1/runner_control.proto }
             - { name: CONTROLLER_UI_DIST, value: /opt/tasklattice/guard-controller/dist }
           volumeMounts:
+            - { name: bootstrap-admin, mountPath: /var/run/tasklattice/bootstrap-admin, readOnly: true }
+            {{- if .Values.security.bootstrapUser.enabled }}
+            - { name: bootstrap-user, mountPath: /var/run/tasklattice/bootstrap-user, readOnly: true }
+            {{- end }}
             - { name: artifact-signing, mountPath: /var/run/tasklattice/artifact, readOnly: true }
             {{- if .Values.controller.promotion.baselinePackage.existingConfigMap }}
             - { name: baseline-package, mountPath: /etc/tasklattice/baseline-package, readOnly: true }
@@ -128,6 +114,14 @@ spec:
           livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 20 }
           resources: {{- toYaml .Values.controller.resources | nindent 12 }}
       volumes:
+        - name: bootstrap-admin
+          secret:
+            secretName: {{ include "tali-guard.bootstrapAdminSecretName" . }}
+        {{- if .Values.security.bootstrapUser.enabled }}
+        - name: bootstrap-user
+          secret:
+            secretName: {{ include "tali-guard.bootstrapUserSecretName" . }}
+        {{- end }}
         - name: artifact-signing
           secret:
             secretName: {{ include "tali-guard.artifactSigningSecretName" . }}

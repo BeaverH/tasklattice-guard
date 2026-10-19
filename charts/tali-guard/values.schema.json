@@ -63,15 +63,16 @@
           "type": "object",
           "required": [],
           "properties": {
-            "minPasswordLength": {
+            "allowLocalDefaultCredentials": {
+              "type": "boolean"
+            },
+            "minLoginLength": {
               "type": "integer",
               "minimum": 5,
               "maximum": 128
-            },
-            "allowLocalDefaultCredentials": {
-              "type": "boolean"
             }
-          }
+          },
+          "additionalProperties": false
         },
         "image": {
           "$ref": "#/definitions/image"
@@ -248,13 +249,14 @@
     "database": {
       "type": "object",
       "required": [
-        "url",
         "existingSecret",
         "secretKey"
       ],
       "properties": {
         "url": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 0,
+          "description": "Use existingSecret for externally provisioned databases."
         },
         "existingSecret": {
           "type": "string"
@@ -284,9 +286,7 @@
           "type": "object",
           "required": [
             "database",
-            "username",
-            "password",
-            "passwordKey"
+            "username"
           ],
           "properties": {
             "database": {
@@ -297,14 +297,11 @@
               "type": "string",
               "minLength": 1
             },
-            "password": {
+            "credentialKey": {
               "type": "string"
-            },
-            "passwordKey": {
-              "type": "string",
-              "minLength": 1
             }
-          }
+          },
+          "additionalProperties": false
         },
         "persistence": {
           "type": "object",
@@ -563,22 +560,27 @@
             "email": {
               "type": "string"
             },
-            "password": {
-              "type": "string"
-            },
             "name": {
               "type": "string",
               "minLength": 1
             },
-            "passwordHash": {
-              "type": "string",
-              "pattern": "^$|^[0-9a-f]{32}:[0-9a-f]{128}$"
+            "localDefault": {
+              "type": "boolean"
             },
-            "passwordHashKey": {
-              "type": "string",
-              "minLength": 1
+            "credentialKey": {
+              "type": "string"
+            },
+            "digestKey": {
+              "type": "string"
+            },
+            "emailKey": {
+              "type": "string"
+            },
+            "nameKey": {
+              "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         },
         "controlSecret": {
           "type": "object",
@@ -655,18 +657,7 @@
             "email": {
               "type": "string"
             },
-            "password": {
-              "type": "string"
-            },
             "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "passwordHash": {
-              "type": "string",
-              "pattern": "^$|^[0-9a-f]{32}:[0-9a-f]{128}$"
-            },
-            "passwordHashKey": {
               "type": "string",
               "minLength": 1
             },
@@ -674,18 +665,22 @@
               "type": "boolean"
             },
             "emailKey": {
-              "type": "string",
-              "minLength": 1
+              "type": "string"
             },
             "nameKey": {
-              "type": "string",
-              "minLength": 1
+              "type": "string"
             },
-            "passwordKey": {
-              "type": "string",
-              "minLength": 1
+            "localDefault": {
+              "type": "boolean"
+            },
+            "credentialKey": {
+              "type": "string"
+            },
+            "digestKey": {
+              "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         }
       }
     }

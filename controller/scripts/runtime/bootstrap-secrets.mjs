@@ -4,6 +4,18 @@ import https from "node:https";
 import { generateTls, tlsFields, validateTls } from "./bootstrap-tls.mjs";
 
 export function secretData(spec) {
+  if (spec.kind === "account") return accountData(spec);
+  if (spec.kind === "database") {
+    const value = randomBytes(32).toString("hex");
+    return { [databaseKey(spec)]: value, POSTGRES_PASSWORD: value,
+      [spec.urlKey ?? "database-url"]: databaseUrl(spec, value) };
+  }
+  if (spec.kind === "litellm") return {
+    "master-key": `sk-${randomBytes(32).toString("hex")}`,
+    "salt-key": randomBytes(32).toString("hex"),
+    "ui-username": spec.username,
+    "ui-password": randomBytes(32).toString("hex"),
+  };
   if (spec.kind === "mtls") return generateTls(spec);
   if (spec.kind === "ed25519") {
     const pair = generateKeyPairSync("ed25519", {
@@ -16,7 +28,48 @@ export function secretData(spec) {
   return Object.fromEntries(spec.keys.map(key => [key, randomBytes(32).toString(spec.kind === "tokens" ? "hex" : "base64")]));
 }
 
+const databaseKey = spec => spec.credentialKey || (spec.profile === "litellm" ? "password" : "postgres-password");
+const databaseUrl = (spec, value) => `postgresql://${encodeURIComponent(spec.username)}:${encodeURIComponent(value)}@${spec.host}:5432/${encodeURIComponent(spec.database)}`;
+const decodeData = secret => Object.fromEntries(Object.entries(secret.data ?? {}).map(([key, value]) => [key, Buffer.from(value, "base64").toString("utf8")]));
+
+async function accountData(spec) {
+  const data = { [spec.emailKey || "email"]: spec.email, [spec.nameKey || "name"]: spec.displayName };
+  if (spec.localDefault) {
+    const { hashPassword } = await import("better-auth/crypto");
+    data[spec.digestKey || "password-hash"] = await hashPassword("password");
+  } else data[spec.credentialKey || "password"] = randomBytes(Math.max(32, Math.ceil((spec.minLength ?? 12) / 2))).toString("hex");
+  return data;
+}
+
 function validateExisting(spec, secret) {
+  const data = decodeData(secret);
+  if (spec.kind === "database") {
+    const value = data[databaseKey(spec)];
+    let matches = false;
+    try {
+      const url = new URL(data[spec.urlKey ?? "database-url"]);
+      matches = url.protocol === "postgresql:" && decodeURIComponent(url.username) === spec.username && decodeURIComponent(url.password) === value &&
+        url.hostname === spec.host && url.port === "5432" && decodeURIComponent(url.pathname.slice(1)) === spec.database && !url.search && !url.hash;
+    } catch { /* Invalid legacy URLs must never trigger credential replacement. */ }
+    if (!value || data.POSTGRES_PASSWORD !== value || !matches) {
+      throw new Error(`Secret ${spec.name} has inconsistent database fields; refusing to replace it.`);
+    }
+    return;
+  }
+  if (spec.kind === "account") {
+    const plain = data[spec.credentialKey || "password"], digest = data[spec.digestKey || "password-hash"];
+    if (!data[spec.emailKey || "email"] || !data[spec.nameKey || "name"] || (!plain && !digest) || (plain && digest) ||
+        (digest && !/^[0-9a-f]{32}:[0-9a-f]{128}$/.test(digest))) {
+      throw new Error(`Secret ${spec.name} has invalid account fields; refusing to replace it.`);
+    }
+    return;
+  }
+  if (spec.kind === "litellm") {
+    if (["master-key", "salt-key", "ui-username", "ui-password", "database-url", "UI_PASSWORD"].some(key => !data[key]) || data.UI_PASSWORD !== data["ui-password"]) {
+      throw new Error(`Secret ${spec.name} has invalid gateway fields; refusing to replace it.`);
+    }
+    return;
+  }
   const fields = spec.kind === "mtls" ? tlsFields(spec).filter(key => key !== (spec.caPrivateKeyKey ?? "ca.key") || secret.data?.[key]) : spec.kind === "ed25519" ? [spec.privateKey, spec.publicKey] : spec.keys;
   if (fields.some(key => !secret.data?.[key])) throw new Error(`Secret ${spec.name} is missing required fields; refusing to replace it.`);
   if (spec.kind === "mtls") validateTls(spec, Object.fromEntries(fields.map(key => [key, Buffer.from(secret.data[key], "base64").toString("utf8")])));
@@ -50,6 +103,12 @@ export async function namespaceOwner(request, namespace) {
 
 async function reuseSecret(request, path, namespace, release, spec, secret, owner, previousOwnerName) {
   validateExisting(spec, secret);
+  if (spec.kind === "litellm") {
+    const database = await request("GET", `/api/v1/namespaces/${encodeURIComponent(namespace)}/secrets/${encodeURIComponent(spec.databaseSecret)}`);
+    if (database.status !== 200 || database.body.data?.["database-url"] !== secret.data["database-url"]) {
+      throw new Error(`Secret ${spec.name} no longer matches its database; refusing to replace it.`);
+    }
+  }
   const references = secret.metadata?.ownerReferences ?? [];
   const owned = references.length === 1 && references[0].uid === owner.uid && references[0].name === owner.name && references[0].kind === owner.kind && references[0].apiVersion === owner.apiVersion;
   const legacy = references.length === 1 && references[0].apiVersion === "v1" && references[0].kind === "ConfigMap" && references[0].name === previousOwnerName;
@@ -71,6 +130,29 @@ export async function ensureSecret(request, namespace, release, spec, owner, pre
     return reuseSecret(request, itemPath, namespace, release, spec, existing.body, owner, previousOwnerName);
   }
   if (existing.status !== 404) throw new Error(`Cannot read Secret ${spec.name}: HTTP ${existing.status}.`);
+  let data;
+  if (spec.legacyName) {
+    const legacy = await request("GET", `${path}/${encodeURIComponent(spec.legacyName)}`);
+    if (legacy.status === 200) {
+      if (!belongsToRelease(legacy.body.metadata, namespace, release)) throw new Error(`Legacy Secret ${spec.legacyName} belongs to another owner.`);
+      data = decodeData(legacy.body);
+      if (spec.kind === "database") {
+        data.POSTGRES_PASSWORD = data[databaseKey(spec)];
+        if (spec.profile === "litellm" && !data["database-url"] && data.POSTGRES_PASSWORD) data["database-url"] = databaseUrl(spec, data.POSTGRES_PASSWORD);
+      }
+    } else if (legacy.status !== 404) throw new Error(`Cannot read legacy Secret ${spec.legacyName}: HTTP ${legacy.status}.`);
+  }
+  data ??= await secretData(spec);
+  if (spec.kind === "litellm") {
+    const database = await request("GET", `${path}/${encodeURIComponent(spec.databaseSecret)}`);
+    if (database.status !== 200) throw new Error(`Cannot read gateway database Secret: HTTP ${database.status}.`);
+    const url = decodeData(database.body)["database-url"];
+    if (!url || (data["database-url"] && data["database-url"] !== url)) throw new Error("Gateway database credentials do not match; refusing to replace them.");
+    data["database-url"] = url;
+    data.UI_PASSWORD = data["ui-password"];
+  }
+  if (Object.values(data).some(value => typeof value !== "string" || !value)) throw new Error(`Secret ${spec.name} has missing fields; refusing to create it.`);
+  validateExisting(spec, { data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, Buffer.from(value).toString("base64")])) });
   const created = await request("POST", path, {
     apiVersion: "v1", kind: "Secret", type: "Opaque",
     metadata: { name: spec.name, namespace, ownerReferences: [owner],
@@ -83,7 +165,7 @@ export async function ensureSecret(request, namespace, release, spec, owner, pre
       "app.kubernetes.io/managed-by": "tali-guard-bootstrap",
       "app.kubernetes.io/part-of": "tasklattice-guard",
     } },
-    stringData: secretData(spec),
+    stringData: data,
   });
   if (created.status === 409) {
     // Another bootstrap won the race. Validate its value, never overwrite it.

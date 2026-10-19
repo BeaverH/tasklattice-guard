@@ -14,7 +14,7 @@ CHART = ROOT / "charts" / "tali-litellm-dev"
 GUARD_CHART = ROOT / "charts" / "tali-guard"
 UPSTREAM = (
     "--set-string", "model.upstream.apiBase=https://api.example/v1",
-    "--set-string", "model.upstream.apiKey=sk-test",
+    "--set-string", "model.upstream.existingSecret=upstream",
     "--set-string", "model.upstream.model=gpt-test",
 )
 
@@ -32,8 +32,8 @@ def find(docs: list[dict], kind: str, suffix: str = "") -> dict:
 
 
 def litellm_config(docs: list[dict]) -> dict:
-    secret = find(docs, "Secret", "tali-litellm-dev")
-    return yaml.safe_load(secret["stringData"]["litellm-config.yaml"])
+    config = find(docs, "ConfigMap", "tali-litellm-dev-config")
+    return yaml.safe_load(config["data"]["litellm-config.yaml"])
 
 
 def test_product_chart_carries_no_litellm_resources():
@@ -51,7 +51,7 @@ def test_dev_stack_has_gateway_database_and_mock_model_by_default():
     container = deployment["spec"]["template"]["spec"]["containers"][0]
     # Published by tasklattice-litellm-guard at an exact <litellm>-guard.<n> tag.
     assert container["image"] == "ghcr.io/tasklattice/tali-litellm:1.87.0-guard.3"
-    assert container["imagePullPolicy"] == "IfNotPresent"
+    assert container["imagePullPolicy"] == "Never"
     env = {item["name"]: item for item in container["env"]}
     for name, key in (("TASKLATTICE_GUARD_API_BASE", "api-base"), ("TASKLATTICE_GUARD_API_KEY", "api-key")):
         assert env[name]["valueFrom"]["secretKeyRef"] == {"name": "tali-litellm-dev-guard", "key": key}
@@ -89,8 +89,8 @@ def test_complete_upstream_provider_replaces_the_mock_model():
     assert model["litellm_params"] == {"model": "openai/gpt-test", "api_base": "https://api.example/v1", "api_key": "os.environ/LITELLM_UPSTREAM_API_KEY", "num_retries": 0}
     container = find(docs, "Deployment", "tali-litellm-dev")["spec"]["template"]["spec"]["containers"][0]
     env = {item["name"]: item for item in container["env"]}
-    assert env["LITELLM_UPSTREAM_API_KEY"]["valueFrom"]["secretKeyRef"]["key"] == "upstream-api-key"
-    assert find(docs, "Secret", "tali-litellm-dev")["stringData"]["upstream-api-key"] == "sk-test"
+    assert env["LITELLM_UPSTREAM_API_KEY"]["valueFrom"]["secretKeyRef"] == {"name": "upstream", "key": "api-key"}
+    assert not any(item["kind"] == "Secret" for item in docs)
 
 
 def test_partial_upstream_keeps_the_mock_model():
@@ -106,3 +106,25 @@ def test_disabling_the_mock_without_an_upstream_fails_rendering():
     )
     assert result.returncode != 0
     assert "model.upstream" in result.stderr
+
+
+def test_all_gateway_credentials_are_initialized_in_cluster():
+    import json
+    docs = render()
+    assert not any(item["kind"] == "Secret" for item in docs)
+    job = find(docs, "Job")
+    assert job["metadata"]["annotations"]["helm.sh/hook"] == "pre-install,pre-upgrade,pre-rollback"
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    assert container["image"] == "ghcr.io/tasklattice/tali-guard-controller:dev"
+    specs = json.loads(next(item["value"] for item in container["env"] if item["name"] == "BOOTSTRAP_SECRETS"))
+    assert [item["kind"] for item in specs] == ["database", "litellm"]
+    assert specs[1]["databaseSecret"] == specs[0]["name"]
+    for item in specs:
+        assert item["name"] != item["legacyName"]
+
+
+@pytest.mark.parametrize("field", ["masterKey", "saltKey", "ui.password", "postgresql.password", "model.upstream.apiKey"])
+def test_gateway_rejects_inline_credential_values(field):
+    result = subprocess.run(["helm", "template", "test", str(CHART), "--set", f"{field}=unsupported"], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "additional" in result.stderr.lower()

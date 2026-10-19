@@ -97,49 +97,46 @@
 {{- printf "%s:%s" .Values.controller.image.repository (default .Chart.AppVersion .Values.controller.image.tag) -}}
 {{- end }}
 
+{{/* Stable names distinct from resources managed by earlier Helm releases. */}}
+{{- define "tali-guard.managedSecretName" -}}
+{{- if le (len .) 58 -}}
+{{- printf "%s-init" . -}}
+{{- else -}}
+{{- printf "%s-%s-init" (. | trunc 44 | trimSuffix "-") (. | sha256sum | trunc 12) -}}
+{{- end -}}
+{{- end }}
+
 {{- define "tali-guard.bootstrapSecretSpecs" -}}
 {{- $specs := list -}}
+{{- $base := include "tali-guard.fullname" . -}}
 {{- if .Values.security.bootstrap.enabled -}}
+{{- if .Values.postgresql.enabled -}}
+{{- $specs = append $specs (dict "name" (include "tali-guard.databaseSecretName" .) "legacyName" (include "tali-guard.postgresqlName" .) "kind" "database" "host" (include "tali-guard.postgresqlName" .) "username" .Values.postgresql.auth.username "database" .Values.postgresql.auth.database "urlKey" .Values.database.secretKey "credentialKey" (default "" .Values.postgresql.auth.credentialKey)) -}}
+{{- end -}}
+{{- range $role, $account := dict "Admin" .Values.security.bootstrapAdmin "User" .Values.security.bootstrapUser -}}
+{{- if and (or (eq $role "Admin") $account.enabled) (not $account.existingSecret) -}}
+{{- $specs = append $specs (dict "name" (include (printf "tali-guard.bootstrap%sSecretName" $role) $) "legacyName" (printf "%s-bootstrap-%s" $base (lower $role)) "kind" "account" "email" $account.email "displayName" $account.name "minLength" $.Values.controller.auth.minLoginLength "localDefault" $account.localDefault "emailKey" $account.emailKey "nameKey" $account.nameKey "credentialKey" $account.credentialKey "digestKey" $account.digestKey) -}}
+{{- end -}}
+{{- end -}}
 {{- if not .Values.security.artifactSigning.existingSecret -}}
-{{- $specs = append $specs (dict "name" (include "tali-guard.artifactSigningSecretName" .) "kind" "ed25519" "privateKey" .Values.security.artifactSigning.privateKeyKey "publicKey" .Values.security.artifactSigning.publicKeyKey) -}}
+{{- $specs = append $specs (dict "name" (include "tali-guard.artifactSigningSecretName" .) "legacyName" (printf "%s-artifact-signing" $base | trunc 63 | trimSuffix "-") "kind" "ed25519" "privateKey" .Values.security.artifactSigning.privateKeyKey "publicKey" .Values.security.artifactSigning.publicKeyKey) -}}
 {{- end -}}
 {{- if not .Values.security.controlSecret.existingSecret -}}
-{{- $specs = append $specs (dict "name" (include "tali-guard.controlSecretName" .) "kind" "tokens" "keys" (list .Values.security.controlSecret.runnerTokenKey .Values.security.controlSecret.betterAuthSecretKey)) -}}
+{{- $specs = append $specs (dict "name" (include "tali-guard.controlSecretName" .) "legacyName" (printf "%s-control" $base | trunc 63 | trimSuffix "-") "kind" "tokens" "keys" (list .Values.security.controlSecret.runnerTokenKey .Values.security.controlSecret.betterAuthSecretKey)) -}}
 {{- end -}}
 {{- if not .Values.security.metrics.existingSecret -}}
-{{- $specs = append $specs (dict "name" (include "tali-guard.metricsSecretName" .) "kind" "tokens" "keys" (list .Values.security.metrics.tokenKey)) -}}
+{{- $specs = append $specs (dict "name" (include "tali-guard.metricsSecretName" .) "legacyName" (printf "%s-metrics" $base | trunc 63 | trimSuffix "-") "kind" "tokens" "keys" (list .Values.security.metrics.tokenKey)) -}}
 {{- end -}}
 {{- if not .Values.security.runtimeLogs.existingSecret -}}
-{{- $specs = append $specs (dict "name" (include "tali-guard.runtimeLogSecretName" .) "kind" "encryption" "keys" (list .Values.security.runtimeLogs.encryptionKeyKey)) -}}
+{{- $specs = append $specs (dict "name" (include "tali-guard.runtimeLogSecretName" .) "legacyName" (printf "%s-runtime-logs" $base | trunc 63 | trimSuffix "-") "kind" "encryption" "keys" (list .Values.security.runtimeLogs.encryptionKeyKey)) -}}
 {{- end -}}
 {{- end -}}
 {{- if and .Values.security.controlTls.enabled .Values.security.controlTls.autoGenerate (not .Values.security.controlTls.existingSecret) -}}
 {{- $controller := include "tali-guard.controllerName" . -}}
 {{- $dns := list $controller (printf "%s.%s" $controller .Release.Namespace) (printf "%s.%s.svc" $controller .Release.Namespace) (printf "%s.%s.svc.cluster.local" $controller .Release.Namespace) -}}
-{{- $specs = append $specs (dict "name" (include "tali-guard.controlTlsSecretName" .) "kind" "mtls" "serverDnsNames" $dns "runnerName" (include "tali-guard.defaultRunnerName" .) "caKey" .Values.security.controlTls.caKey "caPrivateKeyKey" .Values.security.controlTls.caPrivateKeyKey "serverCertificateKey" .Values.security.controlTls.controllerCertificateKey "serverPrivateKeyKey" .Values.security.controlTls.controllerPrivateKeyKey "clientCertificateKey" .Values.security.controlTls.runnerCertificateKey "clientPrivateKeyKey" .Values.security.controlTls.runnerPrivateKeyKey) -}}
+{{- $specs = append $specs (dict "name" (include "tali-guard.controlTlsSecretName" .) "legacyName" (printf "%s-control-tls" $base | trunc 63 | trimSuffix "-") "kind" "mtls" "serverDnsNames" $dns "runnerName" (include "tali-guard.defaultRunnerName" .) "caKey" .Values.security.controlTls.caKey "caPrivateKeyKey" .Values.security.controlTls.caPrivateKeyKey "serverCertificateKey" .Values.security.controlTls.controllerCertificateKey "serverPrivateKeyKey" .Values.security.controlTls.controllerPrivateKeyKey "clientCertificateKey" .Values.security.controlTls.runnerCertificateKey "clientPrivateKeyKey" .Values.security.controlTls.runnerPrivateKeyKey) -}}
 {{- end -}}
 {{- toJson $specs -}}
-{{- end -}}
-
-{{- define "tali-guard.retainedBootstrapSecret" -}}
-{{- $existing := lookup "v1" "Secret" .root.Release.Namespace .name -}}
-{{- if $existing -}}
-{{- $annotations := default (dict) $existing.metadata.annotations -}}
-{{- if and (eq (get $annotations "meta.helm.sh/release-name") .root.Release.Name) (eq (get $annotations "meta.helm.sh/release-namespace") .root.Release.Namespace) }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ .name }}
-  annotations:
-    helm.sh/resource-policy: keep
-  labels:
-    {{- include "tali-guard.commonLabels" .root | nindent 4 }}
-type: Opaque
-data:
-  {{- toYaml $existing.data | nindent 2 }}
-{{- end -}}
-{{- end -}}
 {{- end -}}
 
 {{- define "tali-guard.fullname" -}}
@@ -213,41 +210,41 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- end }}
 
 {{- define "tali-guard.controlSecretName" -}}
-{{- default (printf "%s-control" (include "tali-guard.fullname" .)) .Values.security.controlSecret.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-control" (include "tali-guard.fullname" .))) .Values.security.controlSecret.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.metricsSecretName" -}}
-{{- default (printf "%s-metrics" (include "tali-guard.fullname" .)) .Values.security.metrics.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-metrics" (include "tali-guard.fullname" .))) .Values.security.metrics.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.runtimeLogSecretName" -}}
-{{- default (printf "%s-runtime-logs" (include "tali-guard.fullname" .)) .Values.security.runtimeLogs.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-runtime-logs" (include "tali-guard.fullname" .))) .Values.security.runtimeLogs.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.databaseSecretName" -}}
 {{- if .Values.database.existingSecret -}}
 {{- .Values.database.existingSecret -}}
 {{- else if .Values.postgresql.enabled -}}
-{{- include "tali-guard.postgresqlName" . -}}
+{{- include "tali-guard.managedSecretName" (include "tali-guard.postgresqlName" .) -}}
 {{- else -}}
 {{- printf "%s-database" (include "tali-guard.fullname" .) -}}
 {{- end -}}
 {{- end }}
 
 {{- define "tali-guard.bootstrapAdminSecretName" -}}
-{{- default (printf "%s-bootstrap-admin" (include "tali-guard.fullname" .)) .Values.security.bootstrapAdmin.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-bootstrap-admin" (include "tali-guard.fullname" .))) .Values.security.bootstrapAdmin.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.bootstrapUserSecretName" -}}
-{{- default (printf "%s-bootstrap-user" (include "tali-guard.fullname" .)) .Values.security.bootstrapUser.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-bootstrap-user" (include "tali-guard.fullname" .))) .Values.security.bootstrapUser.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.artifactSigningSecretName" -}}
-{{- default (printf "%s-artifact-signing" (include "tali-guard.fullname" .)) .Values.security.artifactSigning.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-artifact-signing" (include "tali-guard.fullname" .))) .Values.security.artifactSigning.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.controlTlsSecretName" -}}
-{{- default (printf "%s-control-tls" (include "tali-guard.fullname" .)) .Values.security.controlTls.existingSecret }}
+{{- default (include "tali-guard.managedSecretName" (printf "%s-control-tls" (include "tali-guard.fullname" .))) .Values.security.controlTls.existingSecret }}
 {{- end }}
 
 {{- define "tali-guard.customCaSecretName" -}}
@@ -258,66 +255,43 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- if lt (int .Values.runner.default.replicaCount) 1 }}
 {{- fail "runner.default.replicaCount must be at least 1; GuardRails 0 is the mandatory baseline Runner pool" }}
 {{- end }}
-{{- if and .Values.database.url .Values.database.existingSecret }}
-{{- fail "set either database.url or database.existingSecret, not both" }}
-{{- end }}
-{{- if and .Values.postgresql.enabled (or .Values.database.url .Values.database.existingSecret) }}
-{{- fail "postgresql.enabled cannot be combined with database.url or database.existingSecret" }}
-{{- end }}
-{{- if not (or .Values.postgresql.enabled .Values.database.url .Values.database.existingSecret) }}
-{{- fail "enable postgresql or set database.url/database.existingSecret; Controller requires PostgreSQL" }}
-{{- end }}
-{{- if and .Values.postgresql.enabled (not .Values.postgresql.auth.password) }}
-{{- fail "postgresql.auth.password is required when the development PostgreSQL dependency is enabled" }}
-{{- end }}
-{{- if and .Values.security.bootstrapAdmin.existingSecret (or .Values.security.bootstrapAdmin.email .Values.security.bootstrapAdmin.password .Values.security.bootstrapAdmin.passwordHash) }}
-{{- fail "bootstrapAdmin existingSecret cannot be combined with inline credentials" }}
-{{- end }}
-{{- if not (or .Values.security.bootstrapAdmin.existingSecret (and .Values.security.bootstrapAdmin.email (or .Values.security.bootstrapAdmin.password .Values.security.bootstrapAdmin.passwordHash))) }}
-{{- fail "configure bootstrapAdmin existingSecret or an email with password/passwordHash" }}
-{{- end }}
-{{- if .Values.controller.auth.allowLocalDefaultCredentials }}
-{{- range (include "tali-guard.publicUrls" . | fromJsonArray) }}
-{{- if not (regexMatch "^http://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?/?$" .) }}
-{{- fail "allowLocalDefaultCredentials requires loopback Controller publicUrl entries" }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- if and .Values.security.bootstrapAdmin.password .Values.security.bootstrapAdmin.passwordHash }}
-{{- fail "bootstrapAdmin password and passwordHash are mutually exclusive" }}
-{{- end }}
-{{- $usesLocalDefault := and .Values.controller.auth.allowLocalDefaultCredentials (eq .Values.security.bootstrapAdmin.email "admin@tasklattice.local") (eq .Values.security.bootstrapAdmin.password "admin") }}
-{{- if and (not .Values.security.bootstrapAdmin.existingSecret) .Values.security.bootstrapAdmin.password (lt (len .Values.security.bootstrapAdmin.password) (int .Values.controller.auth.minPasswordLength)) (not $usesLocalDefault) }}
-{{- fail (printf "bootstrapAdmin inline password must contain at least %v characters" .Values.controller.auth.minPasswordLength) }}
-{{- end }}
-{{- with .Values.security.bootstrapUser }}
-{{- if .enabled }}
-{{- if and .existingSecret (or .email .password .passwordHash) }}
-{{- fail "bootstrapUser existingSecret cannot be combined with inline credentials" }}
-{{- end }}
-{{- if not (or .existingSecret (and .email (or .password .passwordHash))) }}
-{{- fail "configure bootstrapUser existingSecret or an email with password/passwordHash" }}
-{{- end }}
-{{- if and .password .passwordHash }}
-{{- fail "bootstrapUser password and passwordHash are mutually exclusive" }}
-{{- end }}
-{{- if and .password (lt (len .password) (int $.Values.controller.auth.minPasswordLength)) }}
-{{- fail (printf "bootstrapUser inline password must contain at least %v characters" $.Values.controller.auth.minPasswordLength) }}
-{{- end }}
-{{- if and .email (eq (lower .email) (lower $.Values.security.bootstrapAdmin.email)) }}
-{{- fail "bootstrapAdmin and bootstrapUser must have different email addresses" }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- if and .Values.security.artifactSigning.existingSecret (or .Values.security.artifactSigning.privateKey .Values.security.artifactSigning.publicKey) }}
-{{- fail "artifactSigning existingSecret cannot be combined with inline keys" }}
-{{- end }}
-{{- if not (or .Values.security.bootstrap.enabled .Values.security.artifactSigning.existingSecret (and .Values.security.artifactSigning.privateKey .Values.security.artifactSigning.publicKey)) }}
-{{- fail "enable security.bootstrap or configure artifactSigning existingSecret or an inline Ed25519 private/public key pair" }}
-{{- end }}
-{{- if and .Values.security.bootstrap.enabled (or .Values.security.artifactSigning.privateKey .Values.security.artifactSigning.publicKey) }}
-{{- fail "security.bootstrap cannot be combined with inline signing keys; use existingSecret to supply a key pair" }}
-{{- end }}
+{{- if .Values.database.url -}}
+{{- fail "inline database configuration is no longer supported; use database.existingSecret" -}}
+{{- end -}}
+{{- if and .Values.postgresql.enabled .Values.database.existingSecret -}}
+{{- fail "postgresql.enabled cannot be combined with database.existingSecret" -}}
+{{- end -}}
+{{- if not (or .Values.postgresql.enabled .Values.database.existingSecret) -}}
+{{- fail "enable postgresql or set database.existingSecret; Controller requires PostgreSQL" -}}
+{{- end -}}
+{{- if not .Values.security.bootstrap.enabled -}}
+{{- if or .Values.postgresql.enabled (not .Values.security.controlSecret.existingSecret) (not .Values.security.metrics.existingSecret) (not .Values.security.runtimeLogs.existingSecret) (not .Values.security.artifactSigning.existingSecret) (not .Values.security.bootstrapAdmin.existingSecret) (and .Values.security.bootstrapUser.enabled (not .Values.security.bootstrapUser.existingSecret)) -}}
+{{- fail "enable security.bootstrap or supply every managed Secret through existingSecret" -}}
+{{- end -}}
+{{- end -}}
+{{- range $role, $account := dict "Admin" .Values.security.bootstrapAdmin "User" .Values.security.bootstrapUser -}}
+{{- if or (eq $role "Admin") $account.enabled -}}
+{{- if and $account.existingSecret (or $account.email $account.localDefault) -}}
+{{- fail (printf "bootstrap%s existingSecret cannot be combined with account initialization" $role) -}}
+{{- end -}}
+{{- if not (or $account.existingSecret $account.email) -}}
+{{- fail (printf "configure bootstrap%s existingSecret or email for in-cluster initialization" $role) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.security.bootstrapUser.enabled .Values.security.bootstrapUser.email (eq (lower .Values.security.bootstrapUser.email) (lower .Values.security.bootstrapAdmin.email)) -}}
+{{- fail "bootstrapAdmin and bootstrapUser must have different email addresses" -}}
+{{- end -}}
+{{- if or .Values.controller.auth.allowLocalDefaultCredentials .Values.security.bootstrapAdmin.localDefault (and .Values.security.bootstrapUser.enabled .Values.security.bootstrapUser.localDefault) -}}
+{{- range (include "tali-guard.publicUrls" . | fromJsonArray) -}}
+{{- if not (regexMatch "^http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?/?$" .) -}}
+{{- fail "allowLocalDefaultCredentials requires loopback Controller publicUrl entries" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if or .Values.security.artifactSigning.privateKey .Values.security.artifactSigning.publicKey -}}
+{{- fail "inline signing keys are no longer supported; use existingSecret" -}}
+{{- end -}}
 {{- if and .Values.security.controlTls.enabled .Values.security.controlTls.existingSecret .Values.security.controlTls.autoGenerate }}
 {{- fail "controlTls existingSecret cannot be combined with autoGenerate=true" }}
 {{- end }}
@@ -356,6 +330,6 @@ data:
   CONTROLLER_RUNTIME_SERVICE_URL: {{ include "tali-guard.defaultRuntimeServiceUrl" . | quote }}
   CONTROLLER_RUNTIME_PUBLIC_URL: {{ include "tali-guard.runtimePublicUrl" . | quote }}
   BETTER_AUTH_TRUSTED_ORIGINS: {{ include "tali-guard.trustedOrigins" . | fromJsonArray | join "," | quote }}
-  BETTER_AUTH_MIN_PASSWORD_LENGTH: {{ .Values.controller.auth.minPasswordLength | quote }}
+  CONTROLLER_MIN_LOGIN_LENGTH: {{ .Values.controller.auth.minLoginLength | quote }}
   CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS: {{ .Values.controller.auth.allowLocalDefaultCredentials | quote }}
 {{- end }}

@@ -44,7 +44,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ $name }}
+                  name: {{ include "tali-litellm-dev.runtimeSecretName" . }}
                   key: database-url
           resources:
             requests: {cpu: 5m, memory: 8Mi}
@@ -75,27 +75,22 @@ spec:
             - name: LITELLM_MASTER_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $name }}
+                  name: {{ include "tali-litellm-dev.runtimeSecretName" . }}
                   key: master-key
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ $name }}
+                  name: {{ include "tali-litellm-dev.runtimeSecretName" . }}
                   key: database-url
             - name: UI_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ $name }}
+                  name: {{ include "tali-litellm-dev.runtimeSecretName" . }}
                   key: ui-username
-            - name: UI_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $name }}
-                  key: ui-password
             - name: LITELLM_SALT_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $name }}
+                  name: {{ include "tali-litellm-dev.runtimeSecretName" . }}
                   key: salt-key
             # Guard Endpoint wiring is written by scripts/litellm-dev-wire.mjs.
             - name: TASKLATTICE_GUARD_API_BASE
@@ -112,9 +107,12 @@ spec:
             - name: LITELLM_UPSTREAM_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $name }}
-                  key: upstream-api-key
+                  name: {{ .Values.model.upstream.existingSecret }}
+                  key: {{ .Values.model.upstream.apiKeyKey }}
             {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "tali-litellm-dev.runtimeSecretName" . }}
           volumeMounts:
             - name: config
               mountPath: /etc/litellm/config.yaml
@@ -145,8 +143,8 @@ spec:
               drop: ["ALL"]
       volumes:
         - name: config
-          secret:
-            secretName: {{ $name }}
+          configMap:
+            name: {{ $name }}-config
             items:
               - key: litellm-config.yaml
                 path: config.yaml

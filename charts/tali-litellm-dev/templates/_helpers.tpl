@@ -36,13 +36,20 @@ app.kubernetes.io/component: {{ .component }}
 {{- include "tali-litellm-dev.componentName" (dict "root" . "component" "mock-model") -}}
 {{- end }}
 
-{{- define "tali-litellm-dev.databaseUrl" -}}
-{{- printf "postgresql://%s:%s@%s.%s.svc.cluster.local:5432/%s" .Values.postgresql.username (urlquery .Values.postgresql.password | replace "+" "%20") (include "tali-litellm-dev.postgresqlName" .) .Release.Namespace .Values.postgresql.database -}}
+{{- define "tali-litellm-dev.runtimeSecretName" -}}
+{{- include "tali-litellm-dev.managedSecretName" (include "tali-litellm-dev.fullname" .) -}}
 {{- end }}
-
+{{- define "tali-litellm-dev.databaseSecretName" -}}
+{{- include "tali-litellm-dev.managedSecretName" (include "tali-litellm-dev.postgresqlName" .) -}}
+{{- end }}
+{{- define "tali-litellm-dev.bootstrapSecretSpecs" -}}
+{{- toJson (list
+  (dict "name" (include "tali-litellm-dev.databaseSecretName" .) "legacyName" (include "tali-litellm-dev.postgresqlName" .) "kind" "database" "profile" "litellm" "host" (printf "%s.%s.svc.cluster.local" (include "tali-litellm-dev.postgresqlName" .) .Release.Namespace) "username" .Values.postgresql.username "database" .Values.postgresql.database)
+  (dict "name" (include "tali-litellm-dev.runtimeSecretName" .) "legacyName" (include "tali-litellm-dev.fullname" .) "kind" "litellm" "databaseSecret" (include "tali-litellm-dev.databaseSecretName" .) "username" .Values.ui.username)) -}}
+{{- end }}
 {{/* A real provider replaces the mock only when every upstream value is set. */}}
 {{- define "tali-litellm-dev.upstreamConfigured" -}}
-{{- if and .Values.model.upstream.apiBase .Values.model.upstream.apiKey .Values.model.upstream.model -}}true{{- end -}}
+{{- if and .Values.model.upstream.apiBase .Values.model.upstream.existingSecret .Values.model.upstream.model -}}true{{- end -}}
 {{- end }}
 
 {{- define "tali-litellm-dev.mockEnabled" -}}
@@ -92,4 +99,12 @@ litellm_settings:
   num_retries: 0
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
+{{- end }}
+
+{{- define "tali-litellm-dev.managedSecretName" -}}
+{{- if le (len .) 58 -}}
+{{- printf "%s-init" . -}}
+{{- else -}}
+{{- printf "%s-%s-init" (. | trunc 44 | trimSuffix "-") (. | sha256sum | trunc 12) -}}
+{{- end -}}
 {{- end }}

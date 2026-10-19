@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { bootstrapPasswordHashPattern } from "./bootstrap-password.js";
+import { clusterBootstrapEnvironment } from "./cluster-bootstrap.js";
 
 const modelRuntime = z.object({
   id: z.string().trim().min(1),
@@ -229,6 +230,7 @@ const environmentSchema = z.object({
 export type ControllerConfig = ReturnType<typeof loadConfig>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
+  environment = clusterBootstrapEnvironment(environment);
   const parsed = environmentSchema.parse(environment);
   const modelRuntimes = parseLegacyConfiguration(
     parsed.MODEL_GUARDRAILS_MODEL_RUNTIMES_JSON,

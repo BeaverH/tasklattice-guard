@@ -72,7 +72,7 @@ test('image builds package the release version and pass repository overrides', t
   assert.equal(calls[0].runnerRepository, 'registry.test/runner');
 });
 const pinnedLitellm = /^image:\n(?:\s+.*\n)*?\s+tag:\s*"([^"]+)"/m.exec(readFileSync(new URL('../charts/tali-litellm-dev/values.yaml', import.meta.url), 'utf8'))[1];
-test('litellm-deploy pulls the chart-pinned image, verifies its protocol, wires Guard, then installs the test chart', t => {
+test('litellm-deploy uses the preloaded chart-pinned image, verifies its protocol, wires Guard, then installs the test chart', t => {
   const f = fixture(t);
   const result = f.run('litellm-deploy', ['--set', 'replicaCount=1'], { HELM_TIMEOUT: '7m' });
   assert.equal(result.status, 0, result.stderr);
@@ -80,7 +80,7 @@ test('litellm-deploy pulls the chart-pinned image, verifies its protocol, wires 
   const image = `ghcr.io/tasklattice/tali-litellm:${pinnedLitellm}`;
   assert.match(pinnedLitellm, /^\d+\.\d+\.\d+-guard\.\d+$/);
   assert.deepEqual(calls.map(c => c.command), ['docker', 'python', 'node', 'bash', 'node']);
-  assert.deepEqual(calls[0].args, ['pull', image]);
+  assert.deepEqual(calls[0].args, ['image', 'inspect', image]);
   assert.deepEqual(calls[1].args, ['scripts/verify_relay_stream_image.py', image]);
   assert.deepEqual(calls[2].args, ['scripts/litellm-dev-wire.mjs']);
   assert.deepEqual(calls[3].args.slice(0, 5), ['scripts/helm-upgrade.sh', 'tali-litellm-dev', 'charts/tali-litellm-dev', 'test-context', 'test-namespace']);
@@ -92,19 +92,19 @@ test('litellm-deploy pulls the chart-pinned image, verifies its protocol, wires 
   assert.deepEqual(calls[3].args.slice(-2), ['--set', 'replicaCount=1']);
   assert.deepEqual(calls[4].args, ['scripts/litellm-dev-smoke.mjs']);
 });
-test('LITELLM_IMAGE overrides the chart pin for pull, verification and install', t => {
+test('LITELLM_IMAGE overrides the chart pin for local inspection, verification and install', t => {
   const f = fixture(t);
   const result = f.run('litellm-deploy', [], { LITELLM_IMAGE: 'registry.test/litellm:1.88.0-guard.2', LITELLM_SKIP_SMOKE: '1' });
   assert.equal(result.status, 0, result.stderr);
   const calls = f.calls();
-  assert.deepEqual(calls[0].args, ['pull', 'registry.test/litellm:1.88.0-guard.2']);
+  assert.deepEqual(calls[0].args, ['image', 'inspect', 'registry.test/litellm:1.88.0-guard.2']);
   assert.ok(calls[3].args.includes('image.repository=registry.test/litellm') && calls[3].args.includes('image.tag=1.88.0-guard.2'));
 });
-test('litellm-deploy stops before touching Guard when the image is neither pullable nor local', t => {
+test('litellm-deploy stops before touching Guard when the image is not preloaded locally', t => {
   const f = fixture(t);
   const result = f.run('litellm-deploy', [], { FAIL_COMMAND: 'docker' });
   assert.equal(result.status, 1);
-  assert.deepEqual(f.calls().map(c => c.args[0]), ['pull', 'image']);
+  assert.deepEqual(f.calls().map(c => c.args[0]), ['image']);
 });
 test('litellm-deploy refuses an image whose Provider speaks another stream protocol', t => {
   const f = fixture(t);
@@ -115,12 +115,14 @@ test('litellm-deploy refuses an image whose Provider speaks another stream proto
 });
 test('litellm-deploy passes a complete upstream provider and skips the smoke test on request', t => {
   const f = fixture(t);
-  const result = f.run('litellm-deploy', [], { LITELLM_UPSTREAM_API_BASE: 'https://api.example/v1', LITELLM_UPSTREAM_API_KEY: 'sk-test', LITELLM_UPSTREAM_MODEL: 'gpt-test', LITELLM_SKIP_SMOKE: '1' });
+  const result = f.run('litellm-deploy', [], { LITELLM_UPSTREAM_API_BASE: 'https://api.example/v1', LITELLM_UPSTREAM_SECRET: 'upstream', LITELLM_UPSTREAM_MODEL: 'gpt-test', LITELLM_SKIP_SMOKE: '1' });
   assert.equal(result.status, 0, result.stderr);
   const calls = f.calls();
   assert.deepEqual(calls.map(c => c.command), ['docker', 'python', 'node', 'bash']);
   assert.ok(calls[3].args.includes('model.upstream.apiBase=https://api.example/v1'));
   assert.ok(calls[3].args.includes('model.upstream.model=gpt-test'));
+  assert.ok(calls[3].args.includes('model.upstream.existingSecret=upstream'));
+  assert.ok(!calls[3].args.some(arg => arg.includes('sk-test')));
   const partial = f.run('litellm-deploy', [], { LITELLM_UPSTREAM_API_BASE: 'https://api.example/v1', LITELLM_SKIP_SMOKE: '1' });
   assert.equal(partial.status, 1);
   assert.match(partial.stderr, /together/);
@@ -133,7 +135,7 @@ test('litellm-deploy-full deploys Guard exactly like helm-deploy before LiteLLM'
   assert.deepEqual(calls.map(c => c.command), ['bash', 'docker', 'docker', 'bash', 'docker', 'python', 'node', 'bash']);
   assert.deepEqual(calls[3].args.slice(0, 3), ['scripts/helm-upgrade.sh', 'tali-guard', 'charts/tali-guard']);
   assert.ok(calls[3].args.includes('rolloutRevision=regression'));
-  assert.deepEqual(calls[4].args, ['pull', `ghcr.io/tasklattice/tali-litellm:${pinnedLitellm}`]);
+  assert.deepEqual(calls[4].args, ['image', 'inspect', `ghcr.io/tasklattice/tali-litellm:${pinnedLitellm}`]);
   assert.deepEqual(calls[7].args.slice(0, 3), ['scripts/helm-upgrade.sh', 'tali-litellm-dev', 'charts/tali-litellm-dev']);
 });
 test('helm-deploy never touches the LiteLLM test chart or image', t => {

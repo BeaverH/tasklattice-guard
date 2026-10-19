@@ -45,13 +45,15 @@ runner:
 # component. Production keeps this disabled and supplies database.existingSecret.
 postgresql:
   enabled: true
-  auth:
-    password: guard-dev-postgres-password
+  image:
+    pullPolicy: Never
 
 # Keep shared input/output call-version context available when scaling locally.
 # This Redis is infrastructure only; production uses runner.callContextRedisUrl.
 redis:
   enabled: true
+  image:
+    pullPolicy: Never
   # Call contexts retain the immutable plan for input/output version pinning.
   # Leave room for the full Default regression within the five-minute TTL.
   resources:
@@ -62,16 +64,15 @@ redis:
 
 security:
   bootstrapAdmin:
-    # Import the offline hash when creating the development account.
+    # Create the development account using the image-provided local login.
     email: admin@tasklattice.local
-    # Offline Better Auth hash for the local initial admin / password login.
-    passwordHash: "0a23d43dc81c52d322fbf3f52b2858bb:563bdba4c8dd2c5a6bf67ddb82e6111c41e14b3462c5e3cabf6442d6b529be9ddabd22391d9b1dc2b0e8f4841454786a440d58703dd5a3c417accb84947dcf31"
+    # Initialize the local development login inside the cluster.
+    localDefault: true
     name: Local Administrator
   bootstrapUser:
     enabled: true
     email: user@tasklattice.local
-    # Separate offline hash for the initial user / password login.
-    passwordHash: "8e2671eed5876365cb848b07ee55dc0f:3704a97c3a029f0d8b86f086d96f78d7b5874adc72e2f78503d9a8a4e1551d2ab243d2729b6abfc4579f2818af8004417ee0d435d224622b7f7be24682dde2fc"
+    localDefault: true
     name: Local User
 
 # Keep the self-contained development baseline independent from Prometheus

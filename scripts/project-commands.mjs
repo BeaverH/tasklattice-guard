@@ -92,13 +92,10 @@ async function testPromotion(extra) {
 }
 async function deployLitellm(extra) {
   const image = litellmImage();
-  // A registry blip must not block a stack whose image is already local;
-  // a missing image still fails here, before any Guard resources change.
-  try { await run('docker', ['pull', image]); }
-  catch (error) {
-    await run('docker', ['image', 'inspect', image], true).catch(() => { throw error; });
-    console.error(`Pull failed (${error.message}); using the local copy of ${image}.`);
-  }
+  // Development uses preloaded images; deploying never pulls from a registry.
+  await run('docker', ['image', 'inspect', image], true).catch(() => {
+    throw new Error(`Load the LiteLLM image ${image} into local Docker before deploying.`);
+  });
   // The Provider must speak this Runner's output-stream protocol. An image
   // built for another protocol is refused here rather than failing at the
   // first streamed completion.
@@ -111,15 +108,16 @@ async function deployLitellm(extra) {
   // The wiring script creates the Guard Endpoint/Router and writes the Guard
   // credential Secret itself, so the secret never passes through Helm values.
   await run('node', ['scripts/litellm-dev-wire.mjs']);
-  const upstream = ['LITELLM_UPSTREAM_API_BASE', 'LITELLM_UPSTREAM_API_KEY', 'LITELLM_UPSTREAM_MODEL'].map((key) => env[key]);
-  if (upstream.some(Boolean) && !upstream.every(Boolean)) throw new Error('Set LITELLM_UPSTREAM_API_BASE, LITELLM_UPSTREAM_API_KEY and LITELLM_UPSTREAM_MODEL together.');
-  const [apiBase, apiKey, model] = upstream;
+  const upstream = ['LITELLM_UPSTREAM_API_BASE', 'LITELLM_UPSTREAM_SECRET', 'LITELLM_UPSTREAM_MODEL'].map((key) => env[key]);
+  if (upstream.some(Boolean) && !upstream.every(Boolean)) throw new Error('Set LITELLM_UPSTREAM_API_BASE, LITELLM_UPSTREAM_SECRET and LITELLM_UPSTREAM_MODEL together.');
+  const [apiBase, upstreamSecret, model] = upstream;
   await run('bash', ['scripts/helm-upgrade.sh', litellmRelease, litellmChart, context, namespace,
     '--values', litellmValues,
     '--set', `image.repository=${image.slice(0, image.lastIndexOf(':'))}`,
     '--set-string', `image.tag=${image.slice(image.lastIndexOf(':') + 1)}`,
+    '--set', `bootstrap.image.repository=${env.CONTROLLER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-controller'}`,
     '--set', `model.mock.image.repository=${env.RUNNER_REPOSITORY ?? 'ghcr.io/tasklattice/tali-guard-runner'}`,
-    ...(apiBase ? ['--set-string', `model.upstream.apiBase=${apiBase}`, '--set-string', `model.upstream.apiKey=${apiKey}`, '--set-string', `model.upstream.model=${model}`] : []),
+    ...(apiBase ? ['--set-string', `model.upstream.apiBase=${apiBase}`, '--set-string', `model.upstream.existingSecret=${upstreamSecret}`, '--set-string', `model.upstream.model=${model}`] : []),
     '--wait', '--timeout', env.HELM_TIMEOUT ?? '5m', ...extra]);
   if (env.LITELLM_SKIP_SMOKE !== '1') await run('node', ['scripts/litellm-dev-smoke.mjs']);
 }

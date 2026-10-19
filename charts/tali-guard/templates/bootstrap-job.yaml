@@ -35,6 +35,9 @@ rules:
     resourceNames:
       {{- range $spec := $specs }}
       - {{ $spec.name | quote }}
+      {{- with $spec.legacyName }}
+      - {{ . | quote }}
+      {{- end }}
       {{- end }}
   - apiGroups: [""]
     resources: [secrets]

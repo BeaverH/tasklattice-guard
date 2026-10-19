@@ -30,7 +30,7 @@ rm -f "$work_dir/tali-guard/values.yaml.bak"
 
 mkdir -p "$output_root"
 helm lint "$work_dir/tali-guard" --strict \
-  --set database.url=postgresql://guard:guard@postgres:5432/guard \
+  --set database.existingSecret=guard-database \
   --set security.artifactSigning.existingSecret=guard-artifact-signing \
   --set security.controlTls.existingSecret=guard-control-tls \
   --set security.customCa.existingSecret=guard-model-provider-ca \

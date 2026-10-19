@@ -241,7 +241,7 @@ jobs:
           grep -Fx "appVersion: 0.0.0-ci" <<<"$metadata"
           helm template tali-guard "$chart" \
             --namespace tali \
-            --set database.url=postgresql://guard:guard@postgres:5432/guard \
+            --set database.existingSecret=guard-database \
             --set security.artifactSigning.existingSecret=guard-artifact-signing \
             --set security.controlTls.existingSecret=guard-control-tls \
             --set security.bootstrapAdmin.existingSecret=guard-bootstrap-admin \

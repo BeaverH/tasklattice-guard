@@ -51,9 +51,9 @@ controller:
   # Shared publicUrl is always trusted; with no shared URL this replaces derived
   # origins for compatibility. Remove stale entries when switching environments.
   # trustedOrigins: [http://localhost:8092]
-  # Optional password policy; applies to plaintext setup and password changes.
+  # Optional login policy; applies to account setup and future changes.
   # auth:
-  #   minPasswordLength: 12
+  #   minLoginLength: 12
   # Internal HTTP/gRPC ports are fixed at 8080/9090. For direct local exposure:
   # service:
   #   type: ClusterIP
@@ -119,14 +119,12 @@ runner:
     sizeLimit: 2Gi
 
 database:
-  # Choose exactly one: URL, existingSecret (preferred), or bundled PostgreSQL.
-  # URL example: postgresql://guard:<password>@postgres.uat.svc:5432/guard
-  url: ""
+  # Choose an existing Secret or bundled PostgreSQL.
   # Secret must already exist in the release namespace, containing secretKey.
   existingSecret: ""
   secretKey: database-url
 
-# Development-only PostgreSQL; production uses database.existingSecret or url.
+# Development-only PostgreSQL; production uses database.existingSecret.
 postgresql:
   enabled: false
   image:
@@ -136,8 +134,6 @@ postgresql:
   auth:
     database: guard
     username: guard
-    password: ""
-    passwordKey: postgres-password
   persistence:
     # false uses ephemeral storage; true requests a PVC from this StorageClass.
     enabled: true
@@ -176,19 +172,14 @@ security:
     # Required keys: ca.crt, tls.crt, tls.key, runner.crt, runner.key.
     # existingSecret: guard-control-tls
   bootstrapAdmin:
-    # Choose an existing Secret OR inline email + password/passwordHash.
-    # Secret keys: email, name, and password or password-hash.
+    # Supply an existing Secret, or email to initialize a random login in-cluster.
     # existingSecret: guard-bootstrap-admin
     email: ""
-    # password: "" # Prefer existingSecret; never commit environment passwords.
-    # Offline Better Auth salt:hash. Bootstrap creates an absent account only;
-    # changing these values never resets an existing account's password.
-    passwordHash: ""
     name: Administrator
   # Optional second bootstrap account with the user role (disabled by default).
   # bootstrapUser:
   #   enabled: true
-  #   existingSecret: guard-bootstrap-user # email, name, password or password-hash
+  #   existingSecret: guard-bootstrap-user
   # Optional private CA for outbound HTTPS model/provider connections:
   # customCa:
   #   existingSecret: company-model-ca

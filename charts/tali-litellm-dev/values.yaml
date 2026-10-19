@@ -21,13 +21,9 @@ service:
   # 38080 tali-relay, 38081 Guard Controller, 38082 Guard runtime.
   port: 38083
 
-# LiteLLM proxy credentials. Development defaults only; this chart is not a
-# production deployment path.
-masterKey: sk-tali-litellm-dev
+# The Job generates proxy credentials. This chart is for development only.
 ui:
   username: admin
-  password: password
-saltKey: tali-litellm-dev-salt-v1
 
 guard:
   # Secret written by scripts/litellm-dev-wire.mjs after it creates the Guard
@@ -63,7 +59,8 @@ model:
   # when set, the mock model is not deployed.
   upstream:
     apiBase: ""
-    apiKey: ""
+    existingSecret: ""
+    apiKeyKey: api-key
     model: ""
 
 replicaCount: 1
@@ -83,7 +80,6 @@ postgresql:
     pullPolicy: IfNotPresent
   database: litellm
   username: litellm
-  password: litellm-dev-postgres-password
   resources:
     requests:
       cpu: 50m
@@ -93,3 +89,22 @@ postgresql:
       memory: 512Mi
 
 imagePullSecrets: []
+
+# Initialization uses the Guard Controller runtime tools, before database startup.
+bootstrap:
+  image:
+    repository: ghcr.io/tasklattice/tali-guard-controller
+    tag: "0.2.0"
+    pullPolicy: IfNotPresent
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: true

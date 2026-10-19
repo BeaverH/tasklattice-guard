@@ -63,11 +63,9 @@ spec:
               value: {{ .Values.postgresql.database | quote }}
             - name: POSTGRES_USER
               value: {{ .Values.postgresql.username | quote }}
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "tali-litellm-dev.postgresqlName" . }}
-                  key: password
+          envFrom:
+            - secretRef:
+                name: {{ include "tali-litellm-dev.databaseSecretName" . }}
           readinessProbe:
             exec:
               command: [pg_isready, --username, {{ .Values.postgresql.username | quote }}, --dbname, {{ .Values.postgresql.database | quote }}]

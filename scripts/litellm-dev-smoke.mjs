@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /** Smoke test the LiteLLM test gateway: allowed, blocked-output, and streaming calls. */
+import { execFileSync } from "node:child_process";
 const env = process.env;
 const base = new URL(env.LITELLM_DEV_URL ?? "http://localhost:38083");
-const masterKey = env.LITELLM_DEV_MASTER_KEY ?? "sk-tali-litellm-dev";
+const masterKey = env.LITELLM_DEV_MASTER_KEY ?? Buffer.from(execFileSync("kubectl", [
+  "--context", env.HELM_CONTEXT ?? "orbstack", "--namespace", env.HELM_NAMESPACE ?? "tali",
+  "get", "secret", env.LITELLM_RUNTIME_SECRET ?? "tali-litellm-dev-init", "-o", "jsonpath={.data.master-key}",
+], { encoding: "utf8" }).trim(), "base64").toString("utf8");
 const model = env.LITELLM_DEV_MODEL ?? "guarded-model";
 const headers = { authorization: `Bearer ${masterKey}`, "content-type": "application/json" };
 const report = (stage, value) => console.log(JSON.stringify({ stage, ...value }));

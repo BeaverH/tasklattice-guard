@@ -9,21 +9,20 @@ metrics:
   tokenKey: metrics-token
 bootstrapAdmin:
   existingSecret: ''
-  password: ''
   emailKey: email
-  passwordKey: password
-  passwordHashKey: password-hash
+  localDefault: false
+  credentialKey: ''
+  digestKey: ''
   nameKey: name
 bootstrapUser:
   enabled: false
   existingSecret: ''
   email: ''
-  password: ''
-  passwordHash: ''
   name: User
   emailKey: email
-  passwordKey: password
-  passwordHashKey: password-hash
+  localDefault: false
+  credentialKey: ''
+  digestKey: ''
   nameKey: name
 controlSecret:
   existingSecret: ''

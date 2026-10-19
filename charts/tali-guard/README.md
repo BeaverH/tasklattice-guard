@@ -93,7 +93,7 @@ in that namespace:
 | Example Secret | Required keys |
 | --- | --- |
 | `tali-guard-uat-database` | `database-url`: PostgreSQL connection URL |
-| `tali-guard-uat-bootstrap-admin` | `email`, `name`, and either `password` or `password-hash` |
+| `tali-guard-uat-bootstrap-admin` | account fields understood by the Controller runtime |
 
 Replace the Secret names and Redis URL with your environment's values. The
 example inherits ClusterIP Services, disabled Ingress, two Runner replicas,
@@ -218,7 +218,7 @@ The development profile contains explicitly marked local-only credentials,
 enables single-node PostgreSQL plus Redis infrastructure, and inherits mTLS
 with Runner Token authentication. A Helm bootstrap Job generates signing
 keys and internal tokens directly in Kubernetes; rendering contains no private keys.
-Its baseline login is username `admin` and password `password`. Controller maps
+Its baseline login uses the image-provided local `admin` account. Controller maps
 the username to the internal Better Auth email `admin@tasklattice.local`.
 
 One command rebuilds the moving `:dev` images and installs or upgrades the
@@ -286,9 +286,9 @@ Check the deployment and access Controller:
 npm run helm:status
 ```
 
-Open <http://localhost:38081> directly and sign in with `admin` / `password`. The
+Open <http://localhost:38081> directly and sign in with the image-provided local `admin` login. The
 bootstrap operation only creates a missing Better Auth user; Controller restarts
-and Helm upgrades do not reset a password that has subsequently been changed.
+and Helm upgrades do not reset a login key that has subsequently been changed.
 No port-forward process is required. A development-only data-plane Service is
 exposed separately at <http://localhost:38082>;
 its root returns component metadata, while protected traffic uses `/runtime/v1`.
@@ -318,16 +318,10 @@ kubectl -n guard-system create secret generic guard-database \
   --from-literal=database-url='postgresql://guard:REDACTED@postgres.example:5432/guard'
 ```
 
-Create a Better Auth bootstrap administrator Secret with a strong, unique
-password. Production has no application default credentials, and the chart's
-default minimum password length is 12:
-
-```bash
-kubectl -n guard-system create secret generic guard-bootstrap-admin \
-  --from-literal=email='admin@example.com' \
-  --from-literal=password='replace-with-a-long-random-password' \
-  --from-literal=name='Administrator'
-```
+For an externally managed administrator, have the platform provision an account
+Secret and set `security.bootstrapAdmin.existingSecret`. Use the Controller
+runtime's account field contract, or configure its field-name overrides. Otherwise
+set only the administrator email/name and let the initialization Job create it.
 
 Create an asymmetric Ed25519 artifact-signing Secret:
 
@@ -543,7 +537,7 @@ selectors, then adds Provider, Model, and Action drilldowns. It separates
 latency ownership, scoped technical failures, policy-trigger semantics,
 module-level protection failures, global pre-auth entry failures, traces and
 profiles, Pool/convergence state, and Runtime Evidence pipeline health.
-The chart creates a retained `security.metrics` Bearer Secret and injects it
+The initialization Job creates a retained `security.metrics` Bearer Secret and injects it
 into Controller, every Runner, and both ServiceMonitors. Use
 `security.metrics.existingSecret` when the platform owns secret rotation.
 Roll Controller and Runner Pods after rotating that external token because it
@@ -554,41 +548,26 @@ stable UID. Full metric semantics, standalone Grafana provisioning paths, and
 the product label-cardinality budget and upstream bypass boundary are in the repository's
 `observability/README.md`.
 
-## Offline bootstrap password hash
+## In-cluster account initialization
 
-The local profile stores a Better Auth scrypt hash for the initial `password`
-login in `security.bootstrapAdmin.passwordHash` and `security.bootstrapUser.passwordHash`.
-The local accounts are `admin` / `password` (admin role) and `user` / `password`
-(user role), with separate salts. `bootstrapUser.enabled` is false by default
-and enabled only by the development profile. The database password is separate.
+Set `security.bootstrapAdmin.email` and `name`. The initialization Job creates a
+random initial login in the cluster; no login material or digest is stored in the
+chart or Helm values. An optional `security.bootstrapUser.enabled: true` account
+uses a separate Secret and receives the user role. Account emails must differ.
+Read the generated account Secret through your authorized cluster tooling when
+setting up the first login. The account Secret name is listed in the Job specs.
 
-Generate a compatible hash offline, using the Controller's pinned Better Auth:
+The local profile uses `localDefault: true` for its two development accounts.
+The image generates their Better Auth digests with separate random salts.
+This mode is restricted to loopback public URLs. Production uses random logins.
+Existing application accounts, including logins changed through the UI, are never
+reset by a Job rerun or Helm upgrade.
 
-```bash
-cd controller
-printf '%s' 'password' | npm run --silent auth:hash-password
-```
-
-Set `security.bootstrapAdmin.email`, leave `password` empty, and paste the full
-`salt:hash` output into `passwordHash`. Do not fill both password fields. An
-existing bootstrap Secret can instead contain `password-hash` (configurable with
-`passwordHashKey`), together with the usual email/name fields. Legacy Secrets with
-`password` continue to work. Controller rejects Secrets containing both credentials.
-For a non-Helm deployment use `CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH` instead of
-`CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD`.
-
-An optional user bootstrap accepts the same Secret fields under
-`security.bootstrapUser`, with `enabled: true`; it always creates the `user` role.
-For non-Helm development use `CONTROLLER_BOOTSTRAP_USER_EMAIL`,
-`CONTROLLER_BOOTSTRAP_USER_PASSWORD_HASH` and `CONTROLLER_BOOTSTRAP_USER_NAME`.
-Admin and user emails must differ.
-
-Hash import is a startup-only operation for a missing account. Existing
-accounts keep their password, including passwords changed through the UI. Changing
-Values does not reset an existing login. Import does not re-hash the hash, expose
-an HTTP hash-import endpoint, or change Better Auth's normal password hashing.
-Because an imported hash does not reveal password length, the minimum length
-policy applies to plaintext setup and future password changes, not hash import.
+Externally managed account Secrets remain supported. Controller reads their
+mounted fields directly; optional `emailKey`, `nameKey`, `credentialKey` and
+`digestKey` override the image's legacy field defaults. Supply one login field,
+never both forms. Inline login material and offline digests in Values are no
+longer supported.
 
 ## Automatic credentials and persistent CA
 
@@ -600,12 +579,12 @@ security:
     enabled: true
   bootstrapAdmin:
     email: admin@example.com
-    passwordHash: "<offline Better Auth salt:hash>"
     name: Administrator
 ```
 
 A single initialization Job reuses the Controller image. On first installation it
-creates Ed25519 artifact-signing keys, internal tokens, the log-encryption key,
+creates bundled database credentials, account logins, Ed25519 artifact-signing keys,
+internal tokens, the log-encryption key,
 and an ECDSA P-256 CA. That CA signs the Controller server and Runner client
 certificates. Both the CA certificate and **CA private key** are persisted in the
 TLS Secret, alongside the issued certificate/key pairs. Workload volumes select
@@ -641,24 +620,40 @@ use a full sync, since selective sync does not execute hooks.
 
 To use plaintext gRPC, set only `security.controlTls.enabled: false`; Runner Token
 authentication and artifact signatures stay enabled. The local `values-dev-uat.yaml`
-inherits the default mTLS mode and includes a bootstrap password hash and dependencies.
+inherits the default mTLS mode and initializes local accounts and dependencies.
 Automatic mTLS needs no other certificate settings.
 
 The initialization Job, PostgreSQL readiness init container, and Helm test Pod
 share `controller.image`, its pull policy, and `imagePullSecrets`. The Helm test
 uses Node.js HTTP health checks, so it needs no BusyBox or other tools image.
-There are four local deployment images:
-Controller, Runner, PostgreSQL and Redis. Use newly built/published Controller
-images containing these runtime scripts; older releases do not contain them.
+There are four local deployment images: Controller, Runner, PostgreSQL and Redis.
+Controller and Runner remain separate artifacts. Jobs, init containers and tests
+reuse the applicable application image without introducing a separate tools image.
+The local profile sets `Never` for all images and requires them to be preloaded.
 
 Internal Secret names/key fields are implementation defaults in
 `files/security-defaults.yaml`, rather than a checklist in public Values. Existing
-advanced `existingSecret`, custom CA and key-name overrides remain compatible.
+external Secret data remains compatible. Custom account field overrides now use
+`credentialKey` and `digestKey`; the login policy uses `controller.auth.minLoginLength`.
 External `controlTls.existingSecret` takes precedence over automatic issuance.
-Legacy explicit `bootstrap.enabled: false` / `controlTls.autoGenerate: false`
-remain supported, but new installations do not need those switches.
+To disable initialization, supply all required externally managed Secrets.
+New installations do not need `bootstrap.enabled` or `controlTls.autoGenerate` overrides.
 
-Existing Helm-owned internal Secrets are retained during a cluster-connected Helm
-upgrade. Offline ArgoCD cannot perform `lookup` for this migration; prevent pruning
-existing credentials before migrating an older GitOps deployment. New installations
-render deterministically, with no generated private-key material.
+All chart-owned Secrets are created by the initialization Job; no Secret resource
+or generated data is rendered by Helm. Managed names use an `-init` suffix (with
+a hash for long names). On upgrade the Job copies a release-owned legacy Secret
+into its new name before Helm removes the old resource. Existing key data and
+database logins are preserved. Do not change the release name, namespace, database
+identity or field-name overrides during this migration. External Secrets are
+referenced as supplied and are not copied or modified.
+
+Back up persistent database data and credentials together. Deleting a managed
+Secret while retaining its database volume requires restoring the original login;
+creating another random login cannot update an initialized database. Old GitOps
+installations must run the bootstrap hook before pruning their legacy Secrets.
+
+Remove legacy inline credential fields from environment files when upgrading.
+Use current complete Values with `--reset-values` rather than retaining removed
+fields through `--reuse-values`. The schema rejects obsolete account/database
+inputs. Rebuild and publish the Controller image before using this chart; its
+initialization protocol and mounted-account support must match the templates.

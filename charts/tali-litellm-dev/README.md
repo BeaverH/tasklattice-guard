@@ -51,7 +51,7 @@ administrator, then idempotently:
 
 Environment overrides: `GUARD_DEV_CONTROLLER_URL` (default `http://localhost:38081`),
 `GUARD_DEV_RUNTIME_URL` (default `http://localhost:38082`), `GUARD_DEV_ADMIN_EMAIL` /
-`GUARD_DEV_ADMIN_PASSWORD` (development defaults), `HELM_NAMESPACE`, `HELM_CONTEXT`,
+the wiring CLI admin login override (development defaults), `HELM_NAMESPACE`, `HELM_CONTEXT`,
 `LITELLM_SKIP_SMOKE=1`.
 
 ## Ports
@@ -79,7 +79,7 @@ To use a real provider, set all three before deploying:
 
 ```bash
 LITELLM_UPSTREAM_API_BASE=https://api.openai.com/v1 \
-LITELLM_UPSTREAM_API_KEY=sk-... \
+LITELLM_UPSTREAM_SECRET=litellm-provider \
 LITELLM_UPSTREAM_MODEL=gpt-4o-mini \
 npm run litellm:deploy:dev
 ```
@@ -88,7 +88,35 @@ The mock model is then not deployed and `guarded-model` routes to the provider.
 
 ## LiteLLM UI
 
-`http://localhost:38083/ui` (admin / password). The TaskLattice Guard guardrail
+`http://localhost:38083/ui` (read the generated UI login from the runtime Secret). The TaskLattice Guard guardrail
 appears under Guardrails with `mode: pre_call, post_call`,
 `unreachable_fallback: fail_closed`. Policy decisions are visible in the Guard
 console under the `litellm-dev` Endpoint and Router.
+
+## Runtime initialization
+
+Helm renders no Secret resources. A pre-install/pre-upgrade/pre-rollback Job
+uses the Guard Controller image to create random database, master, UI and salt
+keys. Repeated runs retain them. Its ServiceAccount may read only the configured
+managed and legacy names, create Secrets, and read this namespace UID.
+
+Managed names end in `-init`; upgrades copy release-owned legacy data before Helm
+removes the old resources. The database login and connection URL are kept in sync.
+The proxy configuration is a ConfigMap and contains environment references only.
+Inline master, UI, salt and database keys in Values are no longer supported.
+The development profile requires a newly built Guard Controller `:dev` image for
+initialization, in addition to the LiteLLM proxy and Guard Runner images. The mock
+model reuses the Runner image.
+
+For a real upstream, set `model.upstream.apiBase`, `model.upstream.model` and
+`model.upstream.existingSecret`. The external Secret must contain `api-key`, or
+set `apiKeyKey`. Credentials are never passed through Helm values.
+`LITELLM_UPSTREAM_SECRET` selects that Secret in the development deployment CLI.
+The Guard Endpoint wiring remains an external input supplied by the wiring CLI.
+The smoke command reads the generated master key through kubectl unless
+`LITELLM_DEV_MASTER_KEY` is explicitly supplied.
+
+`bootstrap.image` selects the Controller image for initialization.
+`model.mock.image` selects the Runner image for the mock model. Development uses
+preloaded images only; the deployment CLI never pulls. All helper Pods reuse application
+images. PostgreSQL remains separate infrastructure.

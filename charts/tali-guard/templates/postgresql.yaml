@@ -70,11 +70,9 @@ spec:
               value: {{ .Values.postgresql.auth.database | quote }}
             - name: POSTGRES_USER
               value: {{ .Values.postgresql.auth.username | quote }}
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "tali-guard.postgresqlName" . }}
-                  key: {{ .Values.postgresql.auth.passwordKey }}
+          envFrom:
+            - secretRef:
+                name: {{ include "tali-guard.databaseSecretName" . }}
           readinessProbe:
             exec:
               command: [pg_isready, --username, {{ .Values.postgresql.auth.username | quote }}, --dbname, {{ .Values.postgresql.auth.database | quote }}]

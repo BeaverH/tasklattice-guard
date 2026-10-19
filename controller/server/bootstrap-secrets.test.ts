@@ -96,3 +96,108 @@ describe("in-cluster Secret bootstrap", () => {
     expect(patch).not.toHaveProperty("stringData");
   });
 });
+
+function clusterFixture(initial: Record<string, any> = {}) {
+  const stored = new Map(Object.entries(initial));
+  const request = vi.fn(async (method: string, path: string, body?: any) => {
+    const name = decodeURIComponent(path.split("/").at(-1)!);
+    if (method === "GET") return stored.has(name) ? { status: 200, body: stored.get(name) } : { status: 404 };
+    if (method !== "POST") throw new Error(`Unexpected mutation ${method}`);
+    if (stored.has(body.metadata.name)) return { status: 409 };
+    stored.set(body.metadata.name, { metadata: body.metadata, data: encode(body.stringData) });
+    return { status: 201 };
+  });
+  return { stored, request };
+}
+const dbSpec = { name: "db-init", legacyName: "db", kind: "database", host: "postgres", username: "guard", database: "guard" };
+const legacyMetadata = { annotations: { "meta.helm.sh/release-name": "release", "meta.helm.sh/release-namespace": "namespace" } };
+
+describe("database, account and gateway bootstrap", () => {
+  it("creates matching database fields once and preserves them on retry", async () => {
+    const { stored, request } = clusterFixture();
+    expect(await ensureSecret(request, "namespace", "release", dbSpec, owner)).toBe("created");
+    const original = stored.get(dbSpec.name);
+    const value = Buffer.from(original.data["postgres-password"], "base64").toString();
+    expect(value).toMatch(/^[a-f0-9]{64}$/);
+    expect(original.data.POSTGRES_PASSWORD).toBe(original.data["postgres-password"]);
+    expect(Buffer.from(original.data["database-url"], "base64").toString()).toBe(`postgresql://guard:${value}@postgres:5432/guard`);
+    expect(await ensureSecret(request, "namespace", "release", dbSpec, owner)).toBe("reused");
+    expect(stored.get(dbSpec.name)).toBe(original);
+    expect(request.mock.calls.filter(([method]) => method === "POST")).toHaveLength(1);
+  });
+  it("copies legacy data to a distinct name without modifying the original", async () => {
+    const legacy = { metadata: legacyMetadata, data: encode({ "postgres-password": "legacy", "database-url": "postgresql://guard:legacy@postgres:5432/guard" }) };
+    const { stored, request } = clusterFixture({ db: legacy });
+    await ensureSecret(request, "namespace", "release", dbSpec, owner);
+    expect(stored.get("db")).toBe(legacy);
+    expect(stored.get("db-init").data["postgres-password"]).toBe(legacy.data["postgres-password"]);
+    expect(stored.get("db-init").data["database-url"]).toBe(legacy.data["database-url"]);
+    expect(stored.get("db-init").metadata.ownerReferences).toEqual([owner]);
+    expect(request.mock.calls.every(([method]) => ["GET", "POST"].includes(method))).toBe(true);
+  });
+  it("refuses foreign, incomplete and inconsistent legacy data without creating a replacement", async () => {
+    for (const legacy of [
+      { metadata: {}, data: encode({ "postgres-password": "key" }) },
+      { metadata: legacyMetadata, data: {} },
+      { metadata: legacyMetadata, data: encode({ "postgres-password": "key", "database-url": "postgresql://guard:other@postgres:5432/guard" }) },
+    ]) {
+      const { stored, request } = clusterFixture({ db: legacy });
+      await expect(ensureSecret(request, "namespace", "release", dbSpec, owner)).rejects.toThrow();
+      expect(stored.has("db-init")).toBe(false);
+      expect(request.mock.calls.every(([method]) => method === "GET")).toBe(true);
+    }
+  });
+  it("generates random production accounts and valid separately salted local digests", async () => {
+    const spec = { kind: "account", email: "admin@example.com", displayName: "Admin" };
+    const first = await secretData(spec), second = await secretData(spec);
+    expect(first.password).toHaveLength(64);
+    expect(first.password).not.toBe(second.password);
+    const local = await secretData({ ...spec, localDefault: true });
+    const another = await secretData({ ...spec, localDefault: true });
+    const { verifyPassword } = await import("better-auth/crypto");
+    expect(await verifyPassword({ hash: local["password-hash"], password: "password" })).toBe(true);
+    expect(local["password-hash"]).not.toBe(another["password-hash"]);
+    expect(local).not.toHaveProperty("password");
+  });
+  it("migrates the LiteLLM database and gateway together and retains their keys", async () => {
+    const database = { ...dbSpec, profile: "litellm" };
+    const url = "postgresql://guard:legacy@postgres:5432/guard";
+    const gateway = { name: "gateway-init", legacyName: "gateway", kind: "litellm", username: "admin", databaseSecret: "db-init" };
+    const data = { "master-key": "sk-legacy", "salt-key": "legacy-salt", "ui-username": "admin", "ui-password": "legacy-ui", "database-url": url };
+    const { stored, request } = clusterFixture({ db: { metadata: legacyMetadata, data: encode({ password: "legacy" }) }, gateway: { metadata: legacyMetadata, data: encode(data) } });
+    await ensureSecret(request, "namespace", "release", database, owner);
+    await ensureSecret(request, "namespace", "release", gateway, owner);
+    const original = stored.get(gateway.name);
+    for (const [key, value] of Object.entries(data)) expect(original.data[key]).toBe(Buffer.from(value).toString("base64"));
+    expect(original.data.UI_PASSWORD).toBe(original.data["ui-password"]);
+    expect(await ensureSecret(request, "namespace", "release", gateway, owner)).toBe("reused");
+    expect(stored.get(gateway.name)).toBe(original);
+  });
+  it("generates a new gateway against its initialized database", async () => {
+    const { stored, request } = clusterFixture();
+    await ensureSecret(request, "namespace", "release", dbSpec, owner);
+    await ensureSecret(request, "namespace", "release", { name: "gateway-init", kind: "litellm", username: "admin", databaseSecret: "db-init" }, owner);
+    const gateway = stored.get("gateway-init").data;
+    expect(gateway["database-url"]).toBe(stored.get("db-init").data["database-url"]);
+    expect(gateway.UI_PASSWORD).toBe(gateway["ui-password"]);
+    expect(Buffer.from(gateway["master-key"], "base64").toString()).toMatch(/^sk-[a-f0-9]{64}$/);
+  });
+});
+
+it("migrates an account digest without regenerating it", async () => {
+  const spec = { name: "account-init", legacyName: "account", kind: "account", email: "admin@example.com", displayName: "Admin" };
+  const data = await secretData({ ...spec, localDefault: true });
+  const { stored, request } = clusterFixture({ account: { metadata: legacyMetadata, data: encode(data) } });
+  await ensureSecret(request, "namespace", "release", spec, owner);
+  expect(stored.get("account-init").data).toEqual(encode(data));
+  expect(await ensureSecret(request, "namespace", "release", spec, owner)).toBe("reused");
+});
+
+it("refuses to reuse a gateway when its database credentials differ", async () => {
+  const { stored, request } = clusterFixture();
+  await ensureSecret(request, "namespace", "release", dbSpec, owner);
+  const spec = { name: "gateway-init", kind: "litellm", username: "admin", databaseSecret: "db-init" };
+  await ensureSecret(request, "namespace", "release", spec, owner);
+  stored.get("db-init").data["database-url"] = Buffer.from("different").toString("base64");
+  await expect(ensureSecret(request, "namespace", "release", spec, owner)).rejects.toThrow("no longer matches");
+});
