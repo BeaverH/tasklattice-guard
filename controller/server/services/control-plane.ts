@@ -335,7 +335,7 @@ export class ControlPlaneService {
       versionsByPolicy.set(version.policyId, items);
     }
     return [
-      ...await this.catalogPolicies(),
+      ...(await this.catalogPolicies()).filter(policy => !policy.retired),
       ...custom.map((item) => programmablePolicyPayload(item, versionsByPolicy.get(item.id) ?? [])),
     ];
   }
@@ -357,7 +357,8 @@ export class ControlPlaneService {
       imported.set(row.policyId, [...imported.get(row.policyId) ?? [], view]);
     }
     const newestFirst = (items: PolicyDto[]) => [...items].sort((left, right) => right.version.localeCompare(left.version, undefined, { numeric: true }));
-    const catalog = id ? [this.policyCatalog().get(id)].filter((item): item is PolicyDto => Boolean(item)) : this.policyCatalog().list();
+    const catalog = id ? [this.policyCatalog().get(id)].filter((item): item is PolicyDto => Boolean(item))
+      : [...this.policyCatalog().list(), ...this.policyCatalog().retired()];
     const shipped = new Set(catalog.map((policy) => policy.id));
     return this.policyResources.views([
       ...catalog.map((policy) => imported.has(policy.id)

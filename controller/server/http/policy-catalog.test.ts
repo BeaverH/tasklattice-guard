@@ -71,7 +71,7 @@ describe("Policy catalog HTTP compatibility", () => {
     expect(listResponse.status).toBe(200);
     expect(collection.count).toBe(PolicyCatalog.load(config.policyCatalogDir).list().length);
     expect(collection.items).toHaveLength(collection.count);
-    expect(collection.items).toHaveLength(73);
+    expect(collection.items).toHaveLength(65);
     expect(collection.items.every(item => !("source" in item))).toBe(true);
     expect(collection.items.some((item) => ["mas-ai-risk-management", "singapore-financial-conduct"].includes(item.id))).toBe(false);
     expect(collection.items.find((item) => item.id === "pattern-matching")?.test_count).toBeGreaterThan(0);

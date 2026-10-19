@@ -56,7 +56,8 @@ def package_paths() -> list[tuple[str, Path]]:
     declared = {path.resolve() for _, path in result}
     if len(declared) != len(result):
         raise ValueError("Duplicate Policy package path")
-    discovered = {path.parent.resolve() for path in (SOURCE / "builtin").rglob("policy.yaml")}
+    discovered = {path.parent.resolve() for directory in ("builtin", "history")
+                  for path in (SOURCE / directory).rglob("policy.yaml")}
     listed_builtin = {path.resolve() for asset, path in result if asset != "custom_policies.json"}
     if discovered != listed_builtin:
         raise ValueError("Built-in packages and catalog metadata differ")

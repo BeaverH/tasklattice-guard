@@ -120,8 +120,8 @@ vi.mock("@/components/policy-binding-editor", async (importOriginal) => {
     PolicyBindingEditor: (props: { policies: Policy[]; value: GuardrailPolicyBinding[]; onChange: (value: GuardrailPolicyBinding[]) => void }) => props.value.some(item => item.policy_id === "configured-phrase-filter") ? <original.PolicyBindingEditor {...props} /> : (
       <div>
         <button type="button" onClick={() => props.onChange([binding])}>Select Topic Policy</button>
-        <button type="button" onClick={() => props.onChange([requiredBinding])}>Select Aviation Policy</button>
-        <button type="button" onClick={() => props.onChange([configuredRequiredBinding])}>Complete Aviation configuration</button>
+        <button type="button" onClick={() => props.onChange([requiredBinding])}>Select Brand Policy</button>
+        <button type="button" onClick={() => props.onChange([configuredRequiredBinding])}>Complete Brand configuration</button>
       </div>
     ),
   };
@@ -161,11 +161,11 @@ const binding = {
 const requiredPolicy = {
   ...policy,
   protection: { ...policy.protection!, directory: "business_rules" },
-  id: "aviation-operations-security",
-  name: "Aviation Operations Security",
+  id: "brand-protection-example",
+  name: "Brand Protection",
   tags: [],
   parameters: [
-    { name: "brand_name", label: "Your Airline / Brand Name", kind: "text", required: true, placeholder: "e.g. Acme Airlines", description: "" },
+    { name: "brand_name", label: "Your Brand Name", kind: "text", required: true, placeholder: "e.g. Acme Airlines", description: "" },
     { name: "competitors", label: "Competitors", kind: "textarea", required: true, placeholder: "One competitor per line", description: "Reviewed competitors." },
   ],
 } satisfies Policy;
@@ -373,10 +373,10 @@ describe("Create Guardrail wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await selectSection("Business rules");
     expect(await screen.findByRole("checkbox", { name: "Topic Filtering" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Aviation Operations Security" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Brand Protection" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Review draft" }).hasAttribute("disabled")).toBe(true);
     expect(screen.queryByRole("button", { name: "Leave unselected & continue" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Complete Aviation configuration" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Complete Brand configuration" })).toBeNull();
   });
 
   it("keeps Data & privacy and Correctness checks discoverable and preserves selections across categories", async () => {
@@ -410,17 +410,17 @@ describe("Create Guardrail wizard", () => {
     fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Filtered draft" } });
     fireEvent.click(screen.getByRole("button", { name: "Configure protections" }));
     await selectSection("Business rules");
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Aviation Operations Security" }));
-    fireEvent.click(screen.getByRole("button", { name: "Configure Aviation Operations Security", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Aviation configuration" }));
-    fireEvent.click(screen.getByRole("button", { name: "Configure Aviation Operations Security", exact: true }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Brand Protection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure Brand Protection", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Complete Brand configuration" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure Brand Protection", exact: true }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search protections" }), { target: { value: "Topic Filtering" } });
-    expect(screen.queryByRole("checkbox", { name: "Aviation Operations Security" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Brand Protection" })).toBeNull();
     expect(screen.getByRole("checkbox", { name: "Topic Filtering" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
     await waitFor(() => expect(apiMocks.preview).toHaveBeenCalledWith(expect.objectContaining({ policy_bindings: [configuredRequiredBinding] })));
     fireEvent.click(screen.getByRole("button", { name: "Edit protections" }));
-    expect((screen.getByRole("checkbox", { name: "Aviation Operations Security" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: "Brand Protection" }) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole("searchbox", { name: "Search protections" }).getAttribute("value")).toBe("");
   });
 
@@ -542,23 +542,23 @@ describe("Create Guardrail wizard", () => {
 
   it("explains hidden required Policy configuration and enables Next after it is completed", async () => {
     renderWizard();
-    fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Aviation Guardrail" } });
+    fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Brand Guardrail" } });
     fireEvent.click(screen.getByRole("button", { name: "Configure protections" }));
     await selectSection("Business rules");
     if (screen.queryByRole("button", { name: "All protections" })) fireEvent.click(screen.getByRole("button", { name: "All protections" }));
 
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Aviation Operations Security" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Brand Protection" }));
 
     const next = screen.getByRole("button", { name: "Review draft" });
     expect(next.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("Complete required fields for Aviation Operations Security: Your Airline / Brand Name, Competitors.")).toBeTruthy();
+    expect(screen.getByText("Complete required fields for Brand Protection: Your Brand Name, Competitors.")).toBeTruthy();
     expect(next.getAttribute("aria-describedby")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Configure Aviation Operations Security", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Aviation configuration" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure Brand Protection", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Complete Brand configuration" }));
 
     expect(next.hasAttribute("disabled")).toBe(false);
-    expect(screen.queryByText("Complete required fields for Aviation Operations Security: Your Airline / Brand Name, Competitors.")).toBeNull();
+    expect(screen.queryByText("Complete required fields for Brand Protection: Your Brand Name, Competitors.")).toBeNull();
     fireEvent.click(next);
     expect(screen.getByText("Review Guardrail")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review & create" }));
@@ -608,9 +608,9 @@ describe("Create Guardrail wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Configure protections" }));
     await selectSection("Business rules");
     if (screen.queryByRole("button", { name: "All protections" })) fireEvent.click(screen.getByRole("button", { name: "All protections" }));
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Aviation Operations Security" }));
-    fireEvent.click(screen.getByRole("button", { name: "Configure Aviation Operations Security", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Aviation configuration" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Brand Protection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure Brand Protection", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Complete Brand configuration" }));
     fireEvent.click(screen.getByRole("button", { name: "Configure protections" }));
     await selectSection("Business rules");
     if (screen.queryByRole("button", { name: "All protections" })) fireEvent.click(screen.getByRole("button", { name: "All protections" }));

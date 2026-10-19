@@ -50,7 +50,7 @@ describe("Guardrail Validation contract", () => {
       sourcePolicyVersion: "2.0.0", expectedDecision: "block", expectedOutputContent: "",
       expectedMatches: [{ policyId: "filter-harmful-illegal-weapons", ruleId: "category/harmful_illegal_weapons" }],
     });
-    expect(reviewed).toHaveLength(394);
+    expect(reviewed).toHaveLength(385);
     expect(reviewed.every((item) => item.required)).toBe(true);
     expect(cases).toEqual(original);
   });

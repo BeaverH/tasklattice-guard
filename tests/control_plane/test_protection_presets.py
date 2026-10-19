@@ -22,7 +22,8 @@ def preset_requests() -> list[dict]:
       import { protectionPresets } from './shared/protection-presets.ts';
       import { expandProtectionPreset } from './server/policy-catalog/presets.ts';
       import { buildGuardrailPlan } from './server/domain/guardrail-plan.ts';
-      import { generatedTestCases } from './server/domain/validation.ts';
+      import { generatedTestCases, applyValidationOverrides } from './server/domain/validation.ts';
+      import { defaultTestCaseOverrides } from './server/domain/default-expectations.ts';
       import { planToWire, validationTestToWire } from './server/control-channel/protocol-codec.ts';
       import { loadSync } from '@grpc/proto-loader';
       import { loadPackageDefinition } from '@grpc/grpc-js';
@@ -32,9 +33,9 @@ def preset_requests() -> list[dict]:
       });
       const codec = loadPackageDefinition(definition).tasklattice.guard.control.v1.RunnerControl.service.Connect;
       const extendedIds = [
-        'local-government-identifiers', 'local-passport-formats', 'local-regional-contact-formats',
-        'local-bank-account-formats', 'local-travel-identifiers', 'local-network-addresses',
-        'local-sensitive-attribute-terms', 'local-risk-content-terms', 'local-australian-tax-health-identifiers',
+        'local-government-identifiers', 'local-passports', 'local-contact-data',
+        'local-payment-data', 'local-network-addresses',
+        'local-sensitive-attribute-terms', 'local-risk-content-terms',
       ];
       // Ordinary single-Policy Guardrail drafts, not additional product presets.
       const singlePolicyDrafts = extendedIds.map(id => {
@@ -44,8 +45,15 @@ def preset_requests() -> list[dict]:
       });
       const output = [...protectionPresets, ...singlePolicyDrafts].map(preset => {
         const draft = { allowedTopics: [], restrictedTopics: [], policyBindings: expandProtectionPreset(preset, policies), safetyLevel: 'balanced', outputDelivery: 'full_buffered' };
+        if (extendedIds.includes(preset.id)) {
+          // Only authored expectations whose source and target are in this
+          // single Policy apply here. Cross-Policy Default expectations do not.
+          const binding = draft.policyBindings[0];
+          binding.testCaseOverrides = Object.fromEntries(Object.entries(defaultTestCaseOverrides(preset.id))
+            .filter(([, override]) => override.expectedMatches.every(match => match.policyId === preset.id)));
+        }
         const plan = buildGuardrailPlan({ guardrailId: preset.id, guardrailVersion: '20260906-010000.001Z', policies, draft });
-        const cases = generatedTestCases(preset.id, draft, policies);
+        const cases = applyValidationOverrides(generatedTestCases(preset.id, draft, policies), draft);
         const binary = codec.responseSerialize({ validationRequest: {
           runId: preset.id, guardrailId: preset.id, candidateVersion: '20260906-010000.001Z', sourceDraftRevision: 1, runtimeProfile: 'auto',
           plan: planToWire(plan), testCases: cases.map(validationTestToWire),

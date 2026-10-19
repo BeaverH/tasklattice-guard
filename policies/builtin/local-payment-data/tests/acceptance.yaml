@@ -1,8 +1,7 @@
 # yaml-language-server: $schema=../../../schemas/tests.schema.json
 - id: rule-financial-pii/credit_card-acceptance/input
   name: Trigger Credit Card (Any)
-  description: Proves that the published regex implementation for Credit Card (Any)
-    activates this Rule.
+  description: Proves that the published regex implementation for Credit Card (Any) activates this Rule.
   phase: input
   content: 'Acceptance sample: 4111 1111 1111 1111'
   expected_decision: transform
@@ -15,8 +14,7 @@
   scope: rule
 - id: rule-financial-pii/credit_card-acceptance/output
   name: Trigger Credit Card (Any)
-  description: Proves that the published regex implementation for Credit Card (Any)
-    activates this Rule.
+  description: Proves that the published regex implementation for Credit Card (Any) activates this Rule.
   phase: output
   content: 'Acceptance sample: 4111 1111 1111 1111'
   expected_decision: transform
@@ -29,8 +27,8 @@
   scope: rule
 - id: rule-financial-pii/iban-acceptance/input
   name: Trigger IBAN (International Bank Account Number)
-  description: Proves that the published regex implementation for IBAN (International
-    Bank Account Number) activates this Rule.
+  description: Proves that the published regex implementation for IBAN (International Bank Account Number)
+    activates this Rule.
   phase: input
   content: 'Acceptance sample: AA11AAAAAAAAAAA'
   expected_decision: transform
@@ -43,8 +41,8 @@
   scope: rule
 - id: rule-financial-pii/iban-acceptance/output
   name: Trigger IBAN (International Bank Account Number)
-  description: Proves that the published regex implementation for IBAN (International
-    Bank Account Number) activates this Rule.
+  description: Proves that the published regex implementation for IBAN (International Bank Account Number)
+    activates this Rule.
   phase: output
   content: 'Acceptance sample: AA11AAAAAAAAAAA'
   expected_decision: transform

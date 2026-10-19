@@ -7566,9 +7566,9 @@
   {
     "id": "pattern-matching",
     "name": "Pattern Matching",
-    "description": "Detects and masks 82 reviewed identity, credential, financial, safety, and regional data patterns locally.",
+    "description": "Detects and masks 79 reviewed identity, credential, financial, safety, and regional data patterns locally.",
     "source": "built_in",
-    "version": "1.95.0",
+    "version": "2.0.0",
     "tags": [
       {
         "namespace": "protection",
@@ -8542,36 +8542,6 @@
         "group": "Rule acceptance"
       },
       {
-        "id": "accept/airline_pnr",
-        "name": "Detect Airline PNR / Booking Reference",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: PNR AAAAAA",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/airline_pnr"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/skywards_number",
-        "name": "Detect Emirates Skywards / Frequent Flyer Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: Skywards EK 111111111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/skywards_number"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
         "id": "accept/uae_emirates_id",
         "name": "Detect UAE Emirates ID",
         "description": "Required acceptance case for UAE PII Patterns.",
@@ -8595,21 +8565,6 @@
         "expected_decision": "transform",
         "covered_rule_ids": [
           "pattern/uae_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/flight_number",
-        "name": "Detect Airline Flight Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: flight EK 1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/flight_number"
         ],
         "kind": "rule_acceptance",
         "required": true,
@@ -9772,36 +9727,6 @@
         "group": "Rule acceptance"
       },
       {
-        "id": "accept/airline_pnr/output",
-        "name": "Detect Airline PNR / Booking Reference",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: PNR AAAAAA",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/airline_pnr"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/skywards_number/output",
-        "name": "Detect Emirates Skywards / Frequent Flyer Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: Skywards EK 111111111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/skywards_number"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
         "id": "accept/uae_emirates_id/output",
         "name": "Detect UAE Emirates ID",
         "description": "Required acceptance case for UAE PII Patterns.",
@@ -9825,21 +9750,6 @@
         "expected_decision": "transform",
         "covered_rule_ids": [
           "pattern/uae_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/flight_number/output",
-        "name": "Detect Airline Flight Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: flight EK 1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/flight_number"
         ],
         "kind": "rule_acceptance",
         "required": true,
@@ -11883,68 +11793,6 @@
         "redaction": "[street_address_REDACTED]"
       },
       {
-        "id": "pattern/airline_pnr",
-        "name": "Airline PNR / Booking Reference",
-        "description": "Detects airline PNR / booking references (6 uppercase alpha characters) when near booking context",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "pattern-matching",
-          "implementation_rule_id": "airline_pnr"
-        },
-        "expression": "\\b[A-Z]{6}\\b",
-        "context_expression": "\\b(?:PNR|booking\\s*(?:reference|ref|code|number|confirmation)|reservation\\s*(?:code|number|ref)|record\\s*locator|confirmation\\s*(?:code|number)|itinerary\\s*(?:number|ref))\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[airline_pnr_REDACTED]"
-      },
-      {
-        "id": "pattern/skywards_number",
-        "name": "Emirates Skywards / Frequent Flyer Number",
-        "description": "Detects Emirates Skywards frequent flyer numbers (9-10 digits, optional EK prefix) when near loyalty/frequent flyer context",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "pattern-matching",
-          "implementation_rule_id": "skywards_number"
-        },
-        "expression": "\\b(?:EK\\s?)?\\d{9,10}\\b",
-        "context_expression": "\\b(?:[Ss]kywards|frequent\\s*flyer|FF\\s*(?:number|no|#)|loyalty\\s*(?:number|id|member)|member\\s*(?:number|id|#)|miles\\s*(?:account|number)|tier\\s*(?:number|status))\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[skywards_number_REDACTED]"
-      },
-      {
         "id": "pattern/uae_emirates_id",
         "name": "UAE Emirates ID",
         "description": "Detects UAE Emirates ID numbers (784-YYYY-NNNNNNN-C format, 15 digits starting with 784)",
@@ -12001,37 +11849,6 @@
           "TALI-PRIVACY-PII"
         ],
         "redaction": "[uae_phone_REDACTED]"
-      },
-      {
-        "id": "pattern/flight_number",
-        "name": "Airline Flight Number",
-        "description": "Detects airline flight numbers (major IATA 2-letter codes + 1-4 digit flight number) when near flight context",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "low",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "pattern-matching",
-          "implementation_rule_id": "flight_number"
-        },
-        "expression": "\\b(?:EK|QF|BA|AA|LH|AF|SQ|CX|QR|EY|FZ|WY|GF|KU|SV|MS|RJ|ME|PK|AI|UL|WS|9W|6E)\\s?\\d{1,4}\\b",
-        "context_expression": "\\b(?:flight|departure|arrival|gate|boarding|schedule|operate|route|aircraft|plane|outbound|inbound|leg|sector|flying)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-BUSINESS-POLICY"
-        ],
-        "redaction": "[flight_number_REDACTED]"
       },
       {
         "id": "pattern/sg_nric",

@@ -10,7 +10,7 @@ export const DEFAULT_GUARDRAIL_NAME = "Default Guardrail";
 // reviewed Default-local overrides can retain findings without enforcement.
 // Focused bindings replace the three mixed legacy collections. Credentials
 // precede numeric redaction; complete payment values precede broad tax formats;
-// contextual bank/travel/government identifiers precede broad contact formats.
+// regional bank and government identifiers precede broad contact formats.
 // This is an authored Policy order, never an action/severity ranking.
 const DEFAULT_POLICY_IDS = [
   "builtin-indirect-prompt-injection",
@@ -40,14 +40,9 @@ const DEFAULT_POLICY_IDS = [
   "filter-prompt-injection-system-prompt",
   "local-credentials",
   "local-payment-data",
-  "local-australian-tax-health-identifiers",
-  "local-bank-account-formats",
-  "local-travel-identifiers",
   "local-government-identifiers",
-  "local-passport-formats",
-  "local-regional-contact-formats",
-  "local-contact-data",
   "local-passports",
+  "local-contact-data",
   "local-network-addresses",
   "local-sensitive-attribute-terms",
   "local-risk-content-terms",

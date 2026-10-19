@@ -1,6 +1,6 @@
 import type { GuardrailPolicyBindingConfig } from "../domain/guardrail-plan.js";
 import type { ProtectionPreset } from "../../shared/protection-map.js";
-type ProfilePolicy = { id: string; version: string; rails: readonly string[]; parameters: readonly { name: string; required?: boolean; default?: string | null | undefined }[]; rules: readonly { id: string }[] };
+type ProfilePolicy = { id: string; version: string; rails: readonly string[]; parameters: readonly { name: string; required?: boolean; default?: string | null | undefined }[]; rules: readonly { id: string }[]; published_versions?: readonly ProfilePolicy[] };
 
 /** Validate a preset against this exact installed catalog, never best-effort. */
 export function expandProtectionPreset(preset: ProtectionPreset, policies: readonly ProfilePolicy[], current: readonly GuardrailPolicyBindingConfig[] = []): GuardrailPolicyBindingConfig[] {
@@ -8,9 +8,10 @@ export function expandProtectionPreset(preset: ProtectionPreset, policies: reado
   const selected = new Set(current.map((binding) => binding.policyId));
   const result = structuredClone([...current]);
   for (const reference of preset.policies) {
-    const policy = byId.get(reference.policyId);
-    if (!policy) throw new Error(`Profile ${preset.id}: Policy ${reference.policyId} is unavailable.`);
-    if (policy.version !== reference.policyVersion) throw new Error(`Profile ${preset.id}: Policy ${policy.id} requires version ${reference.policyVersion}, found ${policy.version}.`);
+    const head = byId.get(reference.policyId);
+    if (!head) throw new Error(`Profile ${preset.id}: Policy ${reference.policyId} is unavailable.`);
+    const policy = [head, ...head.published_versions ?? []].find(item => item.version === reference.policyVersion);
+    if (!policy) throw new Error(`Profile ${preset.id}: Policy ${head.id} requires version ${reference.policyVersion}, found ${head.version}.`);
     if (!reference.enabledRails.length || reference.enabledRails.some((rail) => !policy.rails.includes(rail))) {
       throw new Error(`Profile ${preset.id}: Policy ${policy.id} has unsupported Rails.`);
     }

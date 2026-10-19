@@ -104,7 +104,7 @@ describe("Default baseline validation gate", () => {
     if (previous === "local-focused") {
       stored.draftConfig.policyBindings = stored.draftConfig.policyBindings.filter(binding =>
         !["builtin-jailbreak", "builtin-content-safety"].includes(binding.policyId));
-      expect(stored.draftConfig.policyBindings).toHaveLength(34);
+      expect(stored.draftConfig.policyBindings).toHaveLength(29);
     }
     const upgraded = { ...stored, draftRevision: 3, draftConfig: baseline().draftConfig };
     const cases = generatedTestCases(stored.id, upgraded.draftConfig, policies);

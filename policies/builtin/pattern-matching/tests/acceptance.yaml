@@ -805,32 +805,6 @@
   required: true
   parameter_names: []
   scope: rule
-- id: accept/airline_pnr
-  name: Detect Airline PNR / Booking Reference
-  description: Required acceptance case for Aviation PII Patterns.
-  phase: input
-  content: 'Acceptance sample: PNR AAAAAA'
-  expected_decision: transform
-  covered_rule_ids:
-  - pattern/airline_pnr
-  group: Rule acceptance
-  kind: rule_acceptance
-  required: true
-  parameter_names: []
-  scope: rule
-- id: accept/skywards_number
-  name: Detect Emirates Skywards / Frequent Flyer Number
-  description: Required acceptance case for Aviation PII Patterns.
-  phase: input
-  content: 'Acceptance sample: Skywards EK 111111111'
-  expected_decision: transform
-  covered_rule_ids:
-  - pattern/skywards_number
-  group: Rule acceptance
-  kind: rule_acceptance
-  required: true
-  parameter_names: []
-  scope: rule
 - id: accept/uae_emirates_id
   name: Detect UAE Emirates ID
   description: Required acceptance case for UAE PII Patterns.
@@ -852,19 +826,6 @@
   expected_decision: transform
   covered_rule_ids:
   - pattern/uae_phone
-  group: Rule acceptance
-  kind: rule_acceptance
-  required: true
-  parameter_names: []
-  scope: rule
-- id: accept/flight_number
-  name: Detect Airline Flight Number
-  description: Required acceptance case for Aviation PII Patterns.
-  phase: input
-  content: 'Acceptance sample: flight EK 1'
-  expected_decision: transform
-  covered_rule_ids:
-  - pattern/flight_number
   group: Rule acceptance
   kind: rule_acceptance
   required: true
@@ -1871,32 +1832,6 @@
   required: true
   parameter_names: []
   scope: rule
-- id: accept/airline_pnr/output
-  name: Detect Airline PNR / Booking Reference
-  description: Required acceptance case for Aviation PII Patterns.
-  phase: output
-  content: 'Acceptance sample: PNR AAAAAA'
-  expected_decision: transform
-  covered_rule_ids:
-  - pattern/airline_pnr
-  group: Rule acceptance
-  kind: rule_acceptance
-  required: true
-  parameter_names: []
-  scope: rule
-- id: accept/skywards_number/output
-  name: Detect Emirates Skywards / Frequent Flyer Number
-  description: Required acceptance case for Aviation PII Patterns.
-  phase: output
-  content: 'Acceptance sample: Skywards EK 111111111'
-  expected_decision: transform
-  covered_rule_ids:
-  - pattern/skywards_number
-  group: Rule acceptance
-  kind: rule_acceptance
-  required: true
-  parameter_names: []
-  scope: rule
 - id: accept/uae_emirates_id/output
   name: Detect UAE Emirates ID
   description: Required acceptance case for UAE PII Patterns.
@@ -1918,19 +1853,6 @@
   expected_decision: transform
   covered_rule_ids:
   - pattern/uae_phone
-  group: Rule acceptance
-  kind: rule_acceptance
-  required: true
-  parameter_names: []
-  scope: rule
-- id: accept/flight_number/output
-  name: Detect Airline Flight Number
-  description: Required acceptance case for Aviation PII Patterns.
-  phase: output
-  content: 'Acceptance sample: flight EK 1'
-  expected_decision: transform
-  covered_rule_ids:
-  - pattern/flight_number
   group: Rule acceptance
   kind: rule_acceptance
   required: true

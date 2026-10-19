@@ -3470,10 +3470,10 @@
   },
   {
     "id": "local-payment-data",
-    "name": "Payment card & bank identifiers",
-    "description": "Redact recognizable payment card and IBAN formats. Matching does not validate account ownership or enforce payment authorization.",
+    "name": "Payment & bank identifiers",
+    "description": "Redact reviewed payment-card, IBAN, Singapore and Canadian bank-account formats. Format matching does not validate account ownership or payment authorization.",
     "source": "built_in",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "tags": [
       {
         "namespace": "protection",
@@ -3609,6 +3609,118 @@
         "required": true,
         "parameter_names": [],
         "group": "Protection contract"
+      },
+      {
+        "id": "local-bank-account-formats/accept/sg_bank_account/input",
+        "name": "Detect Bank Account (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: bank account 111-11111-1",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/sg_bank_account"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-bank-account-formats/accept/sg_bank_account/output",
+        "name": "Detect Bank Account (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: bank account 111-11111-1",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/sg_bank_account"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-bank-account-formats/accept/ca_bank_account/input",
+        "name": "Detect Bank Account (Canada)",
+        "description": "Required acceptance case for Canadian PII Patterns.",
+        "phase": "input",
+        "content": "Bank account 12345-001-1234567.",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/ca_bank_account"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-bank-account-formats/accept/ca_bank_account/output",
+        "name": "Detect Bank Account (Canada)",
+        "description": "Required acceptance case for Canadian PII Patterns.",
+        "phase": "output",
+        "content": "Bank account 12345-001-1234567.",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/ca_bank_account"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-bank-account-formats/benign-en/input",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-bank-account-formats/benign-en/output",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-bank-account-formats/benign-zh/input",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-bank-account-formats/benign-zh/output",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
       }
     ],
     "rules": [
@@ -3669,15 +3781,77 @@
           "TALI-PRIVACY-FINANCIAL"
         ],
         "redaction": "[iban_REDACTED]"
+      },
+      {
+        "id": "pattern/ca_bank_account",
+        "name": "Bank Account (Canada)",
+        "description": "Detects Canadian bank account routing information (transit-institution-account format)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "high",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-payment-data",
+          "implementation_rule_id": "ca_bank_account"
+        },
+        "expression": "\\b\\d{5}[\\-\\s]\\d{3}[\\-\\s]\\d{7,12}\\b",
+        "context_expression": "\\b(?:bank\\s*account|account\\s*number|transit\\s*number|institution\\s*number|branch\\s*number|routing\\s*number|direct\\s*deposit|void\\s*cheque|chequing|savings\\s*account|numéro\\s*de\\s*compte|dépôt\\s*direct)\\b",
+        "context_max_gap_words": 1,
+        "taxonomy_ids": [
+          "TALI-PRIVACY-FINANCIAL"
+        ],
+        "redaction": "[ca_bank_account_REDACTED]"
+      },
+      {
+        "id": "pattern/sg_bank_account",
+        "name": "Bank Account (Singapore)",
+        "description": "Detects Singapore bank account numbers (XXX-XXXXX(X)-X(XX) format for DBS/POSB/OCBC/UOB)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "high",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-payment-data",
+          "implementation_rule_id": "sg_bank_account"
+        },
+        "expression": "\\b\\d{3}-\\d{5,6}-\\d{1,3}\\b",
+        "context_expression": "\\b(?:bank\\s*account|account\\s*number|DBS|OCBC|UOB|POSB|savings|current\\s*account|bank\\s*statement)\\b",
+        "context_max_gap_words": 1,
+        "taxonomy_ids": [
+          "TALI-PRIVACY-FINANCIAL"
+        ],
+        "redaction": "[sg_bank_account_REDACTED]"
       }
     ]
   },
   {
     "id": "local-contact-data",
-    "name": "Email & phone identifiers",
-    "description": "Redact email addresses and North American phone formats. Add jurisdiction-specific Policies for other phone formats.",
+    "name": "Contact information",
+    "description": "Redact reviewed email, phone, street-address and postal-code formats, including regional formats. This is bounded format screening, not worldwide address recognition.",
     "source": "built_in",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "tags": [
       {
         "namespace": "protection",
@@ -3702,6 +3876,388 @@
     "output_delivery": "full_buffered",
     "parameters": [],
     "test_cases": [
+      {
+        "id": "local-regional-contact-formats/accept/br_phone_landline/input",
+        "name": "Brazilian mobile / landline overlap",
+        "description": "Required acceptance case for Brazilian PII Patterns. The source sample is a mobile number; the complete mobile detector runs before the unprefixed landline detector.",
+        "phase": "input",
+        "content": "Acceptance sample: (11) 91111-1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_phone_mobile"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/br_phone_landline/output",
+        "name": "Brazilian mobile / landline overlap",
+        "description": "Required acceptance case for Brazilian PII Patterns. The source sample is a mobile number; the complete mobile detector runs before the unprefixed landline detector.",
+        "phase": "output",
+        "content": "Acceptance sample: (11) 91111-1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_phone_mobile"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/br_phone_mobile/input",
+        "name": "Detect Brazilian Mobile Phone Number",
+        "description": "Required acceptance case for Brazilian PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: +1 (11) 91111-1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_phone_mobile"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/br_phone_mobile/output",
+        "name": "Detect Brazilian Mobile Phone Number",
+        "description": "Required acceptance case for Brazilian PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: +1 (11) 91111-1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_phone_mobile"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/br_cep/input",
+        "name": "Detect CEP - Brazilian Zip / Postal Code",
+        "description": "Required acceptance case for Brazilian PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: 11111-111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_cep"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/br_cep/output",
+        "name": "Detect CEP - Brazilian Zip / Postal Code",
+        "description": "Required acceptance case for Brazilian PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: 11111-111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_cep"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/fr_phone/input",
+        "name": "Detect Phone Number (France)",
+        "description": "Required acceptance case for EU PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: +33100000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/fr_phone"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/fr_phone/output",
+        "name": "Detect Phone Number (France)",
+        "description": "Required acceptance case for EU PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: +33100000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/fr_phone"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/fr_postal_code/input",
+        "name": "Detect Postal Code (France)",
+        "description": "Required acceptance case for EU PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: code postal 00000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/fr_postal_code"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/fr_postal_code/output",
+        "name": "Detect Postal Code (France)",
+        "description": "Required acceptance case for EU PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: code postal 00000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/fr_postal_code"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/street_address/input",
+        "name": "Detect Street Address",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: 1 AA Street",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/street_address"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/street_address/output",
+        "name": "Detect Street Address",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: 1 AA Street",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/street_address"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/uae_phone/input",
+        "name": "Detect Phone Number (UAE)",
+        "description": "Required acceptance case for UAE PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: +971 2 111 1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/uae_phone"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/uae_phone/output",
+        "name": "Detect Phone Number (UAE)",
+        "description": "Required acceptance case for UAE PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: +971 2 111 1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/uae_phone"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/sg_phone/input",
+        "name": "Detect Phone Number (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: +65 6111 1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/sg_phone"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/sg_phone/output",
+        "name": "Detect Phone Number (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: +65 6111 1111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/sg_phone"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/sg_postal_code/input",
+        "name": "Detect Postal Code (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: postal code 011111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/sg_postal_code"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/sg_postal_code/output",
+        "name": "Detect Postal Code (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: postal code 011111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/sg_postal_code"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/ca_postal_code/input",
+        "name": "Detect Postal Code (Canada)",
+        "description": "Required acceptance case for Canadian PII Patterns.",
+        "phase": "input",
+        "content": "Postal code M5V 3A8.",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/ca_postal_code"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/accept/ca_postal_code/output",
+        "name": "Detect Postal Code (Canada)",
+        "description": "Required acceptance case for Canadian PII Patterns.",
+        "phase": "output",
+        "content": "Postal code M5V 3A8.",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/ca_postal_code"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-regional-contact-formats/br-landline-only/input",
+        "name": "br-landline-only/input",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "Phone: (11) 2345-6789",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_phone_landline"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-regional-contact-formats/br-landline-only/output",
+        "name": "br-landline-only/output",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "Phone: (11) 2345-6789",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/br_phone_landline"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-regional-contact-formats/benign-en/input",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-regional-contact-formats/benign-en/output",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-regional-contact-formats/benign-zh/input",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-regional-contact-formats/benign-zh/output",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
       {
         "id": "accept/email/input",
         "name": "Detect Email Address",
@@ -3817,6 +4373,302 @@
     ],
     "rules": [
       {
+        "id": "pattern/sg_phone",
+        "name": "Phone Number (Singapore)",
+        "description": "Detects Singapore phone numbers (+65/0065/65 prefix with 6/8/9 starting digit for landline and mobile)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "sg_phone"
+        },
+        "expression": "(?<!\\d)(?:\\+65|0065|65)\\s?[689]\\d{3}\\s?\\d{4}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[sg_phone_REDACTED]"
+      },
+      {
+        "id": "pattern/uae_phone",
+        "name": "Phone Number (UAE)",
+        "description": "Detects UAE phone numbers (+971/00971/0 prefix, landline and mobile)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "uae_phone"
+        },
+        "expression": "(?<!\\d)(?:\\+971|00971|0)\\s?(?:2|3|4|6|7|9|50|52|54|55|56|58)\\s?\\d{3}\\s?\\d{4}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[uae_phone_REDACTED]"
+      },
+      {
+        "id": "pattern/fr_phone",
+        "name": "Phone Number (France)",
+        "description": "Detects French phone numbers in various formats (+33, 0033, or 0 prefix followed by 9 digits starting with 1-9)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "fr_phone"
+        },
+        "expression": "(?<!\\d)(?:\\+33|0033|0)[1-9][0-9]{8}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[fr_phone_REDACTED]"
+      },
+      {
+        "id": "pattern/br_phone_mobile",
+        "name": "Brazilian Mobile Phone Number",
+        "description": "Detects Brazilian mobile phone numbers (9 prefix for mobile)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "br_phone_mobile"
+        },
+        "expression": "(?:\\+\\d{1,3}\\s?)?(?:\\(?\\d{2}\\)?\\s?)?9\\d{4}-?\\d{4}",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[br_phone_mobile_REDACTED]"
+      },
+      {
+        "id": "pattern/br_phone_landline",
+        "name": "Brazilian Phone Number (Landline)",
+        "description": "Detects Brazilian landline phone numbers with optional area code",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "br_phone_landline"
+        },
+        "expression": "(?:\\(?\\d{2}\\)?\\s?)?(?:9\\d{4}|\\d{4})-?\\d{4}",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[br_phone_landline_REDACTED]"
+      },
+      {
+        "id": "pattern/br_cep",
+        "name": "CEP - Brazilian Zip / Postal Code",
+        "description": "Detects Brazilian CEP postal codes (XXXXX-XXX or XXXXXXXX format)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "br_cep"
+        },
+        "expression": "\\b\\d{5}-?\\d{3}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[br_cep_REDACTED]"
+      },
+      {
+        "id": "pattern/fr_postal_code",
+        "name": "Postal Code (France)",
+        "description": "Detects French postal codes (5 digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "fr_postal_code"
+        },
+        "expression": "\\b[0-9]{5}\\b",
+        "context_expression": "\\b(?:code\\s*postal|postal\\s*code|CP|zip\\s*code|postcode)\\b",
+        "context_max_gap_words": 1,
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[fr_postal_code_REDACTED]"
+      },
+      {
+        "id": "pattern/street_address",
+        "name": "Street Address",
+        "description": "Detects street addresses (number + street name + street type)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "street_address"
+        },
+        "expression": "\\b\\d{1,6}\\s+[A-Za-z0-9][A-Za-z0-9\\s.'-]*\\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Circle|Cir)\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[street_address_REDACTED]"
+      },
+      {
+        "id": "pattern/sg_postal_code",
+        "name": "Postal Code (Singapore)",
+        "description": "Detects Singapore 6-digit postal codes (ranges 01xxxx to 83xxxx)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "sg_postal_code"
+        },
+        "expression": "\\b[0-8]\\d{5}\\b",
+        "context_expression": "\\b(?:postal\\s*code|postcode|zip\\s*code|Singapore\\s*\\d|blk|block|address|HDB|flat|unit)\\b",
+        "context_max_gap_words": 1,
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[sg_postal_code_REDACTED]"
+      },
+      {
+        "id": "pattern/ca_postal_code",
+        "name": "Postal Code (Canada)",
+        "description": "Detects Canadian postal codes (A1A 1A1 format, excludes invalid first-letter characters per Canada Post spec)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-contact-data",
+          "implementation_rule_id": "ca_postal_code"
+        },
+        "expression": "\\b[ABCEGHJ-NPRSTVXY]\\d[ABCEGHJ-NPRSTV-Z][\\-\\s]?\\d[ABCEGHJ-NPRSTV-Z]\\d\\b",
+        "context_expression": "\\b(?:postal\\s*code|zip\\s*code|mailing\\s*address|street\\s*address|shipping\\s*address|home\\s*address|code\\s*postal|postcode)\\b",
+        "context_max_gap_words": 1,
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[ca_postal_code_REDACTED]"
+      },
+      {
         "id": "pattern/email",
         "name": "Email Address",
         "description": "Detects email addresses",
@@ -3879,9 +4731,9 @@
   {
     "id": "local-passports",
     "name": "Passport identifiers",
-    "description": "Redact 6–9 character alphanumeric identifiers explicitly labelled as a passport or 护照. This does not validate issuing authorities or detect unlabelled documents.",
+    "description": "Redact reviewed international passport formats and context-labelled passport identifiers. Format matching does not establish document validity or issuing jurisdiction.",
     "source": "built_in",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "tags": [
       {
         "namespace": "protection",
@@ -3906,6 +4758,418 @@
     "output_delivery": "full_buffered",
     "parameters": [],
     "test_cases": [
+      {
+        "id": "local-passport-formats/accept/passport_us/input",
+        "name": "Detect Passport (US)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: A00000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_us"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_us/output",
+        "name": "Detect Passport (US)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: A00000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_us"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_uk/input",
+        "name": "Detect Passport (UK)",
+        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "input",
+        "content": "Acceptance sample: 000000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_us"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_uk/output",
+        "name": "Detect Passport (UK)",
+        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "output",
+        "content": "Acceptance sample: 000000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_us"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_germany/input",
+        "name": "Detect Passport (Germany)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: CCCCCCCCC",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_germany"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_germany/output",
+        "name": "Detect Passport (Germany)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: CCCCCCCCC",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_germany"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_france/input",
+        "name": "Detect Passport (France)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: 00AA00000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_france"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_france/output",
+        "name": "Detect Passport (France)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: 00AA00000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_france"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_netherlands/input",
+        "name": "Detect Passport (Netherlands)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: AAAAAAAA0",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_netherlands"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_netherlands/output",
+        "name": "Detect Passport (Netherlands)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: AAAAAAAA0",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_netherlands"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_canada/input",
+        "name": "Detect Passport (Canada)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: AA000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_canada"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_canada/output",
+        "name": "Detect Passport (Canada)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: AA000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_canada"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_india/input",
+        "name": "Detect Passport (India)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: A0000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_india"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_india/output",
+        "name": "Detect Passport (India)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: A0000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_india"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_australia/input",
+        "name": "Detect Passport (Australia)",
+        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "input",
+        "content": "Acceptance sample: A0000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_india"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_australia/output",
+        "name": "Detect Passport (Australia)",
+        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "output",
+        "content": "Acceptance sample: A0000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_india"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_china/input",
+        "name": "Detect Passport (China)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: E00000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_china"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_china/output",
+        "name": "Detect Passport (China)",
+        "description": "Required acceptance case for PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: E00000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_china"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_japan/input",
+        "name": "Detect Passport (Japan)",
+        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "input",
+        "content": "Acceptance sample: AA0000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_netherlands"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_japan/output",
+        "name": "Detect Passport (Japan)",
+        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "output",
+        "content": "Acceptance sample: AA0000000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_netherlands"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/eu_passport_generic/input",
+        "name": "Detect Passport Number (EU Generic)",
+        "description": "Required acceptance case for EU PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "input",
+        "content": "Acceptance sample: passport 00AA00000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_france"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/eu_passport_generic/output",
+        "name": "Detect Passport Number (EU Generic)",
+        "description": "Required acceptance case for EU PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
+        "phase": "output",
+        "content": "Acceptance sample: passport 00AA00000",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_france"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_singapore/input",
+        "name": "Detect Passport (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "input",
+        "content": "Acceptance sample: passport E1111111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_singapore"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/accept/passport_singapore/output",
+        "name": "Detect Passport (Singapore)",
+        "description": "Required acceptance case for Singapore PII Patterns.",
+        "phase": "output",
+        "content": "Acceptance sample: passport E1111111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "pattern/passport_singapore"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-passport-formats/benign-en/input",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-passport-formats/benign-en/output",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-passport-formats/benign-zh/input",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-passport-formats/benign-zh/output",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
       {
         "id": "passport-en/input",
         "name": "passport-en",
@@ -4102,6 +5366,240 @@
       }
     ],
     "rules": [
+      {
+        "id": "pattern/passport_singapore",
+        "name": "Passport (Singapore)",
+        "description": "Detects Singapore passport numbers (E/K prefix + 7 digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_singapore"
+        },
+        "expression": "\\b[EK]\\d{7}\\b",
+        "context_expression": "\\b(?:passport|travel\\s*document|document\\s*number|immigration|ICA)\\b",
+        "context_max_gap_words": 1,
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_singapore_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_china",
+        "name": "Passport (China)",
+        "description": "Chinese passport numbers (E/G prefix + 8 digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_china"
+        },
+        "expression": "\\b[EeGg][0-9]{8}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_china_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_us",
+        "name": "Passport (US)",
+        "description": "US passport numbers (9 digits or alphanumeric letter + 8 digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_us"
+        },
+        "expression": "\\b([A-Z][0-9]{8}|[0-9]{9})\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_us_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_germany",
+        "name": "Passport (Germany)",
+        "description": "German passport numbers (9 alphanumeric, no vowels)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_germany"
+        },
+        "expression": "\\b[CFGHJKLMNPRTVWXYZ0-9]{9}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_germany_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_france",
+        "name": "Passport (France)",
+        "description": "French passport numbers (2 digits, 2 letters, 5 digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_france"
+        },
+        "expression": "\\b[0-9]{2}[A-Z]{2}[0-9]{5}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_france_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_netherlands",
+        "name": "Passport (Netherlands)",
+        "description": "Dutch passport numbers (2 letters + 6 alphanumeric + 1 digit)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_netherlands"
+        },
+        "expression": "\\b[A-Z]{2}[A-Z0-9]{6}[0-9]\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_netherlands_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_canada",
+        "name": "Passport (Canada)",
+        "description": "Canadian passport numbers (old: 2 letters + 6 digits; new: 1 letter + 6 digits + 2 letters)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_canada"
+        },
+        "expression": "\\b([A-Z]{2}[0-9]{6}|[A-Z][0-9]{6}[A-Z]{2})\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_canada_REDACTED]"
+      },
+      {
+        "id": "pattern/passport_india",
+        "name": "Passport (India)",
+        "description": "Indian passport numbers (1 letter + 7 digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-passports",
+          "implementation_rule_id": "passport_india"
+        },
+        "expression": "\\b[A-Z][0-9]{7}\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[passport_india_REDACTED]"
+      },
       {
         "id": "identity/passport",
         "name": "Contextual passport identifier",
@@ -6298,10 +7796,10 @@
   },
   {
     "id": "local-government-identifiers",
-    "name": "Government & institutional identifiers",
-    "description": "Recognize configured government, tax, health and institutional identifier formats. Formats are not proof of identity, validity or issuing jurisdiction. Broad numeric formats can overlap; review before enabling.",
+    "name": "Government, tax & health identifiers",
+    "description": "Redact reviewed government, tax, health and institutional identifier formats, including spaced Australian tax and Medicare numbers. Broad numeric formats can overlap; this is format screening, not identity verification.",
     "source": "built_in",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "tags": [
       {
         "namespace": "protection",
@@ -6326,6 +7824,148 @@
     "output_delivery": "full_buffered",
     "parameters": [],
     "test_cases": [
+      {
+        "id": "local-australian-tax-health-identifiers/rule-au-pii-tax-identifiers/au_tfn-acceptance/input",
+        "name": "Trigger TFN (Australian Tax File Number)",
+        "description": "Proves that the published regex implementation for TFN (Australian Tax File Number) activates this Rule.",
+        "phase": "input",
+        "content": "Acceptance sample: TFN 111 111 111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "au-pii-tax-identifiers/au_tfn"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/rule-au-pii-tax-identifiers/au_tfn-acceptance/output",
+        "name": "Trigger TFN (Australian Tax File Number)",
+        "description": "Proves that the published regex implementation for TFN (Australian Tax File Number) activates this Rule.",
+        "phase": "output",
+        "content": "Acceptance sample: TFN 111 111 111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "au-pii-tax-identifiers/au_tfn"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/rule-au-pii-tax-identifiers/au_abn-acceptance/input",
+        "name": "Trigger ABN (Australian Business Number)",
+        "description": "Proves that the published regex implementation for ABN (Australian Business Number) activates this Rule.",
+        "phase": "input",
+        "content": "Acceptance sample: 11 111 111 111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "au-pii-tax-identifiers/au_abn"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/rule-au-pii-tax-identifiers/au_abn-acceptance/output",
+        "name": "Trigger ABN (Australian Business Number)",
+        "description": "Proves that the published regex implementation for ABN (Australian Business Number) activates this Rule.",
+        "phase": "output",
+        "content": "Acceptance sample: 11 111 111 111",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "au-pii-tax-identifiers/au_abn"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/rule-au-pii-tax-identifiers/au_medicare-acceptance/input",
+        "name": "Trigger Medicare Number (Australia)",
+        "description": "Proves that the published regex implementation for Medicare Number (Australia) activates this Rule.",
+        "phase": "input",
+        "content": "Acceptance sample: 1111 11111 1",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "au-pii-tax-identifiers/au_medicare"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/rule-au-pii-tax-identifiers/au_medicare-acceptance/output",
+        "name": "Trigger Medicare Number (Australia)",
+        "description": "Proves that the published regex implementation for Medicare Number (Australia) activates this Rule.",
+        "phase": "output",
+        "content": "Acceptance sample: 1111 11111 1",
+        "expected_decision": "transform",
+        "covered_rule_ids": [
+          "au-pii-tax-identifiers/au_medicare"
+        ],
+        "kind": "rule_acceptance",
+        "required": true,
+        "parameter_names": [],
+        "group": "Rule acceptance"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/benign-en/input",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/benign-en/output",
+        "name": "benign-en",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "Please explain the account opening process and its fees.",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/benign-zh/input",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "input",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
+      {
+        "id": "local-australian-tax-health-identifiers/benign-zh/output",
+        "name": "benign-zh",
+        "description": "Synthetic, deterministic text fixture; no external action is performed.",
+        "phase": "output",
+        "content": "请介绍账户开户流程以及相关费用。",
+        "expected_decision": "allow",
+        "covered_rule_ids": [],
+        "kind": "scenario",
+        "required": true,
+        "parameter_names": [],
+        "group": "Protection contract"
+      },
       {
         "id": "accept/us_ssn/input",
         "name": "Detect SSN (Social Security Number)",
@@ -7041,6 +8681,94 @@
     ],
     "rules": [
       {
+        "id": "au-pii-tax-identifiers/au_tfn",
+        "name": "TFN (Australian Tax File Number)",
+        "description": "Detects Australian Tax File Numbers (8-9 digits) only when near TFN/tax file context to avoid false positives on arbitrary numbers",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "medium",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-government-identifiers",
+          "implementation_rule_id": "au_tfn"
+        },
+        "expression": "\\b(?:\\d{3}\\s?\\d{3}\\s?\\d{3}|\\d{2}\\s?\\d{3}\\s?\\d{3})\\b",
+        "context_expression": "\\b(?:TFN|T\\.F\\.N\\.|tax\\s*file\\s*(?:number|no\\.?)|tax\\s*file\\s*#?|ATO\\s*number)\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-PII"
+        ],
+        "redaction": "[au_tfn_REDACTED]"
+      },
+      {
+        "id": "au-pii-tax-identifiers/au_abn",
+        "name": "ABN (Australian Business Number)",
+        "description": "Detects Australian Business Numbers (11 digits, optional spaces: XX XXX XXX XXX)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "low",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-government-identifiers",
+          "implementation_rule_id": "au_abn"
+        },
+        "expression": "\\b\\d{2}\\s?\\d{3}\\s?\\d{3}\\s?\\d{3}\\b",
+        "taxonomy_ids": [
+          "TALI-BUSINESS-POLICY"
+        ],
+        "redaction": "[au_abn_REDACTED]"
+      },
+      {
+        "id": "au-pii-tax-identifiers/au_medicare",
+        "name": "Medicare Number (Australia)",
+        "description": "Detects Australian Medicare numbers (formatted XXXX XXXXX X or 11 consecutive digits)",
+        "detector": {
+          "ref": "text/regex",
+          "version": "1.0.0"
+        },
+        "effect": "transform",
+        "risk_severity": "high",
+        "rails": [
+          "input",
+          "output"
+        ],
+        "implementation": {
+          "engine": "nemo-guardrails",
+          "detector": "regex",
+          "flow_name": null,
+          "action_name": "GuardContentFilterAction",
+          "execution": "local",
+          "binding_id": "local-government-identifiers",
+          "implementation_rule_id": "au_medicare"
+        },
+        "expression": "\\b(?:\\d{4}\\s?\\d{5}\\s?\\d{1}|\\d{11})\\b",
+        "taxonomy_ids": [
+          "TALI-PRIVACY-HEALTH"
+        ],
+        "redaction": "[au_medicare_REDACTED]"
+      },
+      {
         "id": "pattern/uae_emirates_id",
         "name": "UAE Emirates ID",
         "description": "Detects UAE Emirates ID numbers (784-YYYY-NNNNNNN-C format, 15 digits starting with 784)",
@@ -7700,1875 +9428,6 @@
           "TALI-PRIVACY-PII"
         ],
         "redaction": "[uoft_utorid_REDACTED]"
-      }
-    ]
-  },
-  {
-    "id": "local-passport-formats",
-    "name": "International passport formats",
-    "description": "Recognize the configured labelled and unlabelled passport formats. A match does not identify the issuing country or validate the document; use Passport identifiers when context-labelled detection is preferred.",
-    "source": "built_in",
-    "version": "2.0.0",
-    "tags": [
-      {
-        "namespace": "protection",
-        "value": "privacy",
-        "label": "Privacy & sensitive information",
-        "source": "declared"
-      },
-      {
-        "namespace": "guardrail_category",
-        "value": "pii_detection",
-        "label": "PII Detection",
-        "source": "declared"
-      },
-      {
-        "namespace": "collection",
-        "value": "focused-protection",
-        "label": "Focused protection",
-        "source": "declared"
-      }
-    ],
-    "safety_level": "balanced",
-    "output_delivery": "full_buffered",
-    "parameters": [],
-    "test_cases": [
-      {
-        "id": "accept/passport_us/input",
-        "name": "Detect Passport (US)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: A00000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_us"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_us/output",
-        "name": "Detect Passport (US)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: A00000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_us"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_uk/input",
-        "name": "Detect Passport (UK)",
-        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "input",
-        "content": "Acceptance sample: 000000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_us"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_uk/output",
-        "name": "Detect Passport (UK)",
-        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "output",
-        "content": "Acceptance sample: 000000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_us"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_germany/input",
-        "name": "Detect Passport (Germany)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: CCCCCCCCC",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_germany"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_germany/output",
-        "name": "Detect Passport (Germany)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: CCCCCCCCC",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_germany"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_france/input",
-        "name": "Detect Passport (France)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: 00AA00000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_france"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_france/output",
-        "name": "Detect Passport (France)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: 00AA00000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_france"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_netherlands/input",
-        "name": "Detect Passport (Netherlands)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: AAAAAAAA0",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_netherlands"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_netherlands/output",
-        "name": "Detect Passport (Netherlands)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: AAAAAAAA0",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_netherlands"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_canada/input",
-        "name": "Detect Passport (Canada)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: AA000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_canada"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_canada/output",
-        "name": "Detect Passport (Canada)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: AA000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_canada"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_india/input",
-        "name": "Detect Passport (India)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: A0000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_india"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_india/output",
-        "name": "Detect Passport (India)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: A0000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_india"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_australia/input",
-        "name": "Detect Passport (Australia)",
-        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "input",
-        "content": "Acceptance sample: A0000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_india"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_australia/output",
-        "name": "Detect Passport (Australia)",
-        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "output",
-        "content": "Acceptance sample: A0000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_india"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_china/input",
-        "name": "Detect Passport (China)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: E00000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_china"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_china/output",
-        "name": "Detect Passport (China)",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: E00000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_china"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_japan/input",
-        "name": "Detect Passport (Japan)",
-        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "input",
-        "content": "Acceptance sample: AA0000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_netherlands"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_japan/output",
-        "name": "Detect Passport (Japan)",
-        "description": "Required acceptance case for PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "output",
-        "content": "Acceptance sample: AA0000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_netherlands"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/eu_passport_generic/input",
-        "name": "Detect Passport Number (EU Generic)",
-        "description": "Required acceptance case for EU PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "input",
-        "content": "Acceptance sample: passport 00AA00000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_france"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/eu_passport_generic/output",
-        "name": "Detect Passport Number (EU Generic)",
-        "description": "Required acceptance case for EU PII Patterns. Consolidated passport format: the retained detector covers the complete identifier; no issuing-country inference is made.",
-        "phase": "output",
-        "content": "Acceptance sample: passport 00AA00000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_france"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_singapore/input",
-        "name": "Detect Passport (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: passport E1111111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_singapore"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/passport_singapore/output",
-        "name": "Detect Passport (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: passport E1111111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/passport_singapore"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "benign-en/input",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-en/output",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/input",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/output",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      }
-    ],
-    "rules": [
-      {
-        "id": "pattern/passport_singapore",
-        "name": "Passport (Singapore)",
-        "description": "Detects Singapore passport numbers (E/K prefix + 7 digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_singapore"
-        },
-        "expression": "\\b[EK]\\d{7}\\b",
-        "context_expression": "\\b(?:passport|travel\\s*document|document\\s*number|immigration|ICA)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_singapore_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_china",
-        "name": "Passport (China)",
-        "description": "Chinese passport numbers (E/G prefix + 8 digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_china"
-        },
-        "expression": "\\b[EeGg][0-9]{8}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_china_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_us",
-        "name": "Passport (US)",
-        "description": "US passport numbers (9 digits or alphanumeric letter + 8 digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_us"
-        },
-        "expression": "\\b([A-Z][0-9]{8}|[0-9]{9})\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_us_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_germany",
-        "name": "Passport (Germany)",
-        "description": "German passport numbers (9 alphanumeric, no vowels)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_germany"
-        },
-        "expression": "\\b[CFGHJKLMNPRTVWXYZ0-9]{9}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_germany_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_france",
-        "name": "Passport (France)",
-        "description": "French passport numbers (2 digits, 2 letters, 5 digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_france"
-        },
-        "expression": "\\b[0-9]{2}[A-Z]{2}[0-9]{5}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_france_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_netherlands",
-        "name": "Passport (Netherlands)",
-        "description": "Dutch passport numbers (2 letters + 6 alphanumeric + 1 digit)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_netherlands"
-        },
-        "expression": "\\b[A-Z]{2}[A-Z0-9]{6}[0-9]\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_netherlands_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_canada",
-        "name": "Passport (Canada)",
-        "description": "Canadian passport numbers (old: 2 letters + 6 digits; new: 1 letter + 6 digits + 2 letters)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_canada"
-        },
-        "expression": "\\b([A-Z]{2}[0-9]{6}|[A-Z][0-9]{6}[A-Z]{2})\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_canada_REDACTED]"
-      },
-      {
-        "id": "pattern/passport_india",
-        "name": "Passport (India)",
-        "description": "Indian passport numbers (1 letter + 7 digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-passport-formats",
-          "implementation_rule_id": "passport_india"
-        },
-        "expression": "\\b[A-Z][0-9]{7}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[passport_india_REDACTED]"
-      }
-    ]
-  },
-  {
-    "id": "local-regional-contact-formats",
-    "name": "Regional phone & address formats",
-    "description": "Recognize configured Brazilian, French, UAE, Singapore and Canadian phone/address formats, plus street addresses. This extends Email & phone identifiers; it is not worldwide address recognition.",
-    "source": "built_in",
-    "version": "2.0.0",
-    "tags": [
-      {
-        "namespace": "protection",
-        "value": "privacy",
-        "label": "Privacy & sensitive information",
-        "source": "declared"
-      },
-      {
-        "namespace": "guardrail_category",
-        "value": "pii_detection",
-        "label": "PII Detection",
-        "source": "declared"
-      },
-      {
-        "namespace": "collection",
-        "value": "focused-protection",
-        "label": "Focused protection",
-        "source": "declared"
-      }
-    ],
-    "safety_level": "balanced",
-    "output_delivery": "full_buffered",
-    "parameters": [],
-    "test_cases": [
-      {
-        "id": "accept/br_phone_landline/input",
-        "name": "Brazilian mobile / landline overlap",
-        "description": "Required acceptance case for Brazilian PII Patterns. The source sample is a mobile number; the complete mobile detector runs before the unprefixed landline detector.",
-        "phase": "input",
-        "content": "Acceptance sample: (11) 91111-1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_phone_mobile"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/br_phone_landline/output",
-        "name": "Brazilian mobile / landline overlap",
-        "description": "Required acceptance case for Brazilian PII Patterns. The source sample is a mobile number; the complete mobile detector runs before the unprefixed landline detector.",
-        "phase": "output",
-        "content": "Acceptance sample: (11) 91111-1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_phone_mobile"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/br_phone_mobile/input",
-        "name": "Detect Brazilian Mobile Phone Number",
-        "description": "Required acceptance case for Brazilian PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: +1 (11) 91111-1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_phone_mobile"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/br_phone_mobile/output",
-        "name": "Detect Brazilian Mobile Phone Number",
-        "description": "Required acceptance case for Brazilian PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: +1 (11) 91111-1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_phone_mobile"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/br_cep/input",
-        "name": "Detect CEP - Brazilian Zip / Postal Code",
-        "description": "Required acceptance case for Brazilian PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: 11111-111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_cep"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/br_cep/output",
-        "name": "Detect CEP - Brazilian Zip / Postal Code",
-        "description": "Required acceptance case for Brazilian PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: 11111-111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_cep"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/fr_phone/input",
-        "name": "Detect Phone Number (France)",
-        "description": "Required acceptance case for EU PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: +33100000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/fr_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/fr_phone/output",
-        "name": "Detect Phone Number (France)",
-        "description": "Required acceptance case for EU PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: +33100000000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/fr_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/fr_postal_code/input",
-        "name": "Detect Postal Code (France)",
-        "description": "Required acceptance case for EU PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: code postal 00000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/fr_postal_code"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/fr_postal_code/output",
-        "name": "Detect Postal Code (France)",
-        "description": "Required acceptance case for EU PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: code postal 00000",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/fr_postal_code"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/street_address/input",
-        "name": "Detect Street Address",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: 1 AA Street",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/street_address"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/street_address/output",
-        "name": "Detect Street Address",
-        "description": "Required acceptance case for PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: 1 AA Street",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/street_address"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/uae_phone/input",
-        "name": "Detect Phone Number (UAE)",
-        "description": "Required acceptance case for UAE PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: +971 2 111 1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/uae_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/uae_phone/output",
-        "name": "Detect Phone Number (UAE)",
-        "description": "Required acceptance case for UAE PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: +971 2 111 1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/uae_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/sg_phone/input",
-        "name": "Detect Phone Number (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: +65 6111 1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/sg_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/sg_phone/output",
-        "name": "Detect Phone Number (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: +65 6111 1111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/sg_phone"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/sg_postal_code/input",
-        "name": "Detect Postal Code (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: postal code 011111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/sg_postal_code"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/sg_postal_code/output",
-        "name": "Detect Postal Code (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: postal code 011111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/sg_postal_code"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/ca_postal_code/input",
-        "name": "Detect Postal Code (Canada)",
-        "description": "Required acceptance case for Canadian PII Patterns.",
-        "phase": "input",
-        "content": "Postal code M5V 3A8.",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/ca_postal_code"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/ca_postal_code/output",
-        "name": "Detect Postal Code (Canada)",
-        "description": "Required acceptance case for Canadian PII Patterns.",
-        "phase": "output",
-        "content": "Postal code M5V 3A8.",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/ca_postal_code"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "br-landline-only/input",
-        "name": "br-landline-only/input",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "Phone: (11) 2345-6789",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_phone_landline"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "br-landline-only/output",
-        "name": "br-landline-only/output",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "Phone: (11) 2345-6789",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/br_phone_landline"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-en/input",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-en/output",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/input",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/output",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      }
-    ],
-    "rules": [
-      {
-        "id": "pattern/sg_phone",
-        "name": "Phone Number (Singapore)",
-        "description": "Detects Singapore phone numbers (+65/0065/65 prefix with 6/8/9 starting digit for landline and mobile)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "sg_phone"
-        },
-        "expression": "(?<!\\d)(?:\\+65|0065|65)\\s?[689]\\d{3}\\s?\\d{4}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[sg_phone_REDACTED]"
-      },
-      {
-        "id": "pattern/uae_phone",
-        "name": "Phone Number (UAE)",
-        "description": "Detects UAE phone numbers (+971/00971/0 prefix, landline and mobile)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "uae_phone"
-        },
-        "expression": "(?<!\\d)(?:\\+971|00971|0)\\s?(?:2|3|4|6|7|9|50|52|54|55|56|58)\\s?\\d{3}\\s?\\d{4}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[uae_phone_REDACTED]"
-      },
-      {
-        "id": "pattern/fr_phone",
-        "name": "Phone Number (France)",
-        "description": "Detects French phone numbers in various formats (+33, 0033, or 0 prefix followed by 9 digits starting with 1-9)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "fr_phone"
-        },
-        "expression": "(?<!\\d)(?:\\+33|0033|0)[1-9][0-9]{8}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[fr_phone_REDACTED]"
-      },
-      {
-        "id": "pattern/br_phone_mobile",
-        "name": "Brazilian Mobile Phone Number",
-        "description": "Detects Brazilian mobile phone numbers (9 prefix for mobile)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "br_phone_mobile"
-        },
-        "expression": "(?:\\+\\d{1,3}\\s?)?(?:\\(?\\d{2}\\)?\\s?)?9\\d{4}-?\\d{4}",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[br_phone_mobile_REDACTED]"
-      },
-      {
-        "id": "pattern/br_phone_landline",
-        "name": "Brazilian Phone Number (Landline)",
-        "description": "Detects Brazilian landline phone numbers with optional area code",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "br_phone_landline"
-        },
-        "expression": "(?:\\(?\\d{2}\\)?\\s?)?(?:9\\d{4}|\\d{4})-?\\d{4}",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[br_phone_landline_REDACTED]"
-      },
-      {
-        "id": "pattern/br_cep",
-        "name": "CEP - Brazilian Zip / Postal Code",
-        "description": "Detects Brazilian CEP postal codes (XXXXX-XXX or XXXXXXXX format)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "br_cep"
-        },
-        "expression": "\\b\\d{5}-?\\d{3}\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[br_cep_REDACTED]"
-      },
-      {
-        "id": "pattern/fr_postal_code",
-        "name": "Postal Code (France)",
-        "description": "Detects French postal codes (5 digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "fr_postal_code"
-        },
-        "expression": "\\b[0-9]{5}\\b",
-        "context_expression": "\\b(?:code\\s*postal|postal\\s*code|CP|zip\\s*code|postcode)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[fr_postal_code_REDACTED]"
-      },
-      {
-        "id": "pattern/street_address",
-        "name": "Street Address",
-        "description": "Detects street addresses (number + street name + street type)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "street_address"
-        },
-        "expression": "\\b\\d{1,6}\\s+[A-Za-z0-9][A-Za-z0-9\\s.'-]*\\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Circle|Cir)\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[street_address_REDACTED]"
-      },
-      {
-        "id": "pattern/sg_postal_code",
-        "name": "Postal Code (Singapore)",
-        "description": "Detects Singapore 6-digit postal codes (ranges 01xxxx to 83xxxx)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "sg_postal_code"
-        },
-        "expression": "\\b[0-8]\\d{5}\\b",
-        "context_expression": "\\b(?:postal\\s*code|postcode|zip\\s*code|Singapore\\s*\\d|blk|block|address|HDB|flat|unit)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[sg_postal_code_REDACTED]"
-      },
-      {
-        "id": "pattern/ca_postal_code",
-        "name": "Postal Code (Canada)",
-        "description": "Detects Canadian postal codes (A1A 1A1 format, excludes invalid first-letter characters per Canada Post spec)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-regional-contact-formats",
-          "implementation_rule_id": "ca_postal_code"
-        },
-        "expression": "\\b[ABCEGHJ-NPRSTVXY]\\d[ABCEGHJ-NPRSTV-Z][\\-\\s]?\\d[ABCEGHJ-NPRSTV-Z]\\d\\b",
-        "context_expression": "\\b(?:postal\\s*code|zip\\s*code|mailing\\s*address|street\\s*address|shipping\\s*address|home\\s*address|code\\s*postal|postcode)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[ca_postal_code_REDACTED]"
-      }
-    ]
-  },
-  {
-    "id": "local-bank-account-formats",
-    "name": "Regional bank account formats",
-    "description": "Redact contextual Singapore and Canadian bank-account formats. This is not account validation or payment authorization.",
-    "source": "built_in",
-    "version": "2.0.0",
-    "tags": [
-      {
-        "namespace": "protection",
-        "value": "privacy",
-        "label": "Privacy & sensitive information",
-        "source": "declared"
-      },
-      {
-        "namespace": "guardrail_category",
-        "value": "pii_detection",
-        "label": "PII Detection",
-        "source": "declared"
-      },
-      {
-        "namespace": "collection",
-        "value": "focused-protection",
-        "label": "Focused protection",
-        "source": "declared"
-      }
-    ],
-    "safety_level": "balanced",
-    "output_delivery": "full_buffered",
-    "parameters": [],
-    "test_cases": [
-      {
-        "id": "accept/sg_bank_account/input",
-        "name": "Detect Bank Account (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: bank account 111-11111-1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/sg_bank_account"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/sg_bank_account/output",
-        "name": "Detect Bank Account (Singapore)",
-        "description": "Required acceptance case for Singapore PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: bank account 111-11111-1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/sg_bank_account"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/ca_bank_account/input",
-        "name": "Detect Bank Account (Canada)",
-        "description": "Required acceptance case for Canadian PII Patterns.",
-        "phase": "input",
-        "content": "Bank account 12345-001-1234567.",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/ca_bank_account"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/ca_bank_account/output",
-        "name": "Detect Bank Account (Canada)",
-        "description": "Required acceptance case for Canadian PII Patterns.",
-        "phase": "output",
-        "content": "Bank account 12345-001-1234567.",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/ca_bank_account"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "benign-en/input",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-en/output",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/input",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/output",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      }
-    ],
-    "rules": [
-      {
-        "id": "pattern/ca_bank_account",
-        "name": "Bank Account (Canada)",
-        "description": "Detects Canadian bank account routing information (transit-institution-account format)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "high",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-bank-account-formats",
-          "implementation_rule_id": "ca_bank_account"
-        },
-        "expression": "\\b\\d{5}[\\-\\s]\\d{3}[\\-\\s]\\d{7,12}\\b",
-        "context_expression": "\\b(?:bank\\s*account|account\\s*number|transit\\s*number|institution\\s*number|branch\\s*number|routing\\s*number|direct\\s*deposit|void\\s*cheque|chequing|savings\\s*account|numéro\\s*de\\s*compte|dépôt\\s*direct)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-FINANCIAL"
-        ],
-        "redaction": "[ca_bank_account_REDACTED]"
-      },
-      {
-        "id": "pattern/sg_bank_account",
-        "name": "Bank Account (Singapore)",
-        "description": "Detects Singapore bank account numbers (XXX-XXXXX(X)-X(XX) format for DBS/POSB/OCBC/UOB)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "high",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-bank-account-formats",
-          "implementation_rule_id": "sg_bank_account"
-        },
-        "expression": "\\b\\d{3}-\\d{5,6}-\\d{1,3}\\b",
-        "context_expression": "\\b(?:bank\\s*account|account\\s*number|DBS|OCBC|UOB|POSB|savings|current\\s*account|bank\\s*statement)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-FINANCIAL"
-        ],
-        "redaction": "[sg_bank_account_REDACTED]"
-      }
-    ]
-  },
-  {
-    "id": "local-travel-identifiers",
-    "name": "Travel & loyalty identifiers",
-    "description": "Redact configured booking-reference, loyalty-number and flight-number formats. Public flight numbers may also match; enable only when the business treats them as sensitive.",
-    "source": "built_in",
-    "version": "2.0.0",
-    "tags": [
-      {
-        "namespace": "protection",
-        "value": "privacy",
-        "label": "Privacy & sensitive information",
-        "source": "declared"
-      },
-      {
-        "namespace": "guardrail_category",
-        "value": "pii_detection",
-        "label": "PII Detection",
-        "source": "declared"
-      },
-      {
-        "namespace": "collection",
-        "value": "focused-protection",
-        "label": "Focused protection",
-        "source": "declared"
-      }
-    ],
-    "safety_level": "balanced",
-    "output_delivery": "full_buffered",
-    "parameters": [],
-    "test_cases": [
-      {
-        "id": "accept/airline_pnr/input",
-        "name": "Detect Airline PNR / Booking Reference",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: PNR AAAAAA",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/airline_pnr"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/airline_pnr/output",
-        "name": "Detect Airline PNR / Booking Reference",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: PNR AAAAAA",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/airline_pnr"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/skywards_number/input",
-        "name": "Detect Emirates Skywards / Frequent Flyer Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: Skywards EK 111111111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/skywards_number"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/skywards_number/output",
-        "name": "Detect Emirates Skywards / Frequent Flyer Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: Skywards EK 111111111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/skywards_number"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/flight_number/input",
-        "name": "Detect Airline Flight Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "input",
-        "content": "Acceptance sample: flight EK 1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/flight_number"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "accept/flight_number/output",
-        "name": "Detect Airline Flight Number",
-        "description": "Required acceptance case for Aviation PII Patterns.",
-        "phase": "output",
-        "content": "Acceptance sample: flight EK 1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "pattern/flight_number"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "benign-en/input",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-en/output",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/input",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/output",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      }
-    ],
-    "rules": [
-      {
-        "id": "pattern/skywards_number",
-        "name": "Emirates Skywards / Frequent Flyer Number",
-        "description": "Detects Emirates Skywards frequent flyer numbers (9-10 digits, optional EK prefix) when near loyalty/frequent flyer context",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-travel-identifiers",
-          "implementation_rule_id": "skywards_number"
-        },
-        "expression": "\\b(?:EK\\s?)?\\d{9,10}\\b",
-        "context_expression": "\\b(?:[Ss]kywards|frequent\\s*flyer|FF\\s*(?:number|no|#)|loyalty\\s*(?:number|id|member)|member\\s*(?:number|id|#)|miles\\s*(?:account|number)|tier\\s*(?:number|status))\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[skywards_number_REDACTED]"
-      },
-      {
-        "id": "pattern/airline_pnr",
-        "name": "Airline PNR / Booking Reference",
-        "description": "Detects airline PNR / booking references (6 uppercase alpha characters) when near booking context",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-travel-identifiers",
-          "implementation_rule_id": "airline_pnr"
-        },
-        "expression": "\\b[A-Z]{6}\\b",
-        "context_expression": "\\b(?:PNR|booking\\s*(?:reference|ref|code|number|confirmation)|reservation\\s*(?:code|number|ref)|record\\s*locator|confirmation\\s*(?:code|number)|itinerary\\s*(?:number|ref))\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[airline_pnr_REDACTED]"
-      },
-      {
-        "id": "pattern/flight_number",
-        "name": "Airline Flight Number",
-        "description": "Detects airline flight numbers (major IATA 2-letter codes + 1-4 digit flight number) when near flight context",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "low",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-travel-identifiers",
-          "implementation_rule_id": "flight_number"
-        },
-        "expression": "\\b(?:EK|QF|BA|AA|LH|AF|SQ|CX|QR|EY|FZ|WY|GF|KU|SV|MS|RJ|ME|PK|AI|UL|WS|9W|6E)\\s?\\d{1,4}\\b",
-        "context_expression": "\\b(?:flight|departure|arrival|gate|boarding|schedule|operate|route|aircraft|plane|outbound|inbound|leg|sector|flying)\\b",
-        "context_max_gap_words": 1,
-        "taxonomy_ids": [
-          "TALI-BUSINESS-POLICY"
-        ],
-        "redaction": "[flight_number_REDACTED]"
       }
     ]
   },
@@ -10948,270 +10807,6 @@
           "TALI-SOCIAL-HARM-HARASSMENT"
         ],
         "redaction": "[harassment_hate_REDACTED]"
-      }
-    ]
-  },
-  {
-    "id": "local-australian-tax-health-identifiers",
-    "name": "Australian tax & health identifiers",
-    "description": "Recognize TFN, ABN and Medicare formats, including spaced TFNs near tax context. Numeric formats can overlap other identifiers; matching does not validate an identifier.",
-    "source": "built_in",
-    "version": "2.0.0",
-    "tags": [
-      {
-        "namespace": "protection",
-        "value": "privacy",
-        "label": "Privacy & sensitive information",
-        "source": "declared"
-      },
-      {
-        "namespace": "guardrail_category",
-        "value": "pii_detection",
-        "label": "PII Detection",
-        "source": "declared"
-      },
-      {
-        "namespace": "collection",
-        "value": "focused-protection",
-        "label": "Focused protection",
-        "source": "declared"
-      }
-    ],
-    "safety_level": "balanced",
-    "output_delivery": "full_buffered",
-    "parameters": [],
-    "test_cases": [
-      {
-        "id": "rule-au-pii-tax-identifiers/au_tfn-acceptance/input",
-        "name": "Trigger TFN (Australian Tax File Number)",
-        "description": "Proves that the published regex implementation for TFN (Australian Tax File Number) activates this Rule.",
-        "phase": "input",
-        "content": "Acceptance sample: TFN 111 111 111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "au-pii-tax-identifiers/au_tfn"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "rule-au-pii-tax-identifiers/au_tfn-acceptance/output",
-        "name": "Trigger TFN (Australian Tax File Number)",
-        "description": "Proves that the published regex implementation for TFN (Australian Tax File Number) activates this Rule.",
-        "phase": "output",
-        "content": "Acceptance sample: TFN 111 111 111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "au-pii-tax-identifiers/au_tfn"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "rule-au-pii-tax-identifiers/au_abn-acceptance/input",
-        "name": "Trigger ABN (Australian Business Number)",
-        "description": "Proves that the published regex implementation for ABN (Australian Business Number) activates this Rule.",
-        "phase": "input",
-        "content": "Acceptance sample: 11 111 111 111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "au-pii-tax-identifiers/au_abn"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "rule-au-pii-tax-identifiers/au_abn-acceptance/output",
-        "name": "Trigger ABN (Australian Business Number)",
-        "description": "Proves that the published regex implementation for ABN (Australian Business Number) activates this Rule.",
-        "phase": "output",
-        "content": "Acceptance sample: 11 111 111 111",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "au-pii-tax-identifiers/au_abn"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "rule-au-pii-tax-identifiers/au_medicare-acceptance/input",
-        "name": "Trigger Medicare Number (Australia)",
-        "description": "Proves that the published regex implementation for Medicare Number (Australia) activates this Rule.",
-        "phase": "input",
-        "content": "Acceptance sample: 1111 11111 1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "au-pii-tax-identifiers/au_medicare"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "rule-au-pii-tax-identifiers/au_medicare-acceptance/output",
-        "name": "Trigger Medicare Number (Australia)",
-        "description": "Proves that the published regex implementation for Medicare Number (Australia) activates this Rule.",
-        "phase": "output",
-        "content": "Acceptance sample: 1111 11111 1",
-        "expected_decision": "transform",
-        "covered_rule_ids": [
-          "au-pii-tax-identifiers/au_medicare"
-        ],
-        "kind": "rule_acceptance",
-        "required": true,
-        "parameter_names": [],
-        "group": "Rule acceptance"
-      },
-      {
-        "id": "benign-en/input",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-en/output",
-        "name": "benign-en",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "Please explain the account opening process and its fees.",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/input",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "input",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      },
-      {
-        "id": "benign-zh/output",
-        "name": "benign-zh",
-        "description": "Synthetic, deterministic text fixture; no external action is performed.",
-        "phase": "output",
-        "content": "请介绍账户开户流程以及相关费用。",
-        "expected_decision": "allow",
-        "covered_rule_ids": [],
-        "kind": "scenario",
-        "required": true,
-        "parameter_names": [],
-        "group": "Protection contract"
-      }
-    ],
-    "rules": [
-      {
-        "id": "au-pii-tax-identifiers/au_tfn",
-        "name": "TFN (Australian Tax File Number)",
-        "description": "Detects Australian Tax File Numbers (8-9 digits) only when near TFN/tax file context to avoid false positives on arbitrary numbers",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "medium",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-australian-tax-health-identifiers",
-          "implementation_rule_id": "au_tfn"
-        },
-        "expression": "\\b(?:\\d{3}\\s?\\d{3}\\s?\\d{3}|\\d{2}\\s?\\d{3}\\s?\\d{3})\\b",
-        "context_expression": "\\b(?:TFN|T\\.F\\.N\\.|tax\\s*file\\s*(?:number|no\\.?)|tax\\s*file\\s*#?|ATO\\s*number)\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-PII"
-        ],
-        "redaction": "[au_tfn_REDACTED]"
-      },
-      {
-        "id": "au-pii-tax-identifiers/au_abn",
-        "name": "ABN (Australian Business Number)",
-        "description": "Detects Australian Business Numbers (11 digits, optional spaces: XX XXX XXX XXX)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "low",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-australian-tax-health-identifiers",
-          "implementation_rule_id": "au_abn"
-        },
-        "expression": "\\b\\d{2}\\s?\\d{3}\\s?\\d{3}\\s?\\d{3}\\b",
-        "taxonomy_ids": [
-          "TALI-BUSINESS-POLICY"
-        ],
-        "redaction": "[au_abn_REDACTED]"
-      },
-      {
-        "id": "au-pii-tax-identifiers/au_medicare",
-        "name": "Medicare Number (Australia)",
-        "description": "Detects Australian Medicare numbers (formatted XXXX XXXXX X or 11 consecutive digits)",
-        "detector": {
-          "ref": "text/regex",
-          "version": "1.0.0"
-        },
-        "effect": "transform",
-        "risk_severity": "high",
-        "rails": [
-          "input",
-          "output"
-        ],
-        "implementation": {
-          "engine": "nemo-guardrails",
-          "detector": "regex",
-          "flow_name": null,
-          "action_name": "GuardContentFilterAction",
-          "execution": "local",
-          "binding_id": "local-australian-tax-health-identifiers",
-          "implementation_rule_id": "au_medicare"
-        },
-        "expression": "\\b(?:\\d{4}\\s?\\d{5}\\s?\\d{1}|\\d{11})\\b",
-        "taxonomy_ids": [
-          "TALI-PRIVACY-HEALTH"
-        ],
-        "redaction": "[au_medicare_REDACTED]"
       }
     ]
   }

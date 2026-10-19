@@ -3,12 +3,12 @@ schema_version: 2
 kind: Policy
 metadata:
   id: local-government-identifiers
-  name: Government & institutional identifiers
-  description: Recognize configured government, tax, health and institutional identifier formats. Formats
-    are not proof of identity, validity or issuing jurisdiction. Broad numeric formats can overlap; review
-    before enabling.
+  name: Government, tax & health identifiers
+  description: Redact reviewed government, tax, health and institutional identifier formats, including
+    spaced Australian tax and Medicare numbers. Broad numeric formats can overlap; this is format screening,
+    not identity verification.
   source: built_in
-  version: 2.0.0
+  version: 3.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -26,6 +26,9 @@ metadata:
   output_delivery: full_buffered
 parameters: []
 rules:
+- rules/au-pii-tax-identifiers-au_tfn.yaml
+- rules/au-pii-tax-identifiers-au_abn.yaml
+- rules/au-pii-tax-identifiers-au_medicare.yaml
 - rules/pattern-uae_emirates_id.yaml
 - rules/pattern-ca_on_drivers_licence.yaml
 - rules/pattern-ca_immigration_doc.yaml
@@ -49,5 +52,7 @@ rules:
 - rules/pattern-sg_nric.yaml
 - rules/pattern-uoft_utorid.yaml
 tests:
+- tests/local-australian-tax-health-identifiers-acceptance.yaml
+- tests/local-australian-tax-health-identifiers-regression.yaml
 - tests/acceptance.yaml
 - tests/regression.yaml

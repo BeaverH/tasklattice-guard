@@ -1,7 +1,7 @@
 import type { ValidationExpectationOverride } from "./guardrail-plan.js";
 
-// Reviewed composition contracts for focused 2.0.0 Policies and the retained
-// 1.95.0 local filters. These are Default-local, not source Policy edits,
+// Reviewed composition contracts for the focused Policies and retained local
+// filters, remapped below for the 3.0.0 PII consolidation. These are Default-local,
 // exclusions or expectations learned automatically from a runtime result.
 const completeRedaction = "The earlier configured Policy redacts the complete sensitive value. Assert its Policy/Rule and the complete output instead of detecting already-redacted text again.";
 const firstReject = "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.";
@@ -68,7 +68,6 @@ function reviewedExpectations(): Overrides {
     ["nl_bsn_contextual", "Acceptance sample: BSN [nl_bsn_contextual_REDACTED]"],
   ] as const) add(government, `accept/${name}`, government, `pattern/${name}`, output, specificFirst);
   add("local-bank-account-formats", "accept/ca_bank_account", "local-bank-account-formats", "pattern/ca_bank_account", "Bank account [ca_bank_account_REDACTED].", specificFirst);
-  add("local-travel-identifiers", "accept/skywards_number", "local-travel-identifiers", "pattern/skywards_number", "Acceptance sample: Skywards [skywards_number_REDACTED]", specificFirst);
   for (const name of ["br_phone_mobile", "sg_phone", "uae_phone"]) {
     add("local-regional-contact-formats", `accept/${name}`, "local-regional-contact-formats", `pattern/${name}`, sample(name), specificFirst);
   }
@@ -84,7 +83,29 @@ function reviewedExpectations(): Overrides {
   return result;
 }
 
-const expectations = reviewedExpectations();
+// Preserve the reviewed composition contracts when source packages are merged.
+// Absorbed case IDs are namespaced; stable Rule IDs retain their provenance.
+const mergedPolicies: Record<string, string> = {
+  "local-payment-data": "local-payment-data",
+  "local-bank-account-formats": "local-payment-data",
+  "local-government-identifiers": "local-government-identifiers",
+  "local-australian-tax-health-identifiers": "local-government-identifiers",
+  "local-passports": "local-passports",
+  "local-passport-formats": "local-passports",
+  "local-contact-data": "local-contact-data",
+  "local-regional-contact-formats": "local-contact-data",
+};
+const expectations: Overrides = {};
+for (const [source, cases] of Object.entries(reviewedExpectations())) {
+  const target = mergedPolicies[source] ?? source;
+  for (const [caseId, override] of Object.entries(cases)) {
+    (expectations[target] ??= {})[source === target ? caseId : `${source}/${caseId}`] = {
+      ...override,
+      sourcePolicyVersion: mergedPolicies[source] ? "3.0.0" : override.sourcePolicyVersion,
+      expectedMatches: override.expectedMatches.map(match => ({ ...match, policyId: mergedPolicies[match.policyId] ?? match.policyId })),
+    };
+  }
+}
 export function defaultTestCaseOverrides(policyId: string): Record<string, ValidationExpectationOverride> {
   return structuredClone(expectations[policyId] ?? {});
 }

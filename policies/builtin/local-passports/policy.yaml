@@ -4,10 +4,10 @@ kind: Policy
 metadata:
   id: local-passports
   name: Passport identifiers
-  description: Redact 6–9 character alphanumeric identifiers explicitly labelled as a passport or 护照.
-    This does not validate issuing authorities or detect unlabelled documents.
+  description: Redact reviewed international passport formats and context-labelled passport identifiers.
+    Format matching does not establish document validity or issuing jurisdiction.
   source: built_in
-  version: 2.0.0
+  version: 3.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -25,7 +25,17 @@ metadata:
   output_delivery: full_buffered
 parameters: []
 rules:
+- rules/pattern-passport_singapore.yaml
+- rules/pattern-passport_china.yaml
+- rules/pattern-passport_us.yaml
+- rules/pattern-passport_germany.yaml
+- rules/pattern-passport_france.yaml
+- rules/pattern-passport_netherlands.yaml
+- rules/pattern-passport_canada.yaml
+- rules/pattern-passport_india.yaml
 - rules/identity-passport.yaml
 tests:
+- tests/local-passport-formats-acceptance.yaml
+- tests/local-passport-formats-regression.yaml
 - tests/acceptance.yaml
 - tests/regression.yaml

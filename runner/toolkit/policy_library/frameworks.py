@@ -29,11 +29,9 @@ OWASP_LLM_2025_POLICY_IDS = frozenset(
         "pattern-matching",
         "baseline-pii-protection",
         "advanced-au-pii-protection",
-        "airline-passenger-data-protection-uae",
         "gdpr-eu-pii-protection",
         "pdpa-singapore",
         "uae-regulatory-compliance",
-        "aviation-operations-security",
         # LLM05 Improper Output Handling.
         "filter-prompt-injection-sql",
         "filter-prompt-injection-malicious-code",

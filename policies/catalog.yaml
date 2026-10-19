@@ -3,9 +3,6 @@ collections:
 - asset: builtin_policies.json
   policies:
   - builtin/advanced-au-pii-protection
-  - builtin/airline-off-topic-restriction
-  - builtin/airline-passenger-data-protection-uae
-  - builtin/aviation-operations-security
   - builtin/baseline-pii-protection
   - builtin/claims-agent-safety
   - builtin/eu-ai-act-article5
@@ -44,6 +41,15 @@ collections:
 - asset: legacy_topic_policies.json
   policies:
   - builtin/builtin-topic-safety/history/1.0.0
+  - history/local-payment-data/2.0.0
+  - history/local-bank-account-formats/2.0.0
+  - history/local-australian-tax-health-identifiers/2.0.0
+  - history/local-government-identifiers/2.0.0
+  - history/local-passport-formats/2.0.0
+  - history/local-passports/2.0.0
+  - history/local-regional-contact-formats/2.0.0
+  - history/local-contact-data/2.0.0
+  - history/pattern-matching/1.95.0
 - asset: model_capability_policies.json
   policies:
   - builtin/builtin-content-safety
@@ -71,14 +77,9 @@ collections:
   - builtin/internet-account-abuse
   - builtin/local-rendered-content-injection
   - builtin/local-government-identifiers
-  - builtin/local-passport-formats
-  - builtin/local-regional-contact-formats
-  - builtin/local-bank-account-formats
-  - builtin/local-travel-identifiers
   - builtin/local-network-addresses
   - builtin/local-sensitive-attribute-terms
   - builtin/local-risk-content-terms
-  - builtin/local-australian-tax-health-identifiers
 - asset: china_policies.json
   policies:
   - builtin/china-personal-identifiers

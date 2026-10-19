@@ -114,10 +114,10 @@ const policy = {
 
 const requiredPolicy = {
   ...policy,
-  id: "aviation-operations-security",
-  name: "Aviation Operations Security",
+  id: "brand-protection-example",
+  name: "Brand Protection",
   parameters: [
-    { name: "brand_name", label: "Your Airline / Brand Name", kind: "text", required: true, placeholder: "e.g. Acme Airlines", description: "" },
+    { name: "brand_name", label: "Your Brand Name", kind: "text", required: true, placeholder: "e.g. Acme Airlines", description: "" },
     { name: "competitors", label: "Competitors", kind: "textarea", required: true, placeholder: "One competitor per line", description: "Reviewed competitors." },
   ],
 } satisfies Policy;
@@ -276,12 +276,12 @@ describe("PolicyBindingEditor", () => {
     render(<Harness policies={[requiredPolicy]} />);
 
     fireEvent.click(screen.getByRole("combobox", { name: "Select Policies" }));
-    fireEvent.click(screen.getByRole("option", { name: /Aviation Operations Security/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Brand Protection/ }));
 
     const disclosure = await screen.findByRole("button", { name: /Review (Rule details|required configuration) for/ });
     expect(disclosure.getAttribute("aria-expanded")).toBe("true");
     expect(disclosure.getAttribute("aria-label")).toBe(
-      "Review required configuration for Aviation Operations Security",
+      "Review required configuration for Brand Protection",
     );
     expect(screen.getByTestId("required-configuration-indicator").getAttribute("aria-hidden")).toBe("true");
     expect(screen.getByText("Required fields remaining: 2")).toBeTruthy();
@@ -294,7 +294,7 @@ describe("PolicyBindingEditor", () => {
     expect(screen.queryByText("Required fields remaining: 2")).toBeNull();
     expect(screen.queryByTestId("required-configuration-indicator")).toBeNull();
     expect(disclosure.getAttribute("aria-label")).toBe(
-      "Review Rule details for Aviation Operations Security",
+      "Review Rule details for Brand Protection",
     );
     expect(disclosure.getAttribute("aria-expanded")).toBe("true");
   });

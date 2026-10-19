@@ -7,10 +7,47 @@ import { policyComplianceSchema } from "../../shared/policy-compliance.js";
 import { describe, expect, it } from "vitest";
 
 import { PolicyCatalog } from "./catalog.js";
+import { buildGuardrailPlan } from "../domain/guardrail-plan.js";
+import { defaultGuardrailDraft } from "../domain/defaults.js";
 
 const assetDirectory = resolve("../runner/toolkit/policy_library/assets");
 
 describe("Policy catalog", () => {
+  it("removes aviation-only templates and facets while retaining shared jurisdictions", () => {
+    const catalog = PolicyCatalog.load(assetDirectory);
+    for (const id of ["airline-off-topic-restriction", "airline-passenger-data-protection-uae", "aviation-operations-security", "local-travel-identifiers"]) {
+      expect(catalog.get(id)).toBeUndefined();
+    }
+    const tags = catalog.list().flatMap(policy => policy.tags);
+    expect(tags.some(tag => tag.value === "aviation")).toBe(false);
+    expect(tags.some(tag => tag.namespace === "jurisdiction" && tag.value === "uae")).toBe(true);
+    expect(catalog.list().flatMap(policy => policy.compliance?.references ?? []).some(reference => reference.url.includes("iata.org"))).toBe(false);
+    const removedRules = new Set(["pattern/airline_pnr", "pattern/skywards_number", "pattern/flight_number"]);
+    expect(catalog.list().flatMap(policy => policy.rules).some(rule => removedRules.has(rule.id))).toBe(false);
+  });
+
+  it("keeps original PII versions executable without returning retired templates in new selections", () => {
+    const catalog = PolicyCatalog.load(assetDirectory);
+    const retired = catalog.retired();
+    expect(retired.map(policy => policy.id).sort()).toEqual([
+      "local-australian-tax-health-identifiers", "local-bank-account-formats",
+      "local-passport-formats", "local-regional-contact-formats",
+    ]);
+    expect(catalog.list().some(policy => policy.retired)).toBe(false);
+    const policies = [...catalog.list(), ...retired];
+    for (const policy of retired) {
+      const draft = defaultGuardrailDraft(catalog.list());
+      draft.policyBindings = [{ ...draft.policyBindings[0]!, policyId: policy.id, policyVersion: policy.version,
+        enabledRuleIds: policy.rules.map(rule => rule.id), enabledRails: policy.rails }];
+      expect(buildGuardrailPlan({ guardrailId: "old-draft", guardrailVersion: "test", draft, policies }).policy_bindings)
+        .toMatchObject([{ policy_id: policy.id, policy_version: "2.0.0" }]);
+    }
+    for (const id of ["local-payment-data", "local-contact-data", "local-passports", "local-government-identifiers"]) {
+      const policy = catalog.get(id)!;
+      expect(policy.version).toBe("3.0.0");
+      expect(policy.published_versions?.map(version => version.version)).toContain("2.0.0");
+    }
+  });
   it("loads imported local Policies as unreviewed custom definitions and rejects platform impersonation", () => {
     const directory = mkdtempSync(join(tmpdir(), "guard-imported-"));
     try {
@@ -31,7 +68,7 @@ describe("Policy catalog", () => {
   it("documents every built-in Policy and separates implementation lineage from industry context", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list().filter(policy => policy.source === "built_in");
-    expect(policies).toHaveLength(73);
+    expect(policies).toHaveLength(65);
     for (const policy of policies) {
       expect(policy.compliance?.policy_version, policy.id).toBe(policy.version);
       expect(policy.compliance?.provenance.en, policy.id).toBeTruthy();
@@ -43,7 +80,7 @@ describe("Policy catalog", () => {
       }
     }
     expect(policies.filter(policy => policy.compliance).length).toBe(policies.length);
-    expect(policies.filter(policy => policy.compliance?.references.length).length).toBe(62);
+    expect(policies.filter(policy => policy.compliance?.references.length).length).toBe(55);
     expect(catalog.get("builtin-content-safety")?.compliance?.references[0]?.url).toContain("nist.gov");
     expect(catalog.get("filter-denied-medical-advice")?.compliance).toMatchObject({
       references: [expect.objectContaining({ url: expect.stringContaining("who.int") })],
@@ -104,7 +141,7 @@ describe("Policy catalog", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list();
 
-    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(73);
+    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(65);
     expect(new Set(policies.map((policy) => policy.id)).size).toBe(policies.length);
     expect(catalog.get("builtin-content-safety")).toMatchObject({ rails: ["input", "output"], test_count: 2 });
     expect(catalog.get("competitor-mention-detection")).toMatchObject({

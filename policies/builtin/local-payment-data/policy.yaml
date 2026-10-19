@@ -3,11 +3,11 @@ schema_version: 2
 kind: Policy
 metadata:
   id: local-payment-data
-  name: Payment card & bank identifiers
-  description: Redact recognizable payment card and IBAN formats. Matching does not validate account ownership
-    or enforce payment authorization.
+  name: Payment & bank identifiers
+  description: Redact reviewed payment-card, IBAN, Singapore and Canadian bank-account formats. Format
+    matching does not validate account ownership or payment authorization.
   source: built_in
-  version: 2.0.0
+  version: 3.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -27,6 +27,10 @@ parameters: []
 rules:
 - rules/financial-pii-credit_card.yaml
 - rules/financial-pii-iban.yaml
+- rules/pattern-ca_bank_account.yaml
+- rules/pattern-sg_bank_account.yaml
 tests:
 - tests/acceptance.yaml
 - tests/regression.yaml
+- tests/local-bank-account-formats-acceptance.yaml
+- tests/local-bank-account-formats-regression.yaml

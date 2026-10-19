@@ -108,10 +108,6 @@ const sources = {
     "This guidance supplies banking-sector context for customer identification. Phrase screening neither performs due diligence nor determines suspicious activity or compliance.",
     "该指引提供银行客户识别与尽职调查背景。短语筛查既不执行尽职调查，也不判断可疑活动或合规情况。",
   )),
-  iataCybersecurity: official("Aviation Cyber Security", "https://www.iata.org/en/programs/security/cyber-security/", "International Air Transport Association", "Aviation-industry cybersecurity programme", bilingual(
-    "This industry programme supplies aviation-security context. Keyword and identifier checks do not implement aviation security, operational controls, access control, or IATA guidance.",
-    "该行业项目提供航空安全背景。关键词和标识符检查不能实现航空安全、运营控制、访问控制或 IATA 指引。",
-  )),
 } as const;
 type SourceKey = keyof typeof sources;
 
@@ -121,11 +117,8 @@ const industrySourceByPolicy: Partial<Record<string, SourceKey>> = {
   "pdpa-singapore": "pdpa",
   "singapore-customer-identifiers": "pdpa",
   "singapore-data-use-boundaries": "pdpa",
-  "airline-passenger-data-protection-uae": "uae",
   "uae-regulatory-compliance": "uae",
-  "aviation-operations-security": "iataCybersecurity",
   "nsfw-content-filter-australia": "australiaOnlineSafety",
-  "local-australian-tax-health-identifiers": "oaic",
   "local-payment-data": "pci",
   "banking-customer-protection": "bisCustomerDueDiligence",
   "securities-market-integrity": "asic",
@@ -144,7 +137,6 @@ const industrySourceByPolicy: Partial<Record<string, SourceKey>> = {
 };
 
 const policiesWithoutExternalMapping = new Set([
-  "airline-off-topic-restriction",
   "builtin-company-policy",
   "builtin-topic-safety",
   "configured-phrase-filter",

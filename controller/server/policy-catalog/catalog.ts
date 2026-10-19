@@ -115,6 +115,8 @@ type PolicyParameter = z.output<typeof parameterSchema>;
 
 export type PolicyTag = z.output<typeof tagSchema> & { id: string };
 export type PolicyDto = {
+  /** Kept only to resolve existing pinned drafts; omitted from new selections. */
+  retired?: boolean;
   definition?: import("../../shared/policy-definition.js").PolicyDefinition;
   maintenance?: { revision: number; maintainer: string };
   published_versions?: PolicyDto[];
@@ -169,11 +171,9 @@ const OWASP_LLM_2025_POLICY_IDS = new Set([
   "pattern-matching",
   "baseline-pii-protection",
   "advanced-au-pii-protection",
-  "airline-passenger-data-protection-uae",
   "gdpr-eu-pii-protection",
   "pdpa-singapore",
   "uae-regulatory-compliance",
-  "aviation-operations-security",
   "filter-prompt-injection-sql",
   "filter-prompt-injection-malicious-code",
   "block-code-execution",
@@ -182,10 +182,14 @@ const OWASP_LLM_2025_POLICY_IDS = new Set([
 ]);
 
 export class PolicyCatalog {
-  private constructor(private readonly policiesById: ReadonlyMap<string, PolicyDto>) {}
+  private constructor(
+    private readonly policiesById: ReadonlyMap<string, PolicyDto>,
+    private readonly retiredById: ReadonlyMap<string, PolicyDto>,
+  ) {}
 
   static load(directory: string): PolicyCatalog {
     const merged = new Map<string, PolicyDto>();
+    const historical = new Map<string, PolicyDto[]>();
     const contractPath = join(directory, "protection-contracts.json");
     let contracts: ProtectionContracts;
     try {
@@ -202,12 +206,23 @@ export class PolicyCatalog {
         // The focused local-filter collection intentionally replaces a legacy
         // definition when it reuses a public Policy ID.
         const normalized = normalizePolicy(policy, contracts, fileName);
-        const previous = merged.get(policy.id);
-        if (policy.id === "builtin-topic-safety" && previous && previous.version !== policy.version) normalized.published_versions = [previous];
-        merged.set(policy.id, normalized);
+        if (fileName === "legacy_topic_policies.json") {
+          historical.set(policy.id, [...historical.get(policy.id) ?? [], normalized]);
+        } else {
+          merged.set(policy.id, normalized);
+        }
       }
     }
-    return new PolicyCatalog(merged);
+    const retired = new Map<string, PolicyDto>();
+    for (const [id, versions] of historical) {
+      const current = merged.get(id);
+      if (current) current.published_versions = versions.filter(version => version.version !== current.version);
+      else {
+        const [head, ...rest] = [...versions].sort((left, right) => right.version.localeCompare(left.version, undefined, { numeric: true }));
+        retired.set(id, { ...head!, retired: true, published_versions: rest });
+      }
+    }
+    return new PolicyCatalog(merged, retired);
   }
 
   list(): PolicyDto[] {
@@ -215,7 +230,11 @@ export class PolicyCatalog {
   }
 
   get(policyId: string): PolicyDto | undefined {
-    return this.policiesById.get(policyId);
+    return this.policiesById.get(policyId) ?? this.retiredById.get(policyId);
+  }
+
+  retired(): PolicyDto[] {
+    return [...this.retiredById.values()];
   }
 }
 

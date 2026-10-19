@@ -105,10 +105,10 @@ async def test_default_local_components_compile_and_run_without_models(
         "runtime_profile": "auto",
     }
     samples = [
-        ("Passport: E12345678", "local-passport-formats", "pattern/passport_china", "Passport: [passport_china_REDACTED]"),
-        ("Passport: A12345678", "local-passport-formats", "pattern/passport_us", "Passport: [passport_us_REDACTED]"),
-        ("Passport: K1234567", "local-passport-formats", "pattern/passport_singapore", "Passport: [passport_singapore_REDACTED]"),
-        ("Passport: 12AB12345", "local-passport-formats", "pattern/passport_france", "Passport: [passport_france_REDACTED]"),
+        ("Passport: E12345678", "local-passports", "pattern/passport_china", "Passport: [passport_china_REDACTED]"),
+        ("Passport: A12345678", "local-passports", "pattern/passport_us", "Passport: [passport_us_REDACTED]"),
+        ("Passport: K1234567", "local-passports", "pattern/passport_singapore", "Passport: [passport_singapore_REDACTED]"),
+        ("Passport: 12AB12345", "local-passports", "pattern/passport_france", "Passport: [passport_france_REDACTED]"),
         ("NRIC: S1234567D", "local-government-identifiers", "pattern/sg_nric", "NRIC: [sg_nric_REDACTED]"),
         ("Emirates ID: 784-1990-1234567-1", "local-government-identifiers", "pattern/uae_emirates_id", "Emirates ID: [uae_emirates_id_REDACTED]"),
         ("BSN: 123456789", "local-government-identifiers", "pattern/nl_bsn_contextual", "BSN: [nl_bsn_contextual_REDACTED]"),
@@ -116,13 +116,13 @@ async def test_default_local_components_compile_and_run_without_models(
         ("OHIP: 1234-567-890-AB", "local-government-identifiers", "pattern/ca_ohip", "OHIP: [ca_ohip_REDACTED]"),
         ("Driver licence: A1234-12345-12345", "local-government-identifiers", "pattern/ca_on_drivers_licence", "Driver licence: [ca_on_drivers_licence_REDACTED]"),
         ("Email: alice@example.com", "local-contact-data", "pattern/email", "Email: [email_REDACTED]"),
-        ("Phone: +65 8123 4567", "local-regional-contact-formats", "pattern/sg_phone", "Phone: [sg_phone_REDACTED]"),
-        ("Phone: +971 50 123 4567", "local-regional-contact-formats", "pattern/uae_phone", "Phone: [uae_phone_REDACTED]"),
+        ("Phone: +65 8123 4567", "local-contact-data", "pattern/sg_phone", "Phone: [sg_phone_REDACTED]"),
+        ("Phone: +971 50 123 4567", "local-contact-data", "pattern/uae_phone", "Phone: [uae_phone_REDACTED]"),
         ("Card: 4111 1111 1111 1111", "local-payment-data", "financial-pii/credit_card", "Card: [credit_card_REDACTED]"),
         ("IBAN: GB82WEST12345698765432", "local-payment-data", "financial-pii/iban", "IBAN: [iban_REDACTED]"),
-        ("Bank account: 123-123456-1", "local-bank-account-formats", "pattern/sg_bank_account", "Bank account: [sg_bank_account_REDACTED]"),
-        ("Bank account: 12345-001-1234567", "local-bank-account-formats", "pattern/ca_bank_account", "Bank account: [ca_bank_account_REDACTED]"),
-        ("Address: 123 Main Street", "local-regional-contact-formats", "pattern/street_address", "Address: [street_address_REDACTED]"),
+        ("Bank account: 123-123456-1", "local-payment-data", "pattern/sg_bank_account", "Bank account: [sg_bank_account_REDACTED]"),
+        ("Bank account: 12345-001-1234567", "local-payment-data", "pattern/ca_bank_account", "Bank account: [ca_bank_account_REDACTED]"),
+        ("Address: 123 Main Street", "local-contact-data", "pattern/street_address", "Address: [street_address_REDACTED]"),
         # Preserve the old Default's non-PII behavior through ordinary focused
         # Policies too; source collections remain unchanged in the library.
         ("Connect to 192.168.1.1", "local-network-addresses", "pattern/ipv4", "Connect to [ipv4_REDACTED]"),
@@ -176,14 +176,14 @@ async def test_default_local_components_compile_and_run_without_models(
 
 
 @pytest.mark.parametrize(("phase", "content", "expected_decision", "expected_text", "expected_policy"), [
-    ("input", "TFN: 123 456 789", "transform", "TFN: [au_tfn_REDACTED]", "local-australian-tax-health-identifiers"),
-    ("input", "TFN: 12 345 678", "transform", "TFN: [au_tfn_REDACTED]", "local-australian-tax-health-identifiers"),
+    ("input", "TFN: 123 456 789", "transform", "TFN: [au_tfn_REDACTED]", "local-government-identifiers"),
+    ("input", "TFN: 12 345 678", "transform", "TFN: [au_tfn_REDACTED]", "local-government-identifiers"),
     ("input", "AKIA0000000000000000", "block", None, "local-credentials"),
     ("input", "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "block", None, "local-credentials"),
     ("output", "AKIA0000000000000000", "block", None, "local-credentials"),
     ("output", "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "block", None, "local-credentials"),
-    ("input", "Passport: E12345678", "transform", "Passport: [passport_china_REDACTED]", "local-passport-formats"),
-    ("output", "Passport: E12345678", "transform", "Passport: [passport_china_REDACTED]", "local-passport-formats"),
+    ("input", "Passport: E12345678", "transform", "Passport: [passport_china_REDACTED]", "local-passports"),
+    ("output", "Passport: E12345678", "transform", "Passport: [passport_china_REDACTED]", "local-passports"),
 ])
 async def test_focused_default_retains_tax_ids_credentials_and_passports(
     default_local_plan: dict, phase: str, content: str, expected_decision: str,
@@ -275,7 +275,7 @@ async def test_default_local_components_pass_reviewed_composition_cases(default_
     ).validate(envelope.validation_request)
     conflicts = [item for item in results if not item["passed"]]
     assert status == "passed", conflicts
-    assert metrics["total"] == len(cases) == 392
+    assert metrics["total"] == len(cases) == 382
     assert metrics["passed"] == metrics["total"]
     assert not conflicts
     assert all(case["required"] for case in cases)
@@ -302,6 +302,10 @@ async def test_focused_default_replays_every_frozen_legacy_case(default_local_pl
     try:
         for case in migration["cases"]:
             original = catalog_policy(case["policyId"])
+            if original is None or original.version != migration["sourcePolicyVersion"]:
+                from runner.toolkit.policy_runtime.codec import policy_from_payload
+                history = json.loads((ROOT / "runner/toolkit/policy_library/assets/legacy_topic_policies.json").read_text())
+                original = next((policy_from_payload(p) for p in history if p["id"] == case["policyId"] and p["version"] == migration["sourcePolicyVersion"]), None)
             assert original is not None and original.version == migration["sourcePolicyVersion"]
             source = next(item for item in original.test_cases if item.id == case["caseId"])
             assert (source.content, source.phase) == (case["content"], case["phase"])
@@ -309,7 +313,7 @@ async def test_focused_default_replays_every_frozen_legacy_case(default_local_pl
             if case["expectedDecision"] == "transform" and expected_output is None:
                 # The unchanged legacy Rule, not the migrated composition, is
                 # the reference when the old case had no composition override.
-                isolated = source_engine.evaluate(definitions=library_definitions([original.id]), text=source.content, phase=source.phase,
+                isolated = source_engine.evaluate(definitions={original.id: original}, text=source.content, phase=source.phase,
                     policies=[original.id], enabled_rules={original.id: source.covered_rule_ids})
                 assert isolated.verdict != "error" and isolated.findings
                 expected_output = isolated.content
@@ -317,6 +321,8 @@ async def test_focused_default_replays_every_frozen_legacy_case(default_local_pl
                 # Consolidated card matching intentionally uses one generic
                 # marker. Preserve every surrounding byte and redacted span.
                 expected_output = re.sub(r"\[(visa|mastercard|amex|discover)_REDACTED\]", "[credit_card_REDACTED]", expected_output)
+            if set(source.covered_rule_ids) & {"pattern/airline_pnr", "pattern/skywards_number", "pattern/flight_number"}:
+                continue  # Aviation checks were explicitly removed from the general Default.
             result = await previews.evaluate(
                 ProtectionRequest(phase=case["phase"], texts=(case["content"],),
                     context=RequestContext(protocol="playground")),

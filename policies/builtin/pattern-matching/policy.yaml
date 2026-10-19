@@ -4,10 +4,10 @@ kind: Policy
 metadata:
   id: pattern-matching
   name: Pattern Matching
-  description: Detects and masks 82 reviewed identity, credential, financial, safety, and regional data
+  description: Detects and masks 79 reviewed identity, credential, financial, safety, and regional data
     patterns locally.
   source: built_in
-  version: 1.95.0
+  version: 2.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -99,11 +99,8 @@ rules:
 - rules/pattern-eu_passport_generic.yaml
 - rules/pattern-fr_postal_code.yaml
 - rules/pattern-street_address.yaml
-- rules/pattern-airline_pnr.yaml
-- rules/pattern-skywards_number.yaml
 - rules/pattern-uae_emirates_id.yaml
 - rules/pattern-uae_phone.yaml
-- rules/pattern-flight_number.yaml
 - rules/pattern-sg_nric.yaml
 - rules/pattern-sg_phone.yaml
 - rules/pattern-sg_postal_code.yaml

@@ -35,14 +35,9 @@ const expectedPolicyIds = [
   "filter-prompt-injection-system-prompt",
   "local-credentials",
   "local-payment-data",
-  "local-australian-tax-health-identifiers",
-  "local-bank-account-formats",
-  "local-travel-identifiers",
   "local-government-identifiers",
-  "local-passport-formats",
-  "local-regional-contact-formats",
-  "local-contact-data",
   "local-passports",
+  "local-contact-data",
   "local-network-addresses",
   "local-sensitive-attribute-terms",
   "local-risk-content-terms",
@@ -75,11 +70,11 @@ describe("Default Guardrail baseline", () => {
     const draft = defaultGuardrailDraft(policies);
     const cases = generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, policies);
 
-    expect(draft.policyBindings).toHaveLength(36);
-    expect(cases).toHaveLength(395);
+    expect(draft.policyBindings).toHaveLength(31);
+    expect(cases).toHaveLength(385);
     for (const [id, ruleCount] of [
       ["advanced-au-pii-protection", 47], ["prompt-injection-protection", 29],
-      ["baseline-pii-protection", 14], ["pattern-matching", 82],
+      ["baseline-pii-protection", 14], ["pattern-matching", 79],
     ] as const) {
       expect(draft.policyBindings.some((binding) => binding.policyId === id)).toBe(false);
       expect(cases.some((item) => item.sourcePolicyId === id)).toBe(false);

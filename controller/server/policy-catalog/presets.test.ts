@@ -10,9 +10,8 @@ const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/as
 describe("Protection presets", () => {
   it("keeps broad disclosure filters opt-in instead of silently enabling them for every industry", () => {
     const reviewedOnly = new Set([
-      "local-government-identifiers", "local-passport-formats", "local-regional-contact-formats",
-      "local-bank-account-formats", "local-travel-identifiers", "local-network-addresses",
-      "local-sensitive-attribute-terms", "local-risk-content-terms", "local-australian-tax-health-identifiers",
+      "local-government-identifiers", "local-network-addresses",
+      "local-sensitive-attribute-terms", "local-risk-content-terms",
     ]);
     expect(policies.filter((policy) => reviewedOnly.has(policy.id))).toHaveLength(reviewedOnly.size);
     for (const preset of protectionPresets) {
@@ -24,7 +23,8 @@ describe("Protection presets", () => {
     const bindings = expandProtectionPreset(preset, policies);
     expect(bindings.map((binding) => binding.policyId)).toEqual(preset.policies.map((reference) => reference.policyId));
     for (const binding of bindings) {
-      const policy = policies.find((item) => item.id === binding.policyId)!;
+      const policy = policies.flatMap(item => [item, ...item.published_versions ?? []])
+        .find(item => item.id === binding.policyId && item.version === binding.policyVersion)!;
       expect(binding.policyVersion).toBe(policy.version);
       expect(binding.enabledRuleIds).toEqual(policy.rules.map((rule) => rule.id));
       expect(policy.protection.execution).toBe("local");

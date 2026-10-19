@@ -8,18 +8,19 @@ for publication and rollback.
 
 ## Default protection and model requirements
 
-The Default Guardrail composes **34 complete Policies**: two model Policies
-followed by 32 local Policies. This supersedes the former model-free baseline.
+The Default Guardrail composes **31 complete Policies**: two model Policies
+and 29 local Policies. This supersedes the former model-free baseline.
 It requires compatible, validated assignments for `jailbreak.input`,
 `content_safety.input`, and `content_safety.output`. The Jailbreak binding may
 use the dedicated NemoGuard JailbreakDetect profile or another supported
 Jailbreak profile; the baseline does not hard-code a vendor or credentials. The authoritative selection is in
 [defaults.ts](../controller/server/domain/defaults.ts). Focused Policies cover
-credentials, payment data, tax/health/government/travel identifiers, contact and
+credentials, payment data, tax/health/government identifiers, contact and
 network data, harmful phrases, and prompt/code injection. Each retains its Rules,
 actions, Rail scope, and inherited test cases; Default owns their composition
-order and reviewed test expectations. `builtin-jailbreak` runs first on Input;
-`builtin-content-safety` follows on Input and runs first on Output. Models see the
+order and reviewed test expectations. Local indirect-injection and memory-poisoning
+checks run first; `builtin-jailbreak` and `builtin-content-safety` follow on Input.
+Content safety also runs on Output. Models see the
 original content before local redaction. A blocking verdict stops the chain.
 Missing required bindings reject runtime preparation; an unavailable or malformed
 model response fails closed and is recorded as an error, never a successful detection.
@@ -32,12 +33,35 @@ provide format/context screening, not exhaustive semantic protection. Default
 uses `full_buffered` output delivery because its transformations require the
 complete response.
 
+## Consolidated PII catalog
+
+The current catalog contains 65 Policies. Four local PII packages are published
+at `3.0.0`: payment and regional bank identifiers (`local-payment-data`),
+government/tax/health identifiers (`local-government-identifiers`), international
+and contextual passports (`local-passports`), and basic/regional contact details
+(`local-contact-data`). Their original Rules, actions and input/output coverage
+are retained in authored order. Absorbed test IDs are prefixed with their former
+Policy ID to keep them unique. Credentials and semantic PII remain independent.
+
+Airline off-topic restrictions, UAE airline passenger protection, aviation
+operations protection and travel/loyalty identifiers are no longer offered.
+The mixed Pattern Matching template is now `2.0.0` with 79 Rules; its PNR,
+Skywards and flight-number Rules are removed too. The aviation domain facet and
+IATA-only reference are removed; shared jurisdictions such as UAE remain.
+
+Original PII versions are frozen under `policies/history/` and loaded solely for
+existing version pins. Retired IDs are omitted from new Policy selections.
+Existing industry Profiles retain their narrower `2.0.0` pins rather than gaining
+regional detection silently. Published Guardrail artifacts are unchanged;
+adopting merged Policies requires the ordinary draft, validation and publication
+workflow. Previously published Pattern Matching snapshots retain their contents.
+
 ## Default reconciliation
 
 On Controller startup, an uncustomized Default is reconciled against the bundled
 Policy catalog when its bindings change, including Policy versions or Rule
 membership. The system queues the full inherited validation suite (currently
-339 cases) and publishes only its passed compiled candidate. Missing models or
+385 cases) and publishes only its passed compiled candidate. Missing models or
 failed validation leave the old published version intact; on a fresh installation
 there is no new executable Default until validation passes. There is no automatic
 local-only downgrade. After fixing model configuration, rerun validation. User-customized Defaults are preserved. Publishing a custom
