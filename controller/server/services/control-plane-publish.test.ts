@@ -7,7 +7,7 @@ import { ControlPlaneService } from "./control-plane.js";
 describe("Guardrail publication", () => {
   it("returns the existing version when the same tested draft is published again, changing nothing", async () => {
     const guardrail = {
-      id: "guardrail-default",
+      id: "guardrail-custom",
       draftRevision: 2,
       status: "active",
     };

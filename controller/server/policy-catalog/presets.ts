@@ -1,5 +1,6 @@
 import type { GuardrailPolicyBindingConfig } from "../domain/guardrail-plan.js";
 import type { ProtectionPreset } from "../../shared/protection-map.js";
+import { appendProfileRules } from "../../shared/profile-rule-selection.js";
 type ProfilePolicy = { id: string; version: string; rails: readonly string[]; parameters: readonly { name: string; required?: boolean; default?: string | null | undefined }[]; rules: readonly { id: string }[]; published_versions?: readonly ProfilePolicy[] };
 
 /** Validate a preset against this exact installed catalog, never best-effort. */
@@ -20,12 +21,29 @@ export function expandProtectionPreset(preset: ProtectionPreset, policies: reado
     for (const parameter of policy.parameters) {
       if (parameter.required && !parameterValues[parameter.name]?.trim()) throw new Error(`Profile ${preset.id}: Policy ${policy.id} needs ${parameter.name}.`);
     }
-    if (selected.has(policy.id)) continue; // Never replace user overrides, versions, directions or order.
+    const knownRules = new Set(policy.rules.map(rule => rule.id));
+    const enabledRuleIds = reference.enabledRuleIds ?? policy.rules.map(rule => rule.id);
+    const ruleOrder = reference.ruleOrder ?? [];
+    if (!enabledRuleIds.length || new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some(id => !knownRules.has(id))) {
+      throw new Error(`Profile ${preset.id}: Policy ${policy.id} has an invalid Rule selection.`);
+    }
+    if (new Set(ruleOrder).size !== ruleOrder.length || ruleOrder.some(id => !enabledRuleIds.includes(id))) {
+      throw new Error(`Profile ${preset.id}: Policy ${policy.id} has an invalid Rule order.`);
+    }
+    if (selected.has(policy.id)) {
+      const existing = result.find(binding => binding.policyId === policy.id)!;
+      // Rule IDs from a different version cannot be safely added to a user pin.
+      if (existing.policyVersion === policy.version) {
+        const selection = appendProfileRules(existing, { enabledRuleIds, ruleOrder });
+        if (selection) Object.assign(existing, selection);
+      }
+      continue; // Keep user actions, parameters, directions and reviewed expectations.
+    }
     selected.add(policy.id);
     result.push({
       policyId: policy.id, policyVersion: policy.version, action: null,
-      parameterValues, enabledRuleIds: policy.rules.map((rule) => rule.id), ruleOrder: [],
-      testCaseOverrides: {}, ruleActions: {}, enabledRails: [...reference.enabledRails], reasoningPolicy: null,
+      parameterValues, enabledRuleIds: [...enabledRuleIds], ruleOrder: [...ruleOrder],
+      testCaseOverrides: structuredClone(reference.testCaseOverrides ?? {}), ruleActions: {}, enabledRails: [...reference.enabledRails], reasoningPolicy: null,
     });
   }
   return result;

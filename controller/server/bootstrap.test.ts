@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { readFile } from "node:fs/promises";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { describe, expect, it, vi } from "vitest";
 import { ensureBootstrapAdmin, ensureBootstrapUser } from "./bootstrap.js";
@@ -37,10 +36,13 @@ describe("bootstrap credential import", () => {
     await expect(auth.api.signInEmail({ body: { email: input.email, password: "Password" } })).rejects.toThrow();
     await expect(auth.api.signInEmail({ body: { email: input.email, password: passwordHash } })).rejects.toThrow();
   });
-  it("the two development Values hashes accept password and use different salts", async () => {
-    const values = await readFile(new URL("../../charts/tali-guard/values-dev-uat.yaml", import.meta.url), "utf8");
-    const hashes = [...values.matchAll(/passwordHash: "([a-f0-9:]+)"/g)].map(match => match[1]!);
-    expect(hashes).toHaveLength(2);
+  it("generates independent development account digests in the initialization Job", async () => {
+    const { secretData } = await import(new URL("../scripts/runtime/bootstrap-secrets.mjs", import.meta.url).href);
+    const hashes: string[] = [];
+    for (const role of ["admin", "user"]) {
+      const data = await secretData({ kind: "account", email: `${role}@tasklattice.local`, displayName: role, localDefault: true });
+      hashes.push(data["password-hash"]);
+    }
     expect(new Set(hashes).size).toBe(2);
     for (const hash of hashes) {
       expect(await verifyPassword({ hash, password: "password" })).toBe(true);

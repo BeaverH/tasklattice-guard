@@ -9,7 +9,7 @@ from tests.data_plane.test_artifact_execution import _runtime
 
 
 @pytest.mark.parametrize("contract", [*MODEL_SAFETY_CAPABILITY_BY_CONTRACT,
-    "tali.guard.topic-control.semantic.v1", "tali.guard.company-policy.v1",
+    "tali.guard.topic-control.semantic.v1",
     "tali.guard.contextual-grounding.v1", "tali.guard.automated-reasoning.v1"])
 async def test_runtime_checks_additional_declared_model_contract_without_action_binding(tmp_path, contract):
     store, registry, runtime = _runtime(tmp_path)

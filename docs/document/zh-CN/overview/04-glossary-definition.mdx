@@ -93,7 +93,7 @@ Policy 是多条 Rule 的集合，同时保存描述、版本和测试等信息�
 
 `model/classifier` 有四个 profile：
 
-- `topic-classification`：用于 Topic Control 和 Company Policy。
+- `topic-classification`：用于 Topic Control，包含公司业务边界检查。
 - `safety-classification`：用于内容安全。
 - `jailbreak-classification`：用于越狱检测。
 - `pii-classification`：用于个人信息识别。
@@ -137,7 +137,7 @@ metadata:
 - Guard 返回 Decision 和必要的替换文本。
 - Gateway 执行放行、阻断、替换或停止交付。
 
-`text/conditions` 可以组合字词、正则、同句和排除条件。竞品名称和业务词表都在 Rule 中声明。`model/classifier` 通过 `profile` 选择分类适配契约。Company Policy 复用 Topic Control 的分类契约。依据核验使用 `model/grounding`，形式验证使用 `service/formal-verification`，因为两者需要的上下文和证据结构不同。
+`text/conditions` 可以组合字词、正则、同句和排除条件。竞品名称和业务词表都在 Rule 中声明。`model/classifier` 通过 `profile` 选择分类适配契约。公司业务边界统一使用 Topic Control 的黑白名单 Rule 和模型绑定。依据核验使用 `model/grounding`，形式验证使用 `service/formal-verification`，因为两者需要的上下文和证据结构不同。
 
 一个 Policy 可以有多份这样的 Rule 文件，由 `policy.yaml` 列出顺序。下一条 Rule 读取上一条处理后的文本。命中 `block` 时，本 Policy 的检测结束。完整的包结构、测试和导入导出，见[创建 Policy](/document/operator/operator-create-policy#operator-policy-declarative)。
 

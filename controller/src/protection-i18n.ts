@@ -1,5 +1,5 @@
 export const protectionEn = {
-  topicRules: { allow: "Allowlist Rule", deny: "Denylist Rule", independent: "Enable each Rule independently. Denylist matches always take priority. Keep at least one Rule enabled, or remove this Policy.", denyHint: "Reject requests matching any denied topic, even if they also match the Allowlist.", allowHint: "Define allowed topics and choose how to handle unmatched requests.", disabled: "Disabled. This Rule is not executed; its configuration is retained for reuse.", helper: "Generate Rule configuration from intent or documents", helperHint: "Describe what is allowed and what is denied. AI suggestions only fill this Policy’s lists when applied; Rule switches and other Policies stay unchanged.", upgrade: "Use independent Allowlist and Denylist Rules", upgradeHint: "Upgrade this draft to Topic Control v2. Existing lists are copied into Rule parameters; save to apply the change." },
+  topicRules: { commonRestrictions: "Common topic restrictions", commonRestrictionsHint: "Optional semantic restrictions for this Guardrail. Review and edit the topics before applying. Existing entries are retained.", addCommonRestrictions: "Add to denylist", allow: "Allowlist Rule", deny: "Denylist Rule", independent: "Enable each Rule independently. Denylist matches always take priority. Keep at least one Rule enabled, or remove this Policy.", denyHint: "Reject requests matching any denied topic, even if they also match the Allowlist.", allowHint: "Define allowed topics and choose how to handle unmatched requests.", disabled: "Disabled. This Rule is not executed; its configuration is retained for reuse.", helper: "Generate Rule configuration from intent or documents", helperHint: "Describe what is allowed and what is denied. AI suggestions only fill this Policy’s lists when applied; Rule switches and other Policies stay unchanged.", upgrade: "Use independent Allowlist and Denylist Rules", upgradeHint: "Upgrade this draft to Topic Control v2. Existing lists are copied into Rule parameters; save to apply the change." },
   validationReadiness: {
     blockedTitle: "Draft cannot run tests: model dependencies are not ready",
     warningTitle: "Draft dependency check needs attention",
@@ -45,8 +45,8 @@ export const protectionEn = {
     advanced: "Advanced settings · output delivery & execution order", orderHint: "Policies keep their Profile or selection order unless you reorder them below.",
     toReview: "Review draft", editProtections: "Edit protections",
     presetHint: "Choose an industry or use case to load its default Profile. Review the enabled protections below, then adjust them in the next step.",
-    switchHint: "You already have selected Policies. Add only missing Policies and keep your settings, or replace the selection with this Profile. Topic boundaries are preserved.",
-    addPreset: "Add missing Policies", replacePreset: "Replace selection", undoPreset: "Undo Profile change", undone: "Previous selection restored.", resolvePreset: "Choose how to apply this Profile",
+    switchHint: "You already have selected Policies. Add missing Policies and Rules for the same Policy version, keeping your settings and order, or replace the selection with this Profile. Validate the combined selection before publishing. Topic boundaries are preserved.",
+    addPreset: "Add missing Policies & Rules", replacePreset: "Replace selection", undoPreset: "Undo Profile change", undone: "Previous selection restored.", resolvePreset: "Choose how to apply this Profile",
   },
 
   catalogLoading: "Loading Policy details. Your selections are preserved; creation will be available after the catalog is checked.",
@@ -65,7 +65,7 @@ export const protectionEn = {
     retry: "Retry assignment status", configure: "Configure detector assignments (new tab)",
     checked: "Configuration revision {{revision}} · report timestamp {{time}}",
     states: { active: "Activated assignment", activating: "Activation in progress", validated: "Validated · not activated", failed: "Validation failed", unverified: "Rail validation required", missing: "Not assigned" },
-    capabilities: { content_safety: "Content safety", jailbreak: "Jailbreak detection", topic_control: "Topic control", company_policy: "Company policy", pii_semantic: "Semantic PII", contextual_grounding: "Answer grounding", automated_reasoning: "Business rule reasoning" },
+    capabilities: { content_safety: "Content safety", jailbreak: "Jailbreak detection", topic_control: "Topic control", pii_semantic: "Semantic PII", contextual_grounding: "Answer grounding", automated_reasoning: "Business rule reasoning" },
   },
   phrases: {
     useEntryActions: "Phrase actions",
@@ -123,7 +123,7 @@ export const protectionEn = {
 };
 
 export const protectionZh = {
-  topicRules: { allow: "白名单 Rule", deny: "黑名单 Rule", independent: "两条 Rule 可独立启用，黑名单命中始终优先。至少启用一条 Rule，或移除这条 Policy。", denyHint: "命中任一拒绝话题时直接阻止，即使同时命中白名单。", allowHint: "定义允许的话题，并选择如何处理未匹配的请求。", disabled: "已关闭。不会执行此 Rule，保留配置供下次启用。", helper: "从意图或文档生成 Rule 配置", helperHint: "描述允许什么、拒绝什么。应用 AI 建议只填充当前 Policy 的名单，不会改变 Rule 开关或其他 Policy。", upgrade: "改用独立的白名单与黑名单 Rule", upgradeHint: "将当前草稿升级为 Topic Control v2，已有名单复制到 Rule 参数中，保存后生效。" },
+  topicRules: { commonRestrictions: "常用话题限制", commonRestrictionsHint: "当前 Guardrail 可选用的语义话题限制。应用前请检查并按业务调整，已有条目会保留。", addCommonRestrictions: "添加到黑名单", allow: "白名单 Rule", deny: "黑名单 Rule", independent: "两条 Rule 可独立启用，黑名单命中始终优先。至少启用一条 Rule，或移除这条 Policy。", denyHint: "命中任一拒绝话题时直接阻止，即使同时命中白名单。", allowHint: "定义允许的话题，并选择如何处理未匹配的请求。", disabled: "已关闭。不会执行此 Rule，保留配置供下次启用。", helper: "从意图或文档生成 Rule 配置", helperHint: "描述允许什么、拒绝什么。应用 AI 建议只填充当前 Policy 的名单，不会改变 Rule 开关或其他 Policy。", upgrade: "改用独立的白名单与黑名单 Rule", upgradeHint: "将当前草稿升级为 Topic Control v2，已有名单复制到 Rule 参数中，保存后生效。" },
   validationReadiness: {
     blockedTitle: "当前草稿无法运行测试：模型依赖未就绪",
     warningTitle: "当前草稿的依赖检查需要注意",
@@ -169,8 +169,8 @@ export const protectionZh = {
     advanced: "高级设置 · 输出方式与执行顺序", orderHint: "默认保留 Profile 或选择时的 Policy 顺序，也可以在下方手动调整。",
     toReview: "确认草稿", editProtections: "修改防护配置",
     presetHint: "选择行业或使用场景，加载对应的默认 Profile。下方展示预启用的防护，下一步可逐项调整。",
-    switchHint: "已有选中的 Policy。可以仅追加缺少的 Policy 并保留现有配置，或用此 Profile替换所选项。业务主题范围会保留。",
-    addPreset: "追加缺少的 Policy", replacePreset: "替换所选项", undoPreset: "撤销 Profile 更改", undone: "已恢复之前的选择。", resolvePreset: "选择 Profile 的应用方式",
+    switchHint: "已有选中的 Policy。可以追加缺少的 Policy 和同版本下未选择的 Rule，保留现有配置及顺序；也可以用此 Profile 替换所选项。组合后须重新验证再发布。业务主题范围会保留。",
+    addPreset: "追加缺少的 Policy 和 Rule", replacePreset: "替换所选项", undoPreset: "撤销 Profile 更改", undone: "已恢复之前的选择。", resolvePreset: "选择 Profile 的应用方式",
   },
 
   catalogLoading: "正在加载 Policy 详情。你的选择已保留，检查完策略库后才能创建草稿。",
@@ -189,7 +189,7 @@ export const protectionZh = {
     retry: "重试绑定状态", configure: "配置检测器绑定（新标签页）",
     checked: "配置修订 {{revision}} · 报告时间 {{time}}",
     states: { active: "绑定已激活", activating: "正在激活", validated: "已验证 · 未激活", failed: "验证失败", unverified: "需要 Rail 验证", missing: "未绑定" },
-    capabilities: { content_safety: "内容安全", jailbreak: "越狱检测", topic_control: "话题范围", company_policy: "公司策略", pii_semantic: "语义 PII", contextual_grounding: "回答依据核查", automated_reasoning: "业务规则推理" },
+    capabilities: { content_safety: "内容安全", jailbreak: "越狱检测", topic_control: "话题范围", pii_semantic: "语义 PII", contextual_grounding: "回答依据核查", automated_reasoning: "业务规则推理" },
   },
   phrases: {
     useEntryActions: "使用词语动作",

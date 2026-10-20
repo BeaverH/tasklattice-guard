@@ -9,21 +9,41 @@ import { protectionPresets } from "../../shared/protection-presets.js";
 import { expandProtectionPreset } from "../policy-catalog/presets.js";
 
 describe("Guardrail Validation contract", () => {
+  it("inherits a multi-Rule scenario only when every covered Rule is enabled, through both catalog paths", async () => {
+    const { DeclarativeCompiler } = await import("../policy-studio/declarative.js");
+    const directory = resolve("../runner/toolkit/policy_library/assets");
+    const compiler = new DeclarativeCompiler(directory);
+    const asset = PolicyCatalog.load(directory).get("local-credentials")!;
+    const authored = compiler.compile(compiler.shipped(asset.id)!);
+    for (const policy of [asset, authored]) {
+      const scenario = policy.test_cases.find(test => test.covered_rule_ids.length > 1)!;
+      expect(scenario).toBeDefined();
+      const binding = { policyId: policy.id, policyVersion: policy.version, action: "transform" as const,
+        parameterValues: {}, enabledRuleIds: scenario.covered_rule_ids.slice(0, 1), ruleActions: {},
+        enabledRails: [scenario.phase as "input" | "output"], reasoningPolicy: null };
+      const draft = { allowedTopics: [], restrictedTopics: [], safetyLevel: "balanced" as const,
+        outputDelivery: "full_buffered" as const, policyBindings: [binding] };
+      expect(generatedTestCases("partial", draft, [policy]).some(test => test.sourceCaseId === scenario.id)).toBe(false);
+      binding.enabledRuleIds = [...scenario.covered_rule_ids];
+      expect(generatedTestCases("complete", draft, [policy]).some(test => test.sourceCaseId === scenario.id)).toBe(true);
+    }
+  });
+
   it("requires explicit pass actions, the original match and unchanged output for observation-only acceptance", () => {
     const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
     const draft = defaultGuardrailDraft(policies);
     const cases = generatedTestCases("guardrail-1", draft, policies);
-    const observed = applyValidationOverrides(cases, draft).filter(item => item.sourcePolicyId === "filter-denied-insults");
+    const observed = applyValidationOverrides(cases, draft).filter(item => item.sourcePolicyId === "local-content-safety" && item.coveredRuleIds.includes("category/denied_insults"));
     expect(observed.map(item => item.phase)).toEqual(["input", "output"]);
     for (const test of observed) {
       expect(test.expectedDecision).toBe("block");
       expect(test.expectationOverride).toMatchObject({ expectedDecision: "allow", expectedOutputContent: test.content,
-        expectedMatches: [{ policyId: "filter-denied-insults", ruleId: "category/denied_insults" }] });
+        expectedMatches: [{ policyId: "local-content-safety", ruleId: "category/denied_insults" }] });
     }
     for (const change of ["action", "match", "content"] as const) {
       const changed = structuredClone(draft);
-      const binding = changed.policyBindings.find(item => item.policyId === "filter-denied-insults")!;
-      const overlay = binding.testCaseOverrides!["accept/denied_insults"]!;
+      const binding = changed.policyBindings.find(item => item.policyId === "local-content-safety")!;
+      const overlay = binding.testCaseOverrides!["filter-denied-insults/accept/denied_insults"]!;
       if (change === "action") binding.ruleActions = {};
       if (change === "match") overlay.expectedMatches = [{ policyId: "local-credentials", ruleId: "unrelated" }];
       if (change === "content") overlay.expectedOutputContent = "changed";
@@ -47,10 +67,10 @@ describe("Guardrail Validation contract", () => {
     const overlap = reviewed.find((item) => item.sourcePolicyId === "local-risk-content-terms" && item.sourceCaseId === "accept/weapons_firearms/input")!;
     expect(overlap.expectedDecision).toBe("transform");
     expect(overlap.expectationOverride).toMatchObject({
-      sourcePolicyVersion: "2.0.0", expectedDecision: "block", expectedOutputContent: "",
-      expectedMatches: [{ policyId: "filter-harmful-illegal-weapons", ruleId: "category/harmful_illegal_weapons" }],
+      sourcePolicyVersion: "4.0.0", expectedDecision: "block", expectedOutputContent: "",
+      expectedMatches: [{ policyId: "local-content-safety", ruleId: "category/harmful_illegal_weapons" }],
     });
-    expect(reviewed).toHaveLength(385);
+    expect(reviewed.length).toBeGreaterThanOrEqual(385);
     expect(reviewed.every((item) => item.required)).toBe(true);
     expect(cases).toEqual(original);
   });

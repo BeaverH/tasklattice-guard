@@ -1,6 +1,6 @@
 import { hasPermission } from "../../shared/rbac";
 import { SecuritySeverityBadge } from "@/components/security-severity";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
@@ -41,7 +41,9 @@ import { PolicyCompliancePanel } from "@/components/policy-compliance";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryKeys } from "@/features/query-keys";
 import { useAuth } from "@/lib/auth";
-import { deleteProgrammablePolicy, getPolicies, getPolicy, type ProgrammablePolicy, type Policy, type PolicyRule, type PolicyTag } from "@/lib/api";
+import { deletePolicy, getPolicies, getPolicy, getGuardrailProfiles, type ProgrammablePolicy, type Policy, type PolicyRule, type PolicyTag } from "@/lib/api";
+import { catalogDirectories, collectionAsPolicy, policyCollections, type CatalogItem, type PolicyCollection } from "@/lib/policy-collections";
+import { CreateGuardrailWizard } from "./create-guardrail-wizard";
 import {
   parsePolicyPackage,
   policyPackageFilename,
@@ -51,9 +53,10 @@ import {
 } from "@/lib/policy-transfer";
 import { cn } from "@/lib/utils";
 import { protectionDirectories, type ProtectionDirectoryId } from "../../shared/protection-map";
-import { declaredPolicyDirectory, policyDirectory } from "@/lib/protection-composition";
+import { declaredPolicyDirectory } from "@/lib/protection-composition";
 import { boundPolicy } from "@/lib/bound-policy";
 
+const POLICY_CARD_CLASS = "group flex min-w-0 flex-col rounded-xl border bg-card p-4 shadow-xs transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-sm";
 const EMPTY_POLICIES: Policy[] = [];
 const HIDDEN_POLICY_TAG_NAMESPACES = new Set(["engine", "scope", "stage", "implementation", "rail", "protection", "guardrail_category", "collection", "domain"]);
 const HIDDEN_POLICY_FACET_NAMESPACES = new Set(["implementation", "rail", "protection", "guardrail_category", "collection", "domain"]);
@@ -76,12 +79,18 @@ const JURISDICTION_FLAGS: Record<string, string> = {
 export function PolicyLibraryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const searchParams = useSearch({ strict: false }) as { policy?: string; version?: string };
+  const searchParams = useSearch({ strict: false }) as { policy?: string; version?: string; collection?: string };
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canManage = hasPermission(user?.role, "policies", "write");
   const query = useQuery({ queryKey: queryKeys.policies, queryFn: getPolicies });
+  const profilesQuery = useQuery({ queryKey: queryKeys.guardrailProfiles, queryFn: getGuardrailProfiles, retry: false });
   const policies = query.data?.items ?? EMPTY_POLICIES;
+  const collections = useMemo(() => policyCollections(profilesQuery.data?.items ?? [], policies).map(item => ({ ...item, name: t(`policyLibrary.collections.names.${item.id}`, { defaultValue: item.name }) })), [profilesQuery.data, policies, t]);
+  const [collectionId, setCollectionId] = useState<string | null>(null);
+  const collection = collections.find(item => item.id === collectionId) ?? null;
+  const [createFromProfile, setCreateFromProfile] = useState<string | null>(null);
+  const catalogItems: CatalogItem[] = useMemo(() => [...collections, ...policies].sort((a, b) => a.name.localeCompare(b.name)), [policies, collections]);
   const editable = (policy: Policy | null) => Boolean(policy);
   const legacyEditable = (policy: Policy | null) => Boolean(policy?.implementation === "nemo_native");
   const [declarativeId, setDeclarativeId] = useState<string | null | undefined>(undefined);
@@ -96,9 +105,10 @@ export function PolicyLibraryPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const studioOpenerRef = useRef<HTMLElement | null>(null);
   const catalogOpenerRef = useRef<HTMLElement | null>(null);
+  const collectionOpenerRef = useRef<HTMLElement | null>(null);
 
   const deleteMutation = useMutation({
-    mutationFn: (policy: Policy) => deleteProgrammablePolicy(policy.id),
+    mutationFn: (policy: Policy) => deletePolicy(policy.id),
     onSuccess: async (_, policy) => {
       if (selected?.id === policy.id) closePolicy();
       queryClient.removeQueries({ queryKey: queryKeys.policy(policy.id) });
@@ -122,9 +132,12 @@ export function PolicyLibraryPage() {
     setSelected(policy ?? null);
   }, [policies, searchParams.policy, searchParams.version]);
 
-  function openPolicy(policy: Policy) {
+  useEffect(() => { setCollectionId(searchParams.collection ?? null); }, [searchParams.collection]);
+
+  function openPolicy(policy: Policy, version?: string) {
+    setCollectionId(null);
     setSelected(policy);
-    navigate({ to: "/policy-library", search: { policy: policy.id, version: undefined }, replace: true });
+    navigate({ to: "/policy-library", search: { policy: policy.id, version }, replace: true });
   }
 
   function closePolicy() {
@@ -132,9 +145,13 @@ export function PolicyLibraryPage() {
     navigate({ to: "/policy-library", search: { policy: undefined, version: undefined }, replace: true });
   }
 
-  const facets = useMemo(() => tagFacets(policies, directory, selectedTags, search), [policies, directory, selectedTags, search]);
-  const filtered = useMemo(() => filterCatalogPolicies(policies, directory, selectedTags, search), [policies, directory, selectedTags, search]);
-  const directoryPolicies = useMemo(() => filterCatalogPolicies(policies, null, selectedTags, search), [policies, selectedTags, search]);
+  function closeCollection() {
+    setCollectionId(null);
+    navigate({ to: "/policy-library", search: { policy: undefined, version: undefined }, replace: true });
+  }
+  const facets = useMemo(() => tagFacets(catalogItems, directory, selectedTags, search), [catalogItems, directory, selectedTags, search]);
+  const filtered = filterCatalogPolicies(catalogItems, directory, selectedTags, search);
+  const directoryPolicies = useMemo(() => filterCatalogPolicies(catalogItems, null, selectedTags, search), [catalogItems, selectedTags, search]);
   const activeCount = selectedTags.size + Number(Boolean(directory));
   function clearFilters() { setDirectory(null); setSelectedTags(new Set()); }
   const filterPanel = <CatalogFilters policies={directoryPolicies} facets={facets} directory={directory} onDirectoryChange={setDirectory} selected={selectedTags} onChange={setSelectedTags} onClear={clearFilters} />;
@@ -210,11 +227,14 @@ export function PolicyLibraryPage() {
           />
         </label>
         <div className="flex flex-wrap items-center gap-4">
-          <p className="shrink-0 text-xs text-muted-foreground" aria-live="polite">{t("policyLibrary.catalogResults", { shown: filtered.length, total: policies.length })}</p>
+          <p className="shrink-0 text-xs text-muted-foreground" aria-live="polite">{t("policyLibrary.catalogResults", { shown: filtered.length, total: catalogItems.length })}</p>
         </div>
       </div>
 
-      {query.error ? <div className="mt-5"><ErrorNotice error={query.error} /></div> : null}
+      {query.error ? <div className="mt-5"><ErrorNotice error={query.error} /><Button variant="outline" onClick={() => void query.refetch()}>{t("protection.retryCatalog")}</Button></div> : null}
+      {profilesQuery.error ? <div className="mt-5" role="alert"><p className="text-sm">{t("policyLibrary.collections.loadFailed")}</p><Button variant="outline" onClick={() => void profilesQuery.refetch()}>{t("policyLibrary.collections.retry")}</Button></div> : null}
+      {profilesQuery.isLoading ? <p role="status" className="mt-4 text-sm text-muted-foreground">{t("policyLibrary.collections.loading")}</p> : null}
+      {searchParams.collection && profilesQuery.isSuccess && query.isSuccess && !collection ? <div role="alert" className="mt-4"><p>{t("policyLibrary.collections.notFound")}</p><Button variant="outline" onClick={closeCollection}>{t("common.close")}</Button></div> : null}
       {searchParams.version && searchParams.policy && query.isSuccess && !selected ? <div role="alert" className="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
         <span className="min-w-0 flex-1 break-words">{t("protection.pinnedVersionUnavailable", { name: `${searchParams.policy}@${searchParams.version}` })}</span>
         <Button className="min-h-11" variant="outline" onClick={closePolicy}>{t("common.close")}</Button>
@@ -243,33 +263,44 @@ export function PolicyLibraryPage() {
 
             {filtered.length ? (
               <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" aria-label={t("policyLibrary.catalogLabel")}>
-                {filtered.map((policy) => (
+                {filtered.map(item => "profile" in item ? (
+                  <CollectionCard key={`profile:${item.id}`} collection={item} onOpen={trigger => {
+                    collectionOpenerRef.current = trigger; setCollectionId(item.id); setSelected(null);
+                    navigate({ to: "/policy-library", search: { policy: undefined, version: undefined, collection: item.id }, replace: true });
+                  }} />
+                ) : (
                   <PolicyCard
-                    key={policy.id}
-                    policy={policy}
-                    onOpen={trigger => { catalogOpenerRef.current = trigger; openPolicy(policy); }}
-                    onExport={legacyEditable(policy) ? () => exportPolicy(policy) : undefined}
-                    onDelete={canManage && legacyEditable(policy) ? () => requestPolicyDelete(policy) : undefined}
+                    key={`policy:${item.id}`}
+                    policy={item}
+                    onOpen={trigger => { catalogOpenerRef.current = trigger; openPolicy(item); }}
+                    onExport={legacyEditable(item) ? () => exportPolicy(item) : undefined}
+                    onDelete={canManage && item.deletable ? () => requestPolicyDelete(item) : undefined}
                   />
                 ))}
               </div>
-            ) : (
+            ) : !profilesQuery.isLoading && !profilesQuery.isError && !query.isError ? (
               <div className="flex min-h-80 flex-col items-center justify-center rounded-xl border border-dashed bg-card px-6 text-center">
                 <Workflow className="size-8 text-muted-foreground" />
                 <h2 className="mt-3 text-sm font-semibold">{t("policyLibrary.noCatalogResults")}</h2>
                 <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">{t("policyLibrary.noCatalogResultsDescription")}</p>
                 <Button className="mt-4" variant="outline" onClick={() => { setSearch(""); setSelectedTags(new Set()); setDirectory(null); }}><RotateCcw />{t("policyLibrary.resetCatalog")}</Button>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       )}
+
+      {collection ? <CollectionDetail collection={collection} returnFocusRef={collectionOpenerRef} onClose={closeCollection}
+        onUse={hasPermission(user?.role, "guardrails", "write") && query.isSuccess && profilesQuery.isSuccess ? () => { closeCollection(); setCreateFromProfile(collection.id); } : undefined} /> : null}
+      {createFromProfile ? <CreateGuardrailWizard open initialProfileId={createFromProfile} returnFocusRef={collectionOpenerRef}
+        onOpenChange={open => { if (!open) setCreateFromProfile(null); }}
+        onCreated={id => { setCreateFromProfile(null); navigate({ to: "/guardrails/$guardrailId", params: { guardrailId: id } }); }} /> : null}
 
       <PolicyDetail
         policy={selected}
         onClose={closePolicy}
         onExport={!searchParams.version && legacyEditable(selected) ? exportPolicy : undefined}
-        onDelete={!searchParams.version && canManage && legacyEditable(selected) ? requestPolicyDelete : undefined}
+        onDelete={!searchParams.version && canManage && selected?.deletable ? requestPolicyDelete : undefined}
         onEdit={!searchParams.version && canManage && editable(selected) ? (policy, trigger) => { studioOpenerRef.current = policy.implementation === "rules" ? catalogOpenerRef.current : trigger; setPolicyImport(null); if (policy.implementation === "rules") { setImportedDefinition(undefined); setDeclarativeId(policy.id); closePolicy(); } else setStudioPolicy(policy.implementation_detail ?? null); } : undefined}
       />
       <DeletePolicyDialog
@@ -300,8 +331,23 @@ export function PolicyLibraryPage() {
   );
 }
 
+function CollectionCard({ collection, onOpen }: { collection: PolicyCollection; onOpen: (trigger: HTMLElement) => void }) {
+  const { t } = useTranslation();
+  return <PolicyCard policy={collectionAsPolicy(collection)} onOpen={onOpen}
+    notice={collection.unavailable.length ? <p className="mt-2 text-xs text-destructive">{t("policyLibrary.collections.incomplete")}</p> : undefined} />;
+}
+
+export function CollectionDetail({ collection, onClose, onUse, returnFocusRef }: {
+  collection: PolicyCollection; onClose: () => void; onUse?: () => void; returnFocusRef: RefObject<HTMLElement | null>;
+}) {
+  const { t } = useTranslation();
+  return <PolicyDetail policy={collectionAsPolicy(collection)} onClose={onClose} returnFocusRef={returnFocusRef}
+    notice={collection.unavailable.length ? <div role="alert" className="mt-4 text-sm text-destructive"><p>{t("policyLibrary.collections.incomplete")}</p><ul className="mt-2 list-disc pl-5">{collection.unavailable.map(id => <li key={id}>{id}</li>)}</ul></div> : undefined}
+    footer={<><Button variant="outline" onClick={onClose}>{t("common.close")}</Button>{onUse ? <Button disabled={Boolean(collection.unavailable.length) || !collection.ruleCount} onClick={onUse}>{t("policyLibrary.collections.use")}</Button> : null}</>} />;
+}
+
 export function CatalogFilters({ policies, facets, directory, onDirectoryChange, selected, onChange, onClear }: {
-  policies: Policy[]; facets: Map<string, CatalogFacetTag[]>; directory: ProtectionDirectoryId | null;
+  policies: CatalogItem[]; facets: Map<string, CatalogFacetTag[]>; directory: ProtectionDirectoryId | null;
   onDirectoryChange: (value: ProtectionDirectoryId | null) => void; selected: Set<string>;
   onChange: (value: Set<string>) => void; onClear: () => void;
 }) {
@@ -312,14 +358,14 @@ export function CatalogFilters({ policies, facets, directory, onDirectoryChange,
       <h2 className="flex items-center gap-2 text-sm font-semibold"><SlidersHorizontal className="size-4 text-muted-foreground" />{t("policyLibrary.filters")}{count ? <span className="text-xs tabular-nums text-primary">{count}</span> : null}</h2>
       <Button size="sm" variant="ghost" className="min-h-11 px-2 text-xs text-muted-foreground" disabled={!count} onClick={onClear}>{t("policyLibrary.clearFilters")}</Button>
     </div>
-    <ProtectionDirectoryNav policies={policies} value={directory} onChange={onDirectoryChange} />
     <TagFilters facets={facets} selected={selected} onChange={onChange} />
+    <ProtectionDirectoryNav policies={policies} value={directory} onChange={onDirectoryChange} />
   </div>;
 }
 
-function ProtectionDirectoryNav({ policies, value, onChange }: { policies: Policy[]; value: ProtectionDirectoryId | null; onChange: (value: ProtectionDirectoryId | null) => void }) {
+function ProtectionDirectoryNav({ policies, value, onChange }: { policies: CatalogItem[]; value: ProtectionDirectoryId | null; onChange: (value: ProtectionDirectoryId | null) => void }) {
   const { t } = useTranslation();
-  const items = protectionDirectories.map((directory) => ({ id: directory.id, label: t(`protection.directories.${directory.id}`), count: policies.filter((policy) => policyDirectory(policy) === directory.id).length }));
+  const items = protectionDirectories.map((directory) => ({ id: directory.id, label: t(`protection.directories.${directory.id}`), count: policies.filter((policy) => catalogDirectories(policy).includes(directory.id)).length }));
   return <details open className="group border-t py-3">
     <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
       {t("protection.overview")}<ChevronDown className="size-3.5 text-muted-foreground group-open:rotate-180" />
@@ -364,14 +410,13 @@ export function TagFilters({ facets, selected, onChange }: { facets: Map<string,
   </div>;
 }
 
-export function PolicyCard({ policy, onOpen, onExport, onDelete }: { policy: Policy; onOpen: (trigger: HTMLElement) => void; onExport?: () => void; onDelete?: () => void }) {
+export function PolicyCard({ policy, onOpen, onExport, onDelete, notice }: { policy: Policy; onOpen: (trigger: HTMLElement) => void; onExport?: () => void; onDelete?: () => void; notice?: ReactNode }) {
   const { t } = useTranslation();
   const directory = declaredPolicyDirectory(policy);
   return (
-    <article className="group flex min-w-0 flex-col rounded-xl border bg-card p-4 shadow-xs transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-sm">
+    <article className={POLICY_CARD_CLASS}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <h3 className="line-clamp-2 min-w-0 flex-1 text-sm leading-5 font-semibold">{policy.name}</h3>
-        {policy.protection ? <Badge variant="secondary">{t(`protection.directories.${policy.protection.directory}`)}</Badge> : null}
         {policy.version === "0" ? <Badge variant="outline">Draft</Badge> : null}
       </div>
       <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">{policy.description}</p>
@@ -393,6 +438,7 @@ export function PolicyCard({ policy, onOpen, onExport, onDelete }: { policy: Pol
           </div>
         </div>
       </div>
+      {notice}
     </article>
   );
 }
@@ -401,7 +447,11 @@ function Metric({ label, value }: { label: string; value: number }) {
   return <div className="inline-flex items-baseline gap-1.5"><span className="text-muted-foreground">{label}</span><strong className="font-mono font-medium">{value}</strong></div>;
 }
 
-export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete }: { policy: Policy | null; onClose: () => void; onEdit?: (policy: Policy, trigger: HTMLButtonElement) => void; onExport?: (policy: Policy) => void; onDelete?: (policy: Policy) => void }) {
+export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete, notice, footer, returnFocusRef }: {
+  policy: Policy | null; onClose: () => void; onEdit?: (policy: Policy, trigger: HTMLButtonElement) => void;
+  onExport?: (policy: Policy) => void; onDelete?: (policy: Policy) => void;
+  notice?: ReactNode; footer?: ReactNode; returnFocusRef?: RefObject<HTMLElement | null>;
+}) {
   const { t } = useTranslation();
   if (!policy) return null;
   return (
@@ -412,7 +462,8 @@ export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete }: { 
       title={policy.name}
       description={policy.description}
       width="xl"
-      footer={<>{onDelete ? <Button className="mr-auto" variant="destructive" onClick={() => onDelete(policy)}><Trash2 />{t("policyLibrary.deleteAction")}</Button> : null}{onExport ? <Button variant="outline" onClick={() => onExport(policy)}><Download />{t("policyStudio.exportPolicy")}</Button> : null}{onEdit ? <Button variant="edit" onClick={(event) => onEdit(policy, event.currentTarget)}>{t("policyLibrary.editPolicy")}</Button> : <Button variant="outline" onClick={onClose}>{t("common.close")}</Button>}</>}
+      returnFocusRef={returnFocusRef}
+      footer={footer ?? <>{onDelete ? <Button className="mr-auto" variant="destructive" onClick={() => onDelete(policy)}><Trash2 />{t("policyLibrary.deleteAction")}</Button> : null}{onExport ? <Button variant="outline" onClick={() => onExport(policy)}><Download />{t("policyStudio.exportPolicy")}</Button> : null}{onEdit ? <Button variant="edit" onClick={(event) => onEdit(policy, event.currentTarget)}>{t("policyLibrary.editPolicy")}</Button> : <Button variant="outline" onClick={onClose}>{t("common.close")}</Button>}</>}
     >
       <div className="flex flex-wrap gap-2">
         {policy.protection ? <Badge variant="secondary">{t(`protection.directories.${policy.protection.directory}`)}</Badge> : null}
@@ -420,6 +471,7 @@ export function PolicyDetail({ policy, onClose, onEdit, onExport, onDelete }: { 
         {visiblePolicyTags(policy.tags).map((tag) => <Badge key={tag.id} variant={tag.source === "derived" ? "outline" : "secondary"}><PolicyTagLabel tag={tag} /></Badge>)}
       </div>
 
+      {notice}
       <Tabs key={`${policy.id}@${policy.version}`} defaultValue="policy" className="mt-5">
         <div className="overflow-x-auto">
           <TabsList aria-label={t("policyLibrary.detailViews")} className="min-w-max">
@@ -550,7 +602,7 @@ function normalizeCatalogTag(tag: PolicyTag): PolicyTag {
     ? { ...tag, id: "jurisdiction:sg", value: "sg" } : tag;
 }
 
-export function filterCatalogPolicies(policies: Policy[], directory: ProtectionDirectoryId | null, selected: Set<string>, search = "") {
+export function filterCatalogPolicies<T extends CatalogItem>(policies: T[], directory: ProtectionDirectoryId | null, selected: Set<string>, search = "") {
   const groups = new Map<string, string[]>();
   for (const id of selected) {
     const namespace = id.split(":")[0];
@@ -558,14 +610,14 @@ export function filterCatalogPolicies(policies: Policy[], directory: ProtectionD
   }
   const words = search.trim().toLocaleLowerCase();
   return policies.filter((policy) => {
-    if (directory && policyDirectory(policy) !== directory) return false;
+    if (directory && !catalogDirectories(policy).includes(directory)) return false;
     const ids = new Set(policy.tags.map((tag) => normalizeCatalogTag(tag).id));
     if ([...groups.values()].some((group) => !group.some((id) => ids.has(id)))) return false;
     return !words || policySearchText(policy).includes(words);
   });
 }
 
-export function tagFacets(policies: Policy[], directory: ProtectionDirectoryId | null = null, selected = new Set<string>(), search = "") {
+export function tagFacets(policies: CatalogItem[], directory: ProtectionDirectoryId | null = null, selected = new Set<string>(), search = "") {
   const facets = new Map<string, Map<string, CatalogFacetTag>>();
   for (const policy of policies) {
     for (const tag of new Map(visiblePolicyTags(policy.tags).map(normalizeCatalogTag).map((tag) => [tag.id, tag])).values()) {
@@ -623,7 +675,9 @@ function facetOrder(namespace: string) {
   return index === -1 ? POLICY_FACET_ORDER.length : index;
 }
 
-function policySearchText(policy: Policy) {
+function policySearchText(policy: CatalogItem) {
+  if ("profile" in policy) return [policy.id, policy.name, policy.description, ...policy.tags.flatMap(tag => [tag.id, tag.label]), policy.profile.industry,
+    ...policy.groups.flatMap(group => [group.policy?.name ?? group.binding.policy_id, ...group.rules.flatMap(rule => [rule.id, rule.name, rule.description])])].join(" ").toLocaleLowerCase();
   return [
     policy.id,
     policy.name,

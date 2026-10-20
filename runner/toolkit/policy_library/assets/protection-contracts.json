@@ -10,7 +10,6 @@
     "builtin-content-safety": {"capability": "content_safety", "rails": ["input", "output"], "modelCapabilities": ["content_safety"], "requiredContext": [], "execution": "model", "outputStreaming": "incremental_check"},
     "builtin-jailbreak": {"capability": "jailbreak", "rails": ["input"], "modelCapabilities": ["jailbreak"], "requiredContext": [], "execution": "model", "outputStreaming": "not_applicable"},
     "builtin-topic-safety": {"capability": "topic_control", "rails": ["input"], "modelCapabilities": ["topic_control"], "requiredContext": ["allowed_topics"], "execution": "local_then_model", "outputStreaming": "not_applicable"},
-    "builtin-company-policy": {"capability": "company_policy", "rails": ["input"], "modelCapabilities": ["company_policy"], "requiredContext": ["allowed_topics"], "execution": "model", "outputStreaming": "not_applicable"},
     "builtin-pii": {"capability": "pii", "rails": ["input", "output"], "modelCapabilities": ["pii_semantic"], "requiredContext": [], "execution": "local_then_model", "outputStreaming": "complete_response"},
     "builtin-contextual-grounding": {"capability": "contextual_grounding", "rails": ["output"], "modelCapabilities": ["contextual_grounding"], "requiredContext": ["query", "grounding_source"], "execution": "model", "outputStreaming": "complete_response"},
     "builtin-automated-reasoning": {"capability": "automated_reasoning", "rails": ["output"], "modelCapabilities": ["automated_reasoning"], "requiredContext": ["reasoning_policy"], "execution": "model", "outputStreaming": "complete_response"}

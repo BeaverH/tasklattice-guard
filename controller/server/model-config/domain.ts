@@ -108,7 +108,7 @@ export const providerRegistrationSchema = z.object({
 export const assignmentInputSchema = z.object({
   controlPlane: z.string().uuid().nullable(),
   bindings: z.object(
-    Object.fromEntries(capabilityBindingIds.map((id) => [id, id === "company_policy.input" ? z.string().uuid().nullable().default(null) : z.string().uuid().nullable()])) as unknown as {
+    Object.fromEntries(capabilityBindingIds.map((id) => [id, z.string().uuid().nullable()])) as unknown as {
       [Id in CapabilityBindingId]: z.ZodType<string | null>;
     },
   ),
@@ -126,7 +126,6 @@ export const profileContracts: Record<ModelProfile, readonly string[]> = {
   "tali.nemotron-safety-guard-v3.v1": ["tali.guard.content-safety.v1"],
   "tali.nemoguard-topic-control.v1": [
     "tali.guard.topic-control.semantic.v1",
-    "tali.guard.company-policy.v1",
   ],
   "tali.typesafe-jev-topic.v1": ["tali.guard.topic-control.semantic.v1"],
   "tali.openai-compatible-pii.v1": ["tali.guard.pii.semantic.v1"],
@@ -135,7 +134,6 @@ export const profileContracts: Record<ModelProfile, readonly string[]> = {
   "tali.taxonomy-judge.v1": [
     "tali.guard.taxonomy-normalization.v1",
     "tali.guard.topic-control.semantic.v1",
-    "tali.guard.company-policy.v1",
   ],
   "tali.grounding-judge.v1": ["tali.guard.contextual-grounding.v1"],
   "tali.automated-reasoning.v1": ["tali.guard.automated-reasoning.v1"],

@@ -314,7 +314,6 @@ def _split_guard_configuration() -> protocol.DataPlaneModelConfiguration:
                 profile_ref="tali.nemoguard-topic-control.v1",
                 contract_refs=[
                     "tali.guard.topic-control.semantic.v1",
-                    "tali.guard.company-policy.v1",
                 ],
             ),
             capability_binding(

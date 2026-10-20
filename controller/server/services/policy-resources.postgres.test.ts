@@ -9,6 +9,7 @@ import * as schema from "../db/schema.js";
 import { emptyPolicyDefinition } from "../../shared/policy-definition.js";
 import type { ValidationCaseResult } from "../domain/models.js";
 import { PolicyResourceService } from "./policy-resources.js";
+import { buildGuardrailPlan, normalizeGuardrailDraft } from "../domain/guardrail-plan.js";
 
 const url = process.env.GUARD_TEST_POSTGRES_URL;
 describe.skipIf(!url)("declarative Policy transactions", () => {
@@ -64,5 +65,30 @@ describe.skipIf(!url)("declarative Policy transactions", () => {
     const transform = jobs.find(j => j.tests[0].expected_decision === "transform");
     expect(transform.tests[0]).toMatchObject({ content: "beta", expected_text: "[hidden]", covered_rule_ids: ["configured/phrases/b"] });
     expect(transform.payload.plan.policy_bindings[0].enabled_rule_ids).toEqual(["configured/phrases/b"]);
+  });
+  it("uses model test values only in validation jobs and publishes reusable references", async () => {
+    const definition = service.compiler.shipped("builtin-topic-safety")!;
+    definition.metadata.id = "parameterized-topic";
+    definition.testing = { parameters: { denied_topics: "Synthetic test topic", allowed_topics: "Synthetic support", topic_mode: "strict" } };
+    await service.save({ definition, maintainer: "Test", expectedRevision: 0, actorId: "test", create: true });
+    const report = await service.validate(definition.metadata.id, "test", true);
+    const jobs = (await pool.query("SELECT v.id, v.tests, o.payload FROM policy_resource_validation v JOIN controller_outbox o ON o.id=v.id WHERE v.parent_id=$1", [report.id])).rows;
+    expect(jobs).toHaveLength(2);
+    expect(jobs.flatMap(j => j.payload.plan.steps).some(step => Object.fromEntries(step.parameters).restricted_topics === "Synthetic test topic")).toBe(true);
+    for (const job of jobs) {
+      await service.complete({ runId: job.id, status: "passed", results: job.tests.map((test: { id: string; expected_decision: string; covered_rule_ids: string[] }) => ({
+        caseId: test.id, actualDecision: test.expected_decision, passed: true, sourcePolicyId: definition.metadata.id, modelInvocations: 1,
+        findings: test.covered_rule_ids.map(rule_id => ({ rule_id, policy_id: definition.metadata.id, verdict: "matched" })),
+      } as ValidationCaseResult)) });
+    }
+    const published = await service.publish(definition.metadata.id, 1, "test");
+    expect(published.definition?.rules[0]!.detector.parameters.restricted_topics).toBe("{{denied_topics}}");
+    const plan = buildGuardrailPlan({ guardrailId: "live-binding", guardrailVersion: "1", policies: [published], draft: normalizeGuardrailDraft({ policyBindings: [{ policyId: published.id, policyVersion: published.version, enabledRuleIds: published.rules.map(r => r.id), parameterValues: { denied_topics: "Business restriction", allowed_topics: "Business support" } }] }) });
+    const parameters = (plan.steps as Array<{ parameters: Array<[string, string]> }>).map(s => Object.fromEntries(s.parameters));
+    expect(parameters.some(p => p.restricted_topics === "Business restriction")).toBe(true);
+    expect(JSON.stringify(parameters)).not.toContain("Synthetic");
+    definition.testing.parameters.denied_topics = "Changed example";
+    await service.save({ definition, maintainer: "Test", expectedRevision: 1, actorId: "test" });
+    expect((await service.publish(definition.metadata.id, 1, "test")).definition?.testing?.parameters.denied_topics).toBe("Synthetic test topic");
   });
 });

@@ -182,12 +182,12 @@ const configuredRequiredBinding = {
   parameter_values: { brand_name: "TaskLattice Air", competitors: "Example Air" },
 } satisfies GuardrailPolicyBinding;
 
-function renderWizard() {
+function renderWizard(initialProfileId?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const onCreated = vi.fn();
   const tree = () => (
       <QueryClientProvider client={client}>
-        <CreateGuardrailWizard open onOpenChange={vi.fn()} onCreated={onCreated} />
+        <CreateGuardrailWizard open initialProfileId={initialProfileId} onOpenChange={vi.fn()} onCreated={onCreated} />
       </QueryClientProvider>
   );
   const view = render(tree());
@@ -305,6 +305,20 @@ describe("Create Guardrail wizard", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: capability }));
     fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
     await waitFor(() => expect(apiMocks.preview).toHaveBeenCalledWith(expect.objectContaining({ policy_bindings: [binding] })));
+  });
+
+  it("uses the library's selected Profile with its exact Rules instead of the General default", async () => {
+    apiMocks.getPresets.mockResolvedValue({ items: [
+      { id: "general", name: "General Profile", category: "general", categoryName: "General", isDefault: true, bindings: [binding], limitations: [] },
+      { id: "chosen-set", name: "Chosen regional set", category: "banking", categoryName: "Banking", isDefault: true, bindings: [configuredRequiredBinding], limitations: [] },
+    ] });
+    renderWizard("chosen-set");
+    expect(await screen.findByText("Profile applied · 1 Policies selected")).toBeTruthy();
+    expect(screen.getByRole("combobox").querySelector(".cds--list-box__label")?.textContent).toContain("Chosen regional set");
+    fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Regional draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review & create" }));
+    await waitFor(() => expect(apiMocks.preview).toHaveBeenCalledWith(expect.objectContaining({ policy_bindings: [configuredRequiredBinding] })));
+    expect(apiMocks.createGuardrail).not.toHaveBeenCalled();
   });
 
   it("loads the General default Profile and lists all Profiles with tags in one dropdown", async () => {
@@ -573,8 +587,8 @@ describe("Create Guardrail wizard", () => {
     expect(apiMocks.preview).not.toHaveBeenCalled();
   });
 
-  it("lets a Company Policy configure its required topics in its own business-rules step", async () => {
-    const company: Policy = { ...policy, id: "builtin-company-policy", name: "Company boundaries",
+  it("lets a custom Topic Policy configure its required business boundaries", async () => {
+    const company: Policy = { ...policy, id: "custom-support-boundaries", name: "Company boundaries",
       protection: { ...policy.protection!, directory: "business_rules", execution: "model", requiredContext: ["allowed_topics"] },
     };
     apiMocks.getPolicies.mockResolvedValue({ items: [company], count: 1 });

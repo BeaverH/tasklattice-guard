@@ -1,13 +1,12 @@
-# yaml-language-server: $schema=../../schemas/policy.schema.json
 schema_version: 2
 kind: Policy
 metadata:
   id: local-passports
   name: Passport identifiers
-  description: Redact reviewed international passport formats and context-labelled passport identifiers.
-    Format matching does not establish document validity or issuing jurisdiction.
+  description: Redact reviewed international passport formats and context-labelled passport identifiers. Format
+    matching does not establish document validity or issuing jurisdiction.
   source: built_in
-  version: 3.0.0
+  version: 4.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -17,25 +16,49 @@ metadata:
     value: pii_detection
     label: PII Detection
     source: declared
-  - namespace: collection
-    value: focused-protection
-    label: Focused protection
+  - namespace: framework
+    value: gdpr
+    label: GDPR
+    source: declared
+  - namespace: framework
+    value: pdpa
+    label: Singapore PDPA
+    source: declared
+  - namespace: jurisdiction
+    value: au
+    label: Australia
+    source: declared
+  - namespace: jurisdiction
+    value: eu
+    label: European Union
+    source: declared
+  - namespace: jurisdiction
+    value: sg
+    label: Singapore
     source: declared
   safety_level: balanced
   output_delivery: full_buffered
 parameters: []
+execution:
+  mode: sequential
+  input: previous_output
+  stop_on: block
 rules:
-- rules/pattern-passport_singapore.yaml
-- rules/pattern-passport_china.yaml
-- rules/pattern-passport_us.yaml
-- rules/pattern-passport_germany.yaml
-- rules/pattern-passport_france.yaml
-- rules/pattern-passport_netherlands.yaml
-- rules/pattern-passport_canada.yaml
-- rules/pattern-passport_india.yaml
-- rules/identity-passport.yaml
+- rules/pattern--passport_singapore.yaml
+- rules/pattern--passport_china.yaml
+- rules/pattern--passport_us.yaml
+- rules/pattern--passport_germany.yaml
+- rules/pattern--passport_france.yaml
+- rules/pattern--passport_netherlands.yaml
+- rules/pattern--passport_canada.yaml
+- rules/pattern--passport_india.yaml
+- rules/identity--passport.yaml
+- rules/au-pii-passports--passport_australia.yaml
+- rules/international-pii-identifiers--passport_uk.yaml
+- rules/international-pii-identifiers--passport_japan.yaml
+- rules/gdpr-eu-national-identifiers--eu_passport_generic.yaml
+- rules/pattern--passport_australia.yaml
+- rules/pattern--eu_passport_generic.yaml
+- rules/sg-pdpa-pii-identifiers--passport_singapore.yaml
 tests:
-- tests/local-passport-formats-acceptance.yaml
-- tests/local-passport-formats-regression.yaml
 - tests/acceptance.yaml
-- tests/regression.yaml

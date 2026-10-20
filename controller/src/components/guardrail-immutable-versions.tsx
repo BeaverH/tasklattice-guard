@@ -164,7 +164,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       </header>
       {error ? <div className="space-y-3 p-5"><ErrorNotice error={error} /><Button variant="outline" onClick={onRetry}>{t("immutableVersions.retry")}</Button></div> : null}
       {loading ? <div className="space-y-3 p-5" aria-label={t("immutableVersions.loading")}><Skeleton className="h-12" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
-        : !versions.length ? !error && <EmptyState title={t("guardrails.noPublishedVersion")} description={t("guardrails.noPublishedVersionDescription")} action={hasPermission(auth.user?.role, "guardrails", "write") ? <Button onClick={onOpenDraft}>{t("guardrails.openDraftRelease")}</Button> : undefined} />
+        : !versions.length ? !error && <EmptyState title={t("guardrails.noPublishedVersion")} description={t("guardrails.noPublishedVersionDescription")} action={!isDefault && hasPermission(auth.user?.role, "guardrails", "write") ? <Button onClick={onOpenDraft}>{t("guardrails.openDraftRelease")}</Button> : undefined} />
           : <>
             <Table>
               <TableHeader><TableRow><TableHead>{t("immutableVersions.version")}</TableHead><TableHead>{t("immutableVersions.status")}</TableHead><TableHead>{t("immutableVersions.published")}</TableHead><TableHead>{t("immutableVersions.policies")}</TableHead><TableHead>{t("immutableVersions.tests")}</TableHead><TableHead className="w-16"><span className="sr-only">{t("immutableVersions.actions")}</span></TableHead></TableRow></TableHeader>

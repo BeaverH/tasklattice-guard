@@ -112,40 +112,16 @@ const sources = {
 type SourceKey = keyof typeof sources;
 
 const industrySourceByPolicy: Partial<Record<string, SourceKey>> = {
-  "eu-ai-act-article5": "euAiAct",
-  "gdpr-eu-pii-protection": "gdpr",
-  "pdpa-singapore": "pdpa",
-  "singapore-customer-identifiers": "pdpa",
-  "singapore-data-use-boundaries": "pdpa",
-  "uae-regulatory-compliance": "uae",
-  "nsfw-content-filter-australia": "australiaOnlineSafety",
+  "local-prohibited-practices": "euAiAct",
+  "local-data-use-boundaries": "pdpa",
+  "local-professional-advice": "whoHealth",
   "local-payment-data": "pci",
-  "banking-customer-protection": "bisCustomerDueDiligence",
-  "securities-market-integrity": "asic",
-  "internet-account-abuse": "nistIdentity",
-  "china-personal-identifiers": "chinaPipl",
-  "china-banking-assistant-boundaries": "chinaFinancialAi",
-  "claims-agent-safety": "whoHealth",
-  "filter-denied-medical-advice": "whoHealth",
-  "filter-harmful-child-safety": "unicefChildren",
   "local-credentials": "owaspSensitive",
-  "local-sql-injection": "owaspSql",
-  "filter-prompt-injection-sql": "owaspSql",
-  "local-code-injection": "owaspCommand",
-  "local-rendered-content-injection": "owaspXss",
   "block-code-execution": "owaspCommand",
 };
 
 const policiesWithoutExternalMapping = new Set([
-  "builtin-company-policy",
-  "builtin-topic-safety",
-  "configured-phrase-filter",
-  "competitor-mention-detection",
-  "china-organization-identifiers",
-  "filter-denied-financial-advice",
-  "filter-denied-legal-advice",
-  "keyword-blocking",
-  "topic-filtering",
+  "builtin-topic-safety", "configured-phrase-filter", "competitor-mention-detection", "keyword-blocking",
 ]);
 
 function contextualSources(policy: PolicyInput): SourceKey[] {

@@ -396,19 +396,20 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
   }
 
   it("keeps a catalog version this installation no longer ships as a read-only version of that Policy", async () => {
+    const importedVersion = PolicyCatalog.load(catalogDir).get("local-network-addresses")!.version;
     const next = await installationWith("next", policy => { policy.version = "2.1.0"; });
     try {
       const { bytes } = await uat.packages.exportPackage(guardrailId, [published[0]!]);
       const preview = await next.service.packages.inspectUpload(bytes, "admin");
-      expect(preview.policies.find(node => node.id === "local-network-addresses")).toMatchObject({ version: "2.0.0", state: "new" });
+      expect(preview.policies.find(node => node.id === "local-network-addresses")).toMatchObject({ version: importedVersion, state: "new" });
       await next.service.packages.importPackage(preview.packageId, { actorId: "admin" });
       const { rows } = await next.database.pool.query("SELECT policy_id, version, source_id FROM policy_imported_version");
-      expect(rows).toEqual([{ policy_id: "local-network-addresses", version: "2.0.0", source_id: "tasklattice-guard" }]);
+      expect(rows).toEqual([{ policy_id: "local-network-addresses", version: importedVersion, source_id: "tasklattice-guard" }]);
       // The Library lists the shipped version, with the imported one as a pinned, read-only version.
       const policy = (await next.service.listPolicies()).find(item => item.id === "local-network-addresses")!;
       expect(policy.version).toBe("2.1.0");
-      expect(policy.published_versions?.find(item => item.version === "2.0.0")).toMatchObject({ origin: "imported", source_id: "tasklattice-guard" });
-      expect((await next.service.getPolicy("local-network-addresses")).published_versions?.some(item => item.version === "2.0.0")).toBe(true);
+      expect(policy.published_versions?.find(item => item.version === importedVersion)).toMatchObject({ origin: "imported", source_id: "tasklattice-guard" });
+      expect((await next.service.getPolicy("local-network-addresses")).published_versions?.some(item => item.version === importedVersion)).toBe(true);
       // Importing it again finds it already here.
       expect((await next.service.packages.inspectUpload(bytes, "admin")).policies.every(node => node.state === "existing")).toBe(true);
     } finally {
@@ -474,7 +475,7 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
       expect(original).toMatchObject({ origin: "imported", draftRevision: 1, draftConfig: chosen.config.draftConfig, testCaseCount: chosen.testSuite.length });
       expect(original.versions[0]!.hasSourceSnapshot).toBe(true);
       const frozen = (await database.pool.query("SELECT plan, test_suite, inspection FROM guardrail_version WHERE guardrail_id=$1", [guardrailId])).rows;
-      // The imported 2.0.0 catalog node is usable even though this installation ships 2.1.0.
+      // The pinned imported catalog node is usable even when the local shipped version differs.
       const candidate = await service.playgroundDraftCandidate(guardrailId);
       expect(candidate.plan).toBeTruthy();
       await service.previewGuardrailPlan({ draftConfig: original.draftConfig, runtimeProfile: original.runtimeProfile });

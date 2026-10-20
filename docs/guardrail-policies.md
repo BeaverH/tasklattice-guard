@@ -8,15 +8,15 @@ for publication and rollback.
 
 ## Default protection and model requirements
 
-The Default Guardrail composes **31 complete Policies**: two model Policies
-and 29 local Policies. This supersedes the former model-free baseline.
+The Default Guardrail explicitly selects **124 Rules across 14 Policies**: two model
+Policies and 12 local Policies. Additional capability Rules remain opt-in.
 It requires compatible, validated assignments for `jailbreak.input`,
 `content_safety.input`, and `content_safety.output`. The Jailbreak binding may
 use the dedicated NemoGuard JailbreakDetect profile or another supported
 Jailbreak profile; the baseline does not hard-code a vendor or credentials. The authoritative selection is in
 [defaults.ts](../controller/server/domain/defaults.ts). Focused Policies cover
 credentials, payment data, tax/health/government identifiers, contact and
-network data, harmful phrases, and prompt/code injection. Each retains its Rules,
+network data, harmful phrases, and prompt/code injection. Selected Rules retain their matching behavior,
 actions, Rail scope, and inherited test cases; Default owns their composition
 order and reviewed test expectations. Local indirect-injection and memory-poisoning
 checks run first; `builtin-jailbreak` and `builtin-content-safety` follow on Input.
@@ -33,35 +33,75 @@ provide format/context screening, not exhaustive semantic protection. Default
 uses `full_buffered` output delivery because its transformations require the
 complete response.
 
-## Consolidated PII catalog
+## Topic and company business boundaries
 
-The current catalog contains 65 Policies. Four local PII packages are published
-at `3.0.0`: payment and regional bank identifiers (`local-payment-data`),
-government/tax/health identifiers (`local-government-identifiers`), international
-and contextual passports (`local-passports`), and basic/regional contact details
-(`local-contact-data`). Their original Rules, actions and input/output coverage
-are retained in authored order. Absorbed test IDs are prefixed with their former
-Policy ID to keep them unique. Credentials and semantic PII remain independent.
+`builtin-topic-safety` is the single model-backed Topic Control Policy. It retains
+the independent `topic/denylist` and `topic/allowlist` Rules; both resolve through
+`topic_control.input`. Denied tasks block first. Strict Allowlist mode also blocks
+unlisted tasks; permissive mode allows tasks outside either list. Allowed and
+denied tasks belong to the Policy binding, including company-specific boundaries.
 
-Airline off-topic restrictions, UAE airline passenger protection, aviation
-operations protection and travel/loyalty identifiers are no longer offered.
-The mixed Pattern Matching template is now `2.0.0` with 79 Rules; its PNR,
-Skywards and flight-number Rules are removed too. The aviation domain facet and
-IATA-only reference are removed; shared jurisdictions such as UAE remain.
+The separate Company Policy, model binding and evaluation contract are removed
+without aliases or configuration migration. Recreate any old Company Policy
+configuration using Topic Control and validate it before publication.
 
-Original PII versions are frozen under `policies/history/` and loaded solely for
-existing version pins. Retired IDs are omitted from new Policy selections.
-Existing industry Profiles retain their narrower `2.0.0` pins rather than gaining
-regional detection silently. Published Guardrail artifacts are unchanged;
-adopting merged Policies requires the ordinary draft, validation and publication
-workflow. Previously published Pattern Matching snapshots retain their contents.
+## Capability catalog and regional/industry Profiles
+
+The Policy Library presents named regional, compliance and industry sets alongside
+the shared capability Policies in one searchable catalog. Jurisdiction and framework
+filters apply to both. Sets use enabled database Profiles and show only their selected,
+versioned Rules; viewing or applying a set does not create another detector definition.
+Capability tags describe discovery coverage, while a set's scope comes from its own
+regional and framework metadata. All catalog entries share one list, card and three-tab Policy inspector (Policy, Test Cases, Compliance); labels drive discovery. The inspector lists Rules directly, without nested source Policies. Test Cases include only enabled stages and complete selected Rule coverage; compliance references retain only selected Rule IDs from matching versions. Storage reuse does not introduce another product hierarchy.
+
+The current catalog has **26 Policies and 223 Rules**, consolidated from 64 Policies
+and 405 Rule declarations. Policies own detection capabilities: content safety,
+injection, credentials, payment data, government identifiers, passports, contact
+and network data, sensitive/risk terms, fraud, data use, advice, and high-risk
+practices. The 14 consolidated local packages use version `4.0.0`. Native model
+Policies and configurable text/code filters keep their independent contracts.
+Child Safety is one Rule inside Local Content Safety, not a separate Policy.
+
+The 14 Profiles select current capability Rules for regions, languages and
+industries, including Singapore, China, Australia, EU, UAE, banking, securities,
+internet support and claims. Singapore identifiers and PDPA checks share the same
+capability owners; data-use restrictions remain distinct from identifier matching.
+General topic restrictions are an optional denylist preset within Topic Control.
+Applying it appends topics only to the current Guardrail binding, without enabling
+new Rules or changing its allowlist or mode. New configurations use semantic model
+classification; existing phrase bindings and published snapshots retain their
+reviewed behavior. Phrase filters remains available for literal matching. Profile references carry explicit Rule selection,
+Rail scope, order, parameters and reviewed composition expectations. Adding a Profile
+appends missing same-version Rules as well as missing Policies, preserving current
+actions, parameters, directions and order. Different version pins remain untouched.
+Combined selections require fresh validation and review of overlapping findings;
+individual Profile expectations are not an approval of an arbitrary combination.
+
+Exact duplicate contracts have one canonical Rule. Three older content-safety
+word lists are strict subsets of their retained Rules, with unchanged exclusions
+and handling. Variants with different context requirements, checksum validation,
+risk or redaction output remain separate. Default removes only two exact duplicate
+ABN/Medicare declarations; its ordered checks, model bindings and observation-only
+Insults override are preserved. New optional capabilities are not enabled in Default.
+
+The `0043_capability_profiles` migration updates built-in database Profiles while
+preserving disabled state and user-owned definitions. Retired mixed/regional Policy
+IDs have no new aliases. Historical assets remain available for audit and existing
+immutable publication snapshots; adopting current capabilities uses normal draft,
+validation and publication. The previously removed aviation Policies and Rules
+remain removed.
+
+The coverage oracle checks every pre-consolidation Rule contract and replays 382
+pre-consolidation local Default cases. The current package suite has 833 local
+cases and 16 model-dependent cases. All Profiles also run as complete Controller
+plans through the real Runner compiler and validator.
 
 ## Default reconciliation
 
 On Controller startup, an uncustomized Default is reconciled against the bundled
 Policy catalog when its bindings change, including Policy versions or Rule
 membership. The system queues the full inherited validation suite (currently
-385 cases) and publishes only its passed compiled candidate. Missing models or
+611 cases) and publishes only its passed compiled candidate. Missing models or
 failed validation leave the old published version intact; on a fresh installation
 there is no new executable Default until validation passes. There is no automatic
 local-only downgrade. After fixing model configuration, rerun validation. User-customized Defaults are preserved. Publishing a custom
@@ -80,8 +120,9 @@ by severity or running independent copies of the original text in parallel.
 
 ## Validation and composition expectations
 
-The bundled acceptance tests retain their original expectations and source Rule
-identity. A binding's optional `testCaseOverrides`, keyed by inherited source Case
+The bundled acceptance tests retain their original expectations, with source Rule
+identities remapped to canonical capability owners. A multi-Rule scenario is inherited
+only when all covered Rules are enabled; selected Profiles do not promise disabled checks. A binding's optional `testCaseOverrides`, keyed by inherited source Case
 ID, supplies a reviewed Guardrail composition expectation: source Policy version,
 reason, final decision, expected Policy/Rule matches, and exact complete output
 (required for transformations). A stale version, disabled expected Rule, missing
@@ -112,3 +153,18 @@ Streaming delivery depends on the selected policies. Complete-response checks
 can require buffering until the final chunk; incremental modes cannot retract
 text already released. The [gateway integration guide](gateway-integration.md)
 defines the supported modes, call association, and enforce/dry run behavior.
+
+## Model Rule parameters
+
+Policy Studio declares named parameters and references them as `{{parameter_name}}`
+in supported model Rule fields. Topic lists and mode, grounding thresholds, and
+formal policy IDs, versions and confidence thresholds can use these references.
+The detector profile remains part of the Policy contract; runtime models remain
+environment bindings. Configure business values independently on each Guardrail's
+Policy binding. Policy test parameters are isolated examples, never binding defaults.
+
+Undeclared references are rejected during authoring/compilation. Binding validation
+checks required inputs, types, threshold ranges and strict-mode allowlists before
+generating a concrete immutable execution plan. Parameters used only by disabled
+model Rules do not block other Rules. The `0044_topic_binding_parameters` migration
+removes the retired general-topic Profile without rewriting Guardrails or Default.

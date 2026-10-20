@@ -28,7 +28,7 @@ Policy 是多条 Rule 的集合，同时保存名称、描述、版本、测试�
 | `model/grounding` | 根据问题、来源材料和回复返回依据核验结果 |
 | `service/formal-verification` | 向已配置的推理服务提交版本化约束，读取证明或反例 |
 
-`profile` 固定技术适配契约，具体 Provider/Model 仍由平台绑定；不是任意聊天模型都支持每个契约。Company Policy 与 Topic Control 复用 `topic-classification`，业务含义留在 Policy 和 Rule。原 `text/category` 和竞品检测已迁为 `text/conditions` 的数据配置，不再在 Python 中维护航空业词表。
+`profile` 固定技术适配契约，具体 Provider/Model 仍由平台绑定；不是任意聊天模型都支持每个契约。公司业务边界统一由 Topic Control 的黑名单、白名单两条 Rule 表达，共用 `topic-classification` 和平台的 `topic_control.input` 模型绑定。原 `text/category` 和竞品检测已迁为 `text/conditions` 的数据配置，不再在 Python 中维护航空业词表。
 
 代码围栏与“请求执行命令”是两条独立业务 Rule。配置式短语入口在 Controller 编译时展开为普通 `text/keyword` Rules：每个条目有独立 ID、处理动作和风险等级，按顺序执行。展开后的每条 Rule 固定继承源 Rule 的等级，Guardrail 参数不能覆盖风险等级；需要不同等级时应在 Policy 中编写独立 Rule。检测器不再执行一组隐藏的处理动作。
 
@@ -220,16 +220,52 @@ ZIP 保留元数据、Rule、测试、资源与说明，附带 `manifest.json`�
 
 | 路径 | 职责 |
 | --- | --- |
-| `builtin/<policy-id>/` | 71 条当前内建 Policy，各自拥有 Rule、测试、资源 |
+| `builtin/<policy-id>/` | 26 条当前内建 Policy，各自拥有 Rule、测试、资源 |
 | `custom/<policy-id>/` | 非平台策略，使用与内建策略相同的包契约 |
 | `examples/customer-information/` | 完整开发示例，不自动加入运行目录 |
 | `catalog.yaml` | 列出平台包与生成产物的归属；自建目录由构建发现 |
 | `detectors.yaml` | 平台管理的检测器名称、版本、底层适配器 |
 | `schemas/` | 从加载模型生成的 manifest、Rule、Test JSON Schema |
 
-当前内建包包含 **455 条 Rule、875 个用例**：本地回归执行 863 个，另 12 个依赖模型。历史 Topic Control 1.0.0 放在所属 Policy 的 `history/1.0.0/`，由该 Policy 的 manifest 声明，保留产品历史版本查询，不计入当前版本回归。相同 ID／版本的重复来源已去除。
+当前内建包包含 **223 条 Rule、849 个用例**：本地回归执行 833 个，另 16 个依赖模型。历史 Topic Control 1.0.0 放在所属 Policy 的 `history/1.0.0/`，由该 Policy 的 manifest 声明，保留产品历史版本查询，不计入当前版本回归。相同 ID／版本的重复来源已去除。
 
 不要直接编辑 `runner/toolkit/policy_library/assets/` 中的生成 Catalog。`runtime_adapter` 只允许内建策略维护现有运行身份，自建 Rule 的身份由 Policy ID 与 Rule ID 生成。当前自建包支持已注册的本地检测器，不开放任意代码上传或新的模型检测器注册。八种处理指令沿用现有协议；每个适配器支持的参数与替换方式都会校验，重新生成、澄清等仍需集成方执行相应处理。
+
+### Policy、Rule 与 Profile 的边界
+
+Policy Library 在同一目录中展示具名的地区、合规与行业策略集，以及共享能力 Policy，
+保留地区和框架筛选器。策略集从已启用的数据库 Profile 读取精确的版本和 Rule 选择，
+所有条目共用卡片和 Policy／Test Cases／Compliance 三 Tab 详情，直接展示所选 Rule，
+不按来源 Policy 再嵌套一层。测试只包含已启用阶段且覆盖的 Rule 全部已选中的用例，
+合规资料只关联精确版本中的所选 Rule。底层复用不影响产品层级，分类仍只使用 Label。
+
+Policy 按检测能力组织；Rule 是可独立启用的判断。地区、语言和行业场景由
+`controller/shared/protection-presets.ts` 中的 14 个 Profile 组合，不再各复制一份检测器。
+Profile 明确选择 `enabledRuleIds`、`enabledRails`、`ruleOrder` 和参数，绑定当前能力版本。
+添加 Profile 会合并同版本下未选择的 Rule，保留现有参数、动作、方向和顺序。不同版本
+仍保留用户的版本选择；组合后的重叠检测结果须重新验证，不能直接沿用单个 Profile 的验收结论。
+例如 Child Safety 是 `local-content-safety` 中的一条 Rule；Singapore PDPA 和客户标识
+分别从标识、支付、联系方式及数据使用边界能力中选取规则，不再是重复 Policy。
+
+14 个本地能力包统一为 `4.0.0`。完全相同的检测条件、风险、动作和替换文本只保留
+一个 Rule；儿童保护、英语辱骂和种族歧视的旧词表是新词表的子集，统一到新 Rule。
+匹配上下文、校验算法、风险或脱敏结果不同的变体仍保留。通用话题限制合入 Topic Control
+黑名单的可选配置：只向当前 Guardrail 追加话题，不作为独立 Policy 或 Profile，不默认启用。
+新配置使用模型语义判断；既有短语配置和发布快照保持原行为，Phrase filters 仍可单独使用。
+
+Default 明确选择 **14 个 Policy、124 条 Rule**，不会因能力包新增 Rule 自动扩大范围。
+原来的 126 条声明中只有重复 ABN 和 Medicare 两条被去重；顺序、动作、Input/Output
+范围和 Insults 的观察行为保持不变。`jailbreak.input`、`content_safety.input`、
+`content_safety.output` 仍为必须的模型绑定，输出继续使用 `full_buffered`。
+
+数据库迁移 `0043_capability_profiles.sql` 更新平台内置 Profile 的选择，保留禁用状态及
+用户自有 Profile。运行请求仍从数据库读取 Profile；已发布 Guardrail 的不可变快照不会
+被来源整理改写。旧包不提供新选择或别名；已有历史目录仅用于历史版本和审计。
+
+回归依据保存在 `tests/fixtures/policy-capability-contracts.json`：逐一核对整理前 405 条
+Rule 的检测契约，词表合并另验子集关系；Default 还重放整理前的 382 个本地用例。
+单包用例按其覆盖的 Rule 验证，完整 Profile 和 Default 另做真实组合执行验证。
+多 Rule 用例只有在所有覆盖 Rule 均启用时才继承，避免对未选择的检查作出验收承诺。
 
 ### Rule handling contract
 
@@ -247,3 +283,15 @@ ZIP 保留元数据、Rule、测试、资源与说明，附带 `manifest.json`�
 检测命中断言只接受 `matched`。`unknown` 表示证据不足或无法判定，仍可触发
 保护性拦截，但不能满足 Rule 命中或 `expectedMatches` 断言。缺少上下文等边界
 场景应单独检查拦截行为，不应声明该输入证明了检测器命中。
+
+### 模型 Rule 参数
+
+Policy Studio 的 Rules 步骤声明参数（名称、类型、必填、可选默认值），模型字段通过
+`{{parameter_name}}` 引用。Topic Control 的话题与模式、Grounding 的阈值、形式化验证的
+策略 ID／版本／阈值均支持引用；检测器类型和模型能力仍由 Rule 声明，运行模型由环境绑定。
+具体业务值在每个 Guardrail 的 Policy 绑定中填写，不需要复制 Policy。
+
+测试页的参数只供该 Policy 的测试使用，不作为 Guardrail 默认值。保存／编译检查未声明引用，
+Guardrail 验证／发布检查必填项、类型、阈值范围和 strict 模式的白名单，生成包含实际值的
+不可变执行计划。只被关闭的模型 Rule 引用的参数不会阻塞其余 Rule。
+`0044_topic_binding_parameters` 只删除旧通用话题 Profile，不改动既有 Guardrail 和 Default。

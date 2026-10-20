@@ -23,6 +23,22 @@ function toRules() { fill("Policy name", "Topic boundary"); click("common.next")
 function goStep(name: RegExp) { fireEvent.click(screen.getByRole("tab", { name })); }
 
 describe("Declarative Policy Studio stepper", () => {
+  it("renames a declaration and keeps Rule references and test values linked", async () => {
+    api.mockImplementation(async (_path: string, options?: RequestInit) => ({ id: "renamed", revision: 1, definition: options?.body ? JSON.parse(String(options.body)).definition : undefined }));
+    show(); toRules(); select("Detector", "model/classifier"); select("Classification", "topic-classification");
+    expect((screen.getByRole("button", { name: "Remove parameter denied_topics", exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    goStep(/3 Test Cases/); fill("Denied topics · test value", "Example topic");
+    goStep(/2 Rules/);
+    fireEvent.change(screen.getAllByRole("textbox", { name: "Parameter name", exact: true })[2]!, { target: { value: "business_restrictions" } });
+    expect((screen.getByRole("combobox", { name: "Denied topics", exact: true }) as HTMLSelectElement).value).toBe("business_restrictions");
+    goStep(/3 Test Cases/);
+    expect((screen.getByRole("textbox", { name: "Denied topics · test value" }) as HTMLTextAreaElement).value).toBe("Example topic");
+    click("Save draft"); await waitFor(() => expect(api).toHaveBeenCalled());
+    const saved = JSON.parse(String(api.mock.calls[0]![1].body)).definition;
+    expect(saved.rules[0].detector.parameters.restricted_topics).toBe("{{business_restrictions}}");
+    expect(saved.testing.parameters).toEqual({ business_restrictions: "Example topic" });
+    expect(saved.parameters[2].default).toBeNull();
+  });
   it.each(["agent/indirect-injection", "agent/memory-poisoning"])("authors %s with an explicit external content source", async detector => {
     api.mockImplementation(async (_path: string, options?: RequestInit) => ({ id: "boundary", revision: 1, definition: options?.body ? JSON.parse(String(options.body)).definition : undefined }));
     show(); toRules(); select("Detector", detector);
@@ -47,13 +63,15 @@ describe("Declarative Policy Studio stepper", () => {
     });
     show(); toRules();
     select("Detector", "model/classifier"); select("Classification", "topic-classification");
-    fill("Restricted topics", "Cooking recipes");
-    click("common.next"); click("Input"); fill("Test name", "Recipe"); fill("Input text", "Give me a cake recipe.");
+    expect((screen.getByRole("combobox", { name: "Denied topics", exact: true }) as HTMLSelectElement).value).toBe("denied_topics");
+    click("common.next"); fill("Denied topics · test value", "Cooking recipes"); click("Input"); fill("Test name", "Recipe"); fill("Input text", "Give me a cake recipe.");
     click("Run tests"); await screen.findByText("Passed", { exact: false });
     click("Review & publish");
     expect((screen.getByRole("button", { name: "Publish", exact: true }) as HTMLButtonElement).disabled).toBe(false);
-    expect(persisted!.rules[0]!.detector).toEqual({ ref: "model/classifier", version: "1.0.0", parameters: { profile: "topic-classification", topic_mode: "permissive", allowed_topics: "", restricted_topics: "Cooking recipes" } });
-    goStep(/2 Rules/); fill("Restricted topics", "Cooking and financial advice"); goStep(/4 Review/);
+    expect(persisted!.rules[0]!.detector).toEqual({ ref: "model/classifier", version: "1.0.0", parameters: { profile: "topic-classification", topic_mode: "{{topic_mode}}", allowed_topics: "{{allowed_topics}}", restricted_topics: "{{denied_topics}}" } });
+    expect(persisted!.parameters.find(p => p.name === "denied_topics")!.default).toBeNull();
+    expect(persisted!.testing!.parameters.denied_topics).toBe("Cooking recipes");
+    goStep(/3 Test Cases/); fill("Denied topics · test value", "Cooking and financial advice"); goStep(/4 Review/);
     expect((screen.getByRole("button", { name: "Publish", exact: true }) as HTMLButtonElement).disabled).toBe(true);
     expect(api.mock.calls.some(([path]) => path.endsWith("/publish"))).toBe(false);
   });
@@ -116,14 +134,15 @@ describe("Declarative Policy Studio stepper", () => {
   it("authors a versioned formal policy with required query and proof expectation", async () => {
     api.mockImplementation(async (_path: string, options?: RequestInit) => ({ id: "formal", revision: 1, definition: options?.body ? JSON.parse(String(options.body)).definition : undefined }));
     show(); toRules(); select("Detector", "service/formal-verification");
-    fill("Formal policy ID", "warranty"); fill("Formal policy version", "3");
     click("common.next"); click("Output"); fill("Input text", "Ten years.");
     expect((screen.getByRole("button", { name: "Run tests", exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    fill("Formal policy ID · test value", "warranty"); fill("Formal policy version · test value", "3");
     fill("User query", "Warranty duration?"); select("Expected reasoning result", "invalid");
     expect((screen.getByRole("button", { name: "Run tests", exact: true }) as HTMLButtonElement).disabled).toBe(false);
     click("Save draft"); await waitFor(() => expect(api).toHaveBeenCalled());
     const saved = JSON.parse(String(api.mock.calls[0]![1].body)).definition;
-    expect(saved.rules[0].detector.parameters).toEqual({ policy_id: "warranty", policy_version: "3", confidence_threshold: 0.8 });
+    expect(saved.rules[0].detector.parameters).toEqual({ policy_id: "{{formal_policy_id}}", policy_version: "{{formal_policy_version}}", confidence_threshold: "{{confidence_threshold}}" });
+    expect(saved.testing.parameters).toEqual({ formal_policy_id: "warranty", formal_policy_version: "3" });
     expect(saved.tests[0].context).toMatchObject({ query: "Warranty duration?", expected_reasoning_result: "invalid" });
   });
 

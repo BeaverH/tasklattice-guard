@@ -5,7 +5,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import type { GuardrailPolicyBinding, Policy } from "@/lib/api";
 
-import { PolicyBindingEditor, defaultPolicyBinding } from "./policy-binding-editor";
+import { PolicyBindingEditor, defaultPolicyBinding, getPolicyBindingValidation } from "./policy-binding-editor";
+import { emptyPolicyDefinition } from "../../shared/policy-definition";
 import configurablePolicies from "../../../runner/toolkit/policy_library/assets/configurable_policies.json";
 
 vi.mock("react-i18next", () => ({
@@ -128,6 +129,22 @@ function Harness({ policies = [policy] }: { policies?: Policy[] }) {
 }
 
 describe("PolicyBindingEditor", () => {
+  it("edits declared model parameters per binding and validates numerical limits", () => {
+    const definition = emptyPolicyDefinition();
+    definition.parameters = [{ name: "threshold", label: "Grounding threshold", kind: "number", required: true, default: "0.7", description: "", placeholder: "" }];
+    definition.rules = [{ id: "check", name: "Grounding", description: "", stages: ["output"], detector: { ref: "model/grounding", version: "1.0.0", parameters: { grounding_threshold: "{{threshold}}" } }, on_match: { action: "block" }, risk_level: "medium", metadata: { taxonomy_ids: ["TALI-RESPONSE-INTEGRITY"] } }];
+    const modelPolicy: Policy = { ...policy, id: "reusable-grounding", definition, parameters: definition.parameters, rails: ["output"], rules: [{ ...policy.rules[0]!, id: "check", rails: ["output"] }] };
+    const first = defaultPolicyBinding(modelPolicy); const second = defaultPolicyBinding(modelPolicy); const change = vi.fn();
+    render(<PolicyBindingEditor embedded policies={[modelPolicy]} value={[first]} onChange={change} showSelector={false} />);
+    const input = screen.getByRole("spinbutton", { name: "Grounding threshold *" });
+    fireEvent.change(input, { target: { value: "0.9" } });
+    const changed = change.mock.calls.at(-1)![0][0];
+    expect(changed.parameter_values.threshold).toBe("0.9");
+    expect(second.parameter_values.threshold).toBe("0.7");
+    expect(getPolicyBindingValidation(changed, modelPolicy).parameterIssues).toEqual([]);
+    expect(getPolicyBindingValidation({ ...changed, parameter_values: { threshold: "2" } }, modelPolicy).parameterIssues.join()).toContain("between 0 and 1");
+    expect(getPolicyBindingValidation({ ...changed, enabled_rule_ids: [], parameter_values: {} }, modelPolicy).missingRequiredParameters).toEqual([]);
+  });
   const scrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
   beforeAll(() => {
     // jsdom has no layout/scrolling implementation; Radix Select scrolls its focused option.

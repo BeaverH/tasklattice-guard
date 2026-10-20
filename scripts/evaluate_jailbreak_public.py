@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.evaluation_contract import execution_status, load_snapshot, normalize, summarize_actions, target_identity
 DEFAULT_OUTPUT = ROOT / "output/jailbreak-public-evaluation"
 VERSION = "20261019-000000.001Z"
-FOCUSED_POLICIES = ("local-prompt-manipulation", "filter-prompt-injection-jailbreak")
+FOCUSED_POLICIES = ("local-injection-protection",)
 # Immutable first-party source URLs and byte hashes; no mutable HEAD at runtime.
 PINNED_SOURCES = [
     {'id': 'llm-attacks--LICENSE', 'repo': 'llm-attacks/llm-attacks', 'revision': '098262edf85f807224e70ecd87b9d83716bf6b73', 'path': 'LICENSE', 'url': 'https://raw.githubusercontent.com/llm-attacks/llm-attacks/098262edf85f807224e70ecd87b9d83716bf6b73/LICENSE', 'sha256': '1e4bb8e2313ef9ff36033526503aa8837c80ba1d4c055c2e7d9977760028eec7', 'bytes': 1065, 'retrieved_at': '2026-10-19T03:11:21.374463+00:00', 'license': 'MIT'},
@@ -76,11 +76,14 @@ import { PolicyCatalog } from './server/policy-catalog/catalog.ts';
 const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
 const draft = defaultGuardrailDraft(policies);
 const local = draft.policyBindings.filter(b => policies.find(p => p.id === b.policyId).protection.execution === 'local');
-const focused = new Set(['local-prompt-manipulation', 'filter-prompt-injection-jailbreak']);
+const focused = new Set(['local-injection-protection']);
 const build = (bindings) => buildGuardrailPlan({guardrailId: DEFAULT_GUARDRAIL_ID,
   guardrailVersion: '20261019-000000.001Z', draft: {...draft, policyBindings: bindings}, policies});
 console.log(JSON.stringify({default_local: build(local),
-  local_jailbreak_only: build(local.filter(b => focused.has(b.policyId)))}));
+  local_jailbreak_only: build(local.filter(b => focused.has(b.policyId)).map(b => {
+    const enabledRuleIds=b.enabledRuleIds.filter(id=>id.startsWith('prompt-injection-blocker/')||id==='category/prompt_injection_jailbreak');
+    return {...b,enabledRuleIds,ruleOrder:enabledRuleIds,testCaseOverrides:{}};
+  }))}));
 """
 
 

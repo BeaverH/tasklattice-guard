@@ -55,6 +55,10 @@ import {
   outboxEvents,
   policyImportedVersions,
   policyRecords,
+  policyResources,
+  policyResourceVersions,
+  policyResourceValidations,
+  guardrailProfiles,
   policyValidationRuns,
   policyVersions,
   runnerInstances,
@@ -360,7 +364,7 @@ export class ControlPlaneService {
     const catalog = id ? [this.policyCatalog().get(id)].filter((item): item is PolicyDto => Boolean(item))
       : [...this.policyCatalog().list(), ...this.policyCatalog().retired()];
     const shipped = new Set(catalog.map((policy) => policy.id));
-    return this.policyResources.views([
+    const views = await this.policyResources.views([
       ...catalog.map((policy) => imported.has(policy.id)
         ? { ...policy, published_versions: [...policy.published_versions ?? [], ...newestFirst(imported.get(policy.id)!)] }
         : policy),
@@ -369,6 +373,7 @@ export class ControlPlaneService {
         return { ...head!, published_versions: rest };
       }),
     ], db, id);
+    return views.map(policy => ({ ...policy, deletable: !this.policyCatalog().get(policy.id) }));
   }
 
   async getPolicy(id: string) {
@@ -446,15 +451,19 @@ export class ControlPlaneService {
   async deletePolicy(input: { id: string; actorId: string }): Promise<void> {
     await this.db.transaction(async (tx) => {
       if (this.policyCatalog().get(input.id)) throw new ValidationError("Built-in Policies are system managed and cannot be deleted.");
+      await advisoryTransactionLock(tx, `policy-resource:${input.id}`);
+      const [resource] = await tx.select().from(policyResources).where(eq(policyResources.id, input.id)).for("update");
       const [record] = await tx.select().from(policyRecords).where(eq(policyRecords.id, input.id)).for("update");
-      if (!record) throw new NotFoundError("Policy", input.id);
+      const imported = await tx.select().from(policyImportedVersions).where(eq(policyImportedVersions.policyId, input.id)).for("update");
+      if (!resource && !record && !imported.length) throw new NotFoundError("Policy", input.id);
+      const name = resource?.definition.metadata.name ?? record?.name ?? String(imported[0]?.definition.name ?? input.id);
       // A Guardrail version is built from this Policy: its Policy versions must stay viewable.
       const versionUses = await tx.select({ name: guardrails.name, version: guardrailVersions.version }).from(guardrailVersions)
         .innerJoin(guardrails, eq(guardrails.id, guardrailVersions.guardrailId))
         .where(sql`${guardrailVersions.plan}->'policy_bindings' @> ${JSON.stringify([{ policy_id: input.id }])}::jsonb`).limit(5);
       if (versionUses.length) {
         throw new ConflictError(
-          `Policy ${record.name} is used by Guardrail versions: ${versionUses.map((item) => `${item.name} ${item.version}`).join(", ")}. Delete those versions first.`,
+          `Policy ${name} is used by Guardrail versions: ${versionUses.map((item) => `${item.name} ${item.version}`).join(", ")}. Delete those versions first.`,
           "policy_in_use",
         );
       }
@@ -463,14 +472,28 @@ export class ControlPlaneService {
       const referenced = activeGuardrails.filter((item) => normalizeGuardrailDraft(item.draftConfig).policyBindings.some((binding) => binding.policyId === input.id));
       if (referenced.length) {
         throw new ConflictError(
-          `Policy ${record.name} is still referenced by Guardrail drafts: ${referenced.map((item) => item.name).join(", ")}.`,
+          `Policy ${name} is still referenced by Guardrail drafts: ${referenced.map((item) => item.name).join(", ")}.`,
           "policy_in_use",
         );
       }
+      const profiles = await tx.select().from(guardrailProfiles);
+      const profileUses = profiles.filter(profile => profile.definition.policies.some(binding => binding.policyId === input.id)
+        || profile.definition.optionalPolicyIds.includes(input.id));
+      if (profileUses.length) throw new ConflictError(
+        `Policy ${name} is still referenced by Profiles: ${profileUses.map(profile => profile.definition.name).join(", ")}.`, "policy_in_use",
+      );
+      const [activeRun] = await tx.select({ id: policyResourceValidations.id }).from(policyResourceValidations)
+        .where(and(eq(policyResourceValidations.policyId, input.id), inArray(policyResourceValidations.status, ["queued", "running"]))).limit(1);
+      if (activeRun) throw new ConflictError("Wait for Policy testing to finish before deleting this Policy.", "policy_validation_in_progress");
+      await tx.delete(outboxEvents).where(and(eq(outboxEvents.aggregateId, input.id), eq(outboxEvents.kind, "policy.validation_requested")));
+      await tx.delete(policyResourceValidations).where(eq(policyResourceValidations.policyId, input.id));
+      await tx.delete(policyResourceVersions).where(eq(policyResourceVersions.policyId, input.id));
+      await tx.delete(policyResources).where(eq(policyResources.id, input.id));
+      await tx.delete(policyImportedVersions).where(eq(policyImportedVersions.policyId, input.id));
       await tx.delete(policyRecords).where(eq(policyRecords.id, input.id));
       await tx.insert(auditEvents).values({
         id: randomUUID(), kind: "policy.deleted", actorId: input.actorId,
-        resourceType: "policy", resourceId: input.id, detail: { name: record.name },
+        resourceType: "policy", resourceId: input.id, detail: { name },
       });
     });
   }
@@ -822,6 +845,7 @@ export class ControlPlaneService {
     runtimeProfile?: string | undefined;
     expectedDraftRevision?: number | undefined;
   }) {
+    assertUserEditableGuardrail(input.id);
     const updated = await this.db.transaction(async (tx) => {
       const [existing] = await tx.select().from(guardrails).where(and(
         eq(guardrails.id, input.id), isNull(guardrails.deletedAt),
@@ -879,6 +903,7 @@ export class ControlPlaneService {
   }
 
   async discardGuardrailDraft(input: { id: string; actorId: string; expectedDraftRevision: number; expectedBaselineVersion: string }) {
+    assertUserEditableGuardrail(input.id);
     const restored = await this.db.transaction(async tx => {
       const [guardrail] = await tx.select().from(guardrails).where(and(eq(guardrails.id, input.id), isNull(guardrails.deletedAt))).for("update");
       if (!guardrail) throw new NotFoundError("Guardrail", input.id);
@@ -909,6 +934,7 @@ export class ControlPlaneService {
     actorId: string;
     expectedDraftRevision?: number;
   }) {
+    assertUserEditableGuardrail(input.guardrailId);
     return this.db.transaction(async (tx) => {
       const [guardrail] = await tx.select().from(guardrails).where(and(
         eq(guardrails.id, input.guardrailId), isNull(guardrails.deletedAt),
@@ -1043,6 +1069,7 @@ export class ControlPlaneService {
     groundingSources: string[];
     expectedReasoningResult: string | null;
   }) {
+    assertUserEditableGuardrail(input.guardrailId);
     const id = `custom-${randomUUID()}`;
     const created = await this.db.transaction(async (tx) => {
       const [guardrail] = await tx.select().from(guardrails).where(and(
@@ -1080,6 +1107,7 @@ export class ControlPlaneService {
   }
 
   async deleteTestCase(input: { guardrailId: string; caseId: string; actorId: string }): Promise<void> {
+    assertUserEditableGuardrail(input.guardrailId);
     await this.db.transaction(async (tx) => {
       const [guardrail] = await tx.select().from(guardrails).where(and(eq(guardrails.id, input.guardrailId), isNull(guardrails.deletedAt))).for("update");
       if (!guardrail) throw new NotFoundError("Guardrail", input.guardrailId);
@@ -1097,6 +1125,7 @@ export class ControlPlaneService {
   }
 
   async setTestCaseExcluded(input: { guardrailId: string; caseId: string; excluded: boolean; actorId: string }) {
+    assertUserEditableGuardrail(input.guardrailId);
     const stored = await this.db.transaction(async (tx) => {
       const [guardrail] = await tx.select().from(guardrails).where(and(
         eq(guardrails.id, input.guardrailId), isNull(guardrails.deletedAt),
@@ -1221,6 +1250,7 @@ export class ControlPlaneService {
   }
 
   async requestValidation(input: { guardrailId: string; actorId: string; compilerAvailable: boolean }) {
+    assertUserEditableGuardrail(input.guardrailId);
     if (!input.compilerAvailable) {
       throw new ConflictError("A healthy GuardRails 0 Runner is required to validate Guardrail configurations.", "default_runner_unavailable");
     }
@@ -2902,6 +2932,7 @@ export function programmablePolicyPayload(
 ) {
   return {
     ...programmablePolicySurface(record, versions),
+    deletable: true,
     // Immutable selectable metadata for older pinned bindings. Do not duplicate
     // source files or recursively embed editor state in these version surfaces.
     published_versions: versions.map((version) => {
@@ -3197,6 +3228,14 @@ function decryptRuntimeEventMetadata(value: Record<string, unknown>, key: Buffer
 
 /** Test reports carry the candidate's digest; its full content stays server-side. */
 // The frozen suite is read through the version; results already echo each case.
+// Platform bootstrap maintains Default through its internal validation/publication
+// path. User endpoints must not modify that baseline or its acceptance suite.
+function assertUserEditableGuardrail(id: string): void {
+  if (id === DEFAULT_GUARDRAIL_ID) {
+    throw new ConflictError("The Default Guardrail is maintained by the platform. Its configuration and Test Cases are read-only. View or test a published version instead.", "default_guardrail_read_only");
+  }
+}
+
 function publicValidationRun({ candidateArtifact: _candidateArtifact, testSuite: _testSuite, ...run }: typeof validationRuns.$inferSelect) {
   return run;
 }

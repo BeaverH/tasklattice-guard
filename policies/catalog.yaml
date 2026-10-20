@@ -1,43 +1,12 @@
 schema_version: 2
 collections:
 - asset: builtin_policies.json
-  policies:
-  - builtin/advanced-au-pii-protection
-  - builtin/baseline-pii-protection
-  - builtin/claims-agent-safety
-  - builtin/eu-ai-act-article5
-  - builtin/gdpr-eu-pii-protection
-  - builtin/nsfw-content-filter-all-regions
-  - builtin/nsfw-content-filter-australia
-  - builtin/nsfw-content-filter-basic
-  - builtin/prompt-injection-protection
-  - builtin/pdpa-singapore
-  - builtin/topic-filtering
-  - builtin/uae-regulatory-compliance
+  policies: []
 - asset: local_content_filters.json
   policies:
-  - builtin/filter-denied-financial-advice
-  - builtin/filter-denied-insults
-  - builtin/filter-denied-legal-advice
-  - builtin/filter-denied-medical-advice
-  - builtin/filter-harmful-violence
-  - builtin/filter-harmful-self-harm
-  - builtin/filter-harmful-child-safety
-  - builtin/filter-harmful-illegal-weapons
-  - builtin/filter-bias-gender
-  - builtin/filter-bias-racial
-  - builtin/filter-bias-religious
-  - builtin/filter-bias-sexual-orientation
-  - builtin/filter-prompt-injection-jailbreak
-  - builtin/filter-prompt-injection-data-exfiltration
-  - builtin/filter-prompt-injection-sql
-  - builtin/filter-prompt-injection-malicious-code
-  - builtin/filter-prompt-injection-system-prompt
-  - builtin/filter-harm-toxic-abuse
-  - builtin/pattern-matching
-  - builtin/keyword-blocking
   - builtin/block-code-execution
   - builtin/competitor-mention-detection
+  - builtin/keyword-blocking
 - asset: legacy_topic_policies.json
   policies:
   - builtin/builtin-topic-safety/history/1.0.0
@@ -52,40 +21,32 @@ collections:
   - history/pattern-matching/1.95.0
 - asset: model_capability_policies.json
   policies:
-  - builtin/builtin-content-safety
   - builtin/builtin-jailbreak
-  - builtin/builtin-topic-safety
-  - builtin/builtin-pii
-  - builtin/builtin-company-policy
-  - builtin/builtin-contextual-grounding
+  - builtin/builtin-content-safety
   - builtin/builtin-automated-reasoning
+  - builtin/builtin-contextual-grounding
+  - builtin/builtin-pii
+  - builtin/builtin-topic-safety
 - asset: focused_policies.json
   policies:
   - builtin/builtin-indirect-prompt-injection
   - builtin/builtin-memory-poisoning
+  - builtin/local-content-safety
+  - builtin/local-injection-protection
   - builtin/local-credentials
-  - builtin/local-prompt-manipulation
-  - builtin/local-sql-injection
-  - builtin/local-code-injection
   - builtin/local-payment-data
-  - builtin/local-contact-data
-  - builtin/local-passports
-  - builtin/singapore-customer-identifiers
-  - builtin/singapore-data-use-boundaries
-  - builtin/banking-customer-protection
-  - builtin/securities-market-integrity
-  - builtin/internet-account-abuse
-  - builtin/local-rendered-content-injection
   - builtin/local-government-identifiers
+  - builtin/local-passports
+  - builtin/local-contact-data
   - builtin/local-network-addresses
   - builtin/local-sensitive-attribute-terms
   - builtin/local-risk-content-terms
+  - builtin/local-fraud-prevention
+  - builtin/local-data-use-boundaries
+  - builtin/local-professional-advice
+  - builtin/local-prohibited-practices
 - asset: china_policies.json
-  policies:
-  - builtin/china-personal-identifiers
-  - builtin/china-organization-identifiers
-  - builtin/china-prompt-manipulation
-  - builtin/china-banking-assistant-boundaries
+  policies: []
 - asset: configurable_policies.json
   policies:
   - builtin/configured-phrase-filter

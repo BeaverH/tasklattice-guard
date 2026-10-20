@@ -302,6 +302,20 @@
       "when": 1791760000008,
       "tag": "0042_credential_policy_profile_version",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792368000000,
+      "tag": "0043_capability_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792454400000,
+      "tag": "0044_topic_binding_parameters",
+      "breakpoints": true
     }
   ]
 }

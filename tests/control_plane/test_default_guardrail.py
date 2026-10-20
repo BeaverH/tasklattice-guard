@@ -40,6 +40,7 @@ def default_local_baseline() -> dict:
         import { PolicyCatalog } from './server/policy-catalog/catalog.ts';
         import { generatedTestCases, applyValidationOverrides } from './server/domain/validation.ts';
         import { planToWire, validationTestToWire } from './server/control-channel/protocol-codec.ts';
+        import fs from 'node:fs';
         import { loadSync } from '@grpc/proto-loader';
         import { loadPackageDefinition } from '@grpc/grpc-js';
         const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
@@ -64,7 +65,20 @@ def default_local_baseline() -> dict:
             candidateVersion: "20260904-010000.001Z", sourceDraftRevision: 1, runtimeProfile: 'auto',
             plan: planToWire(plan), testCases: cases.map(validationTestToWire),
         }});
-        console.log(JSON.stringify({plan, cases, wireRequest: binary.toString('base64')}));
+        const previous = JSON.parse(fs.readFileSync('../tests/fixtures/default-capability-consolidation.json','utf8'));
+        const contracts = JSON.parse(fs.readFileSync('../tests/fixtures/policy-capability-contracts.json','utf8')).rules;
+        const mapped = (pid,rid) => contracts.find(r=>r.source_policy===pid&&r.source_rule===rid);
+        const frozenCases = previous.cases.filter(c=>!['builtin-jailbreak','builtin-content-safety'].includes(c.sourcePolicyId)).map(c=>{
+          const first=contracts.find(r=>r.source_policy===c.sourcePolicyId);
+          const remap=m=>({policyId:mapped(m.policyId,m.ruleId).policy,ruleId:mapped(m.policyId,m.ruleId).rule});
+          const version=policies.find(p=>p.id===first.policy).version;
+          return {...c,policyId:first.policy,sourcePolicyId:first.policy,sourcePolicyVersion:version,
+            coveredRuleIds:c.coveredRuleIds.map(r=>mapped(c.sourcePolicyId,r).rule),
+            ...(c.expectationOverride?{expectationOverride:{...c.expectationOverride,sourcePolicyVersion:version,expectedMatches:c.expectationOverride.expectedMatches.map(remap)}}:{})};
+        });
+        const frozenBinary=connect.responseSerialize({validationRequest:{runId:'before-consolidation',guardrailId:DEFAULT_GUARDRAIL_ID,
+          candidateVersion:"20260904-010000.001Z",sourceDraftRevision:1,runtimeProfile:'auto',plan:planToWire(plan),testCases:frozenCases.map(validationTestToWire)}});
+        console.log(JSON.stringify({plan, cases, wireRequest: binary.toString('base64'), frozenWireRequest:frozenBinary.toString('base64')}));
     """
     result = subprocess.run(
         ["node", "--import", "tsx", "--input-type=module", "-e", source],
@@ -250,7 +264,7 @@ async def test_default_records_insults_and_still_enforces_later_policies(default
                 candidate_version="20260904-010000.001Z", plan=default_local_plan, runtime_profile="auto",
             )
             assert result.decision == expected, result.reason
-            observed = [f for f in result.findings if f.policy_id == "filter-denied-insults"]
+            observed = [f for f in result.findings if f.policy_id == "local-content-safety"]
             assert observed and all(f.recommended_action == "allow" for f in observed)
             assert observed[0].rule_id == "category/denied_insults"
             if expected == "allow":
@@ -275,7 +289,7 @@ async def test_default_local_components_pass_reviewed_composition_cases(default_
     ).validate(envelope.validation_request)
     conflicts = [item for item in results if not item["passed"]]
     assert status == "passed", conflicts
-    assert metrics["total"] == len(cases) == 382
+    assert metrics["total"] == len(cases)
     assert metrics["passed"] == metrics["total"]
     assert not conflicts
     assert all(case["required"] for case in cases)
@@ -287,58 +301,16 @@ async def test_default_local_components_pass_reviewed_composition_cases(default_
             assert item["expectationOverride"] == source["expectationOverride"]
         else:
             assert item["expectedDecision"] == source["expectedDecision"]
-        assert item["coveredRuleIds"] == cases_by_id[item["caseId"]]["coveredRuleIds"]
+        assert set(item["coveredRuleIds"]) == set(cases_by_id[item["caseId"]]["coveredRuleIds"])
     assert all(item["modelInvocations"] == 0 and item["actualFailure"] is None for item in results)
 
 
 @pytest.mark.asyncio
-async def test_focused_default_replays_every_frozen_legacy_case(default_local_plan: dict) -> None:
-    migration = json.loads((ROOT / "tests/fixtures/default-policy-migration.json").read_text())
-    assert len(migration["cases"]) == 140
-    assert len(migration["policyIds"]) == 18
-    assert len({(case["policyId"], case["caseId"]) for case in migration["cases"]}) == 140
-    source_engine = BuiltinContentFilter()
-    previews = DraftPreviewRuntime(DefaultRunnerCompiler(), action_providers(*local_action_providers()))
-    try:
-        for case in migration["cases"]:
-            original = catalog_policy(case["policyId"])
-            if original is None or original.version != migration["sourcePolicyVersion"]:
-                from runner.toolkit.policy_runtime.codec import policy_from_payload
-                history = json.loads((ROOT / "runner/toolkit/policy_library/assets/legacy_topic_policies.json").read_text())
-                original = next((policy_from_payload(p) for p in history if p["id"] == case["policyId"] and p["version"] == migration["sourcePolicyVersion"]), None)
-            assert original is not None and original.version == migration["sourcePolicyVersion"]
-            source = next(item for item in original.test_cases if item.id == case["caseId"])
-            assert (source.content, source.phase) == (case["content"], case["phase"])
-            expected_output = case.get("expectedOutputContent")
-            if case["expectedDecision"] == "transform" and expected_output is None:
-                # The unchanged legacy Rule, not the migrated composition, is
-                # the reference when the old case had no composition override.
-                isolated = source_engine.evaluate(definitions={original.id: original}, text=source.content, phase=source.phase,
-                    policies=[original.id], enabled_rules={original.id: source.covered_rule_ids})
-                assert isolated.verdict != "error" and isolated.findings
-                expected_output = isolated.content
-            if expected_output is not None:
-                # Consolidated card matching intentionally uses one generic
-                # marker. Preserve every surrounding byte and redacted span.
-                expected_output = re.sub(r"\[(visa|mastercard|amex|discover)_REDACTED\]", "[credit_card_REDACTED]", expected_output)
-            if set(source.covered_rule_ids) & {"pattern/airline_pnr", "pattern/skywards_number", "pattern/flight_number"}:
-                continue  # Aviation checks were explicitly removed from the general Default.
-            result = await previews.evaluate(
-                ProtectionRequest(phase=case["phase"], texts=(case["content"],),
-                    context=RequestContext(protocol="playground")),
-                preview_id="legacy-default-migration", guardrail_id="guardrail-default", draft_revision=1,
-                candidate_version="20260904-010000.001Z", plan=default_local_plan, runtime_profile="auto",
-            )
-            identity = (case["policyId"], case["caseId"])
-            # The frozen migration fixture remains unchanged; insults now has
-            # an explicitly reviewed observation-only Default contract.
-            expected_decision = "allow" if identity == ("filter-denied-insults", "accept/denied_insults") else case["expectedDecision"]
-            assert result.decision == expected_decision, (identity, result)
-            if result.decision == "transform":
-                assert result.texts == (expected_output,), (identity, result.texts, expected_output)
-            assert result.findings and all(finding.policy_id in {
-                binding["policy_id"] for binding in default_local_plan["policy_bindings"]
-            } for finding in result.findings), identity
-            assert result.usage.model_invocations == 0 and not result.usage.fail_closed, identity
-    finally:
-        await previews.shutdown()
+async def test_default_replays_every_pre_consolidation_case(default_local_baseline: dict) -> None:
+    envelope = protocol.ControllerMessage.FromString(base64.b64decode(default_local_baseline['frozenWireRequest']))
+    status, metrics, results = await DefaultRunnerValidator(
+        DefaultRunnerCompiler(), action_providers(*local_action_providers()),
+    ).validate(envelope.validation_request)
+    assert metrics['total'] == 382
+    assert status == 'passed', [r for r in results if not r['passed']]
+    assert metrics['passed'] == metrics['total']

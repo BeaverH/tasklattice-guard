@@ -64,7 +64,6 @@ def runtime_action_providers(settings: RunnerSettings) -> tuple[ActionProvider, 
             if item.role == "taxonomy_judge"
             and item.contract_ref in {
                 "tali.guard.topic-control.semantic.v1",
-                "tali.guard.company-policy.v1",
             }
         ),
         None,
@@ -159,34 +158,30 @@ def dynamic_runtime_action_providers(
         EvaluationActionProvider(tuple(routes)),
     ]
 
-    topic_evaluators = []
-    for capability, contract in (("topic_control", "tali.guard.topic-control.semantic.v1"),
-                                 ("company_policy", "tali.guard.company-policy.v1")):
-        binding = bindings.get(f"{capability}.input")
-        if binding is None:
-            continue
-        runtime = _assigned_runtime(binding.model_ref, runtimes)
-        source = next(item for item in configuration.runtimes if item.id == binding.model_ref)
-        if (binding.profile_ref != source.profile_ref or binding.capability_ref != capability
-            or _rail_name(binding.rail_type) != "input" or contract not in binding.contract_refs):
-            raise ValueError("Topic/Company binding must match its runtime, capability, contract and Rail.")
-        if binding.profile_ref == JEV_TOPIC_PROFILE:
-            topic_evaluators.append(JevTopicEvaluator(
+    topic = bindings.get("topic_control.input")
+    if topic is not None:
+        runtime = _assigned_runtime(topic.model_ref, runtimes)
+        source = next(item for item in configuration.runtimes if item.id == topic.model_ref)
+        if (topic.profile_ref != source.profile_ref or topic.capability_ref != "topic_control"
+            or _rail_name(topic.rail_type) != "input"
+            or tuple(topic.contract_refs) != ("tali.guard.topic-control.semantic.v1",)):
+            raise ValueError("Topic Control binding must match its runtime, capability, contract and Rail.")
+        if topic.profile_ref == JEV_TOPIC_PROFILE:
+            evaluator = JevTopicEvaluator(
                 base_url=runtime.base_url, model=runtime.model, api_key=runtime.api_key or "",
                 provider_id=runtime.id, timeout_seconds=runtime.timeout_seconds,
                 skip_tls_verify=runtime.skip_tls_verify, transport=transport,
-            ))
+            )
         else:
-            if binding.profile_ref not in {"tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1"}:
-                raise ValueError("Unsupported Topic/Company model profile.")
-            topic_evaluators.append(ChatTopicEvaluator(
-                capability=capability, base_url=runtime.base_url, model=runtime.model,
+            if topic.profile_ref not in {"tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1"}:
+                raise ValueError("Unsupported Topic Control model profile.")
+            evaluator = ChatTopicEvaluator(
+                capability="topic_control", base_url=runtime.base_url, model=runtime.model,
                 api_key_env_var=None, api_key=runtime.api_key, provider_id=runtime.id,
                 skip_tls_verify=runtime.skip_tls_verify, timeout_seconds=runtime.timeout_seconds,
                 request_options={"max_tokens": runtime.max_tokens}, transport=transport,
-            ))
-    if topic_evaluators:
-        providers.append(TopicJudgeActionProvider(evaluators=tuple(topic_evaluators)))
+            )
+        providers.append(TopicJudgeActionProvider(evaluator=evaluator))
 
     grounding = bindings.get("contextual_grounding.output")
     if grounding is not None:

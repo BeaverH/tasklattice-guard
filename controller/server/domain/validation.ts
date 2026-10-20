@@ -48,7 +48,8 @@ export function generatedTestCases(
     if (policy.definition) {
       const parameters = { ...Object.fromEntries(policy.parameters.flatMap(p => p.default == null ? [] : [[p.name, p.default]])), ...binding.parameterValues };
       return definitionTestCases(policy.definition, parameters).filter(test => enabledRails.has(test.phase)
-        && (!test.covered_rule_ids.length || test.covered_rule_ids.some(id => enabledRules.has(id) || policy.definition!.rules.some(r => r.expand && enabledRules.has(r.id) && id.startsWith(`${r.id}/`)))))
+        && test.covered_rule_ids.every(id => enabledRules.has(id)
+          || policy.definition!.rules.some(r => r.expand && enabledRules.has(r.id) && id.startsWith(`${r.id}/`))))
         .map(test => ({ id: generatedCaseId(policy.id, test.id), guardrailId, name: test.name, policyId: policy.id, phase: test.phase, content: test.content,
           expectedDecision: test.expected_decision, origin: "generated" as const, trustedInstruction: test.context?.trusted_instruction ?? "",
           targetSource: test.context?.target_source ?? (test.phase === "output" ? "model_output" as const : "user_input" as const), query: test.context?.query ?? "", groundingSources: test.context?.grounding_sources ?? [],
@@ -60,7 +61,9 @@ export function generatedTestCases(
       if (item.phase !== "input" && item.phase !== "output") return [];
       if (!enabledRails.has(item.phase)) return [];
       const phase = item.phase;
-      if (item.covered_rule_ids.length && !item.covered_rule_ids.some((id) => enabledRules.has(id))) return [];
+      // A scenario covering several Rules is only valid when its complete
+      // selection is enabled. Partial Profiles cannot promise disabled checks.
+      if (!item.covered_rule_ids.every((id) => enabledRules.has(id))) return [];
       const topicCase = policy.id === "builtin-topic-safety" && item.id === "topic-input";
       const topicAction = binding.ruleActions["model/topic-control"] ?? binding.action ?? "block";
       const topicBlockedDecision = topicAction;

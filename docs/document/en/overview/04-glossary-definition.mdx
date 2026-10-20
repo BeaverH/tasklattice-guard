@@ -50,7 +50,7 @@ A Policy collects Rules together with metadata, versions, resources and tests. D
 
 If you change the action of a Rule from block to observation, the Rule must continue to detect. Guard returns the Decision and any replacement content. The Gateway applies that Decision to the real model request or response. Each security event takes its severity from the published Rule snapshot, not from the detector confidence.
 
-The technical references are `text/keyword`, `text/regex`, `text/conditions`, `code/fenced-block`, `model/classifier`, `model/grounding` and `service/formal-verification`. Classifier profiles select compatible technical contracts. Company Policy uses the Topic Control profile. Business terms belong in the Rule data. Each configured phrase entry compiles into a separate keyword Rule, with its own ID, action and risk level.
+The technical references are `text/keyword`, `text/regex`, `text/conditions`, `code/fenced-block`, `model/classifier`, `model/grounding` and `service/formal-verification`. Classifier profiles select compatible technical contracts. Company boundaries use the Topic Control allowlist and denylist with one shared model binding. Business terms belong in the Rule data. Each configured phrase entry compiles into a separate keyword Rule, with its own ID, action and risk level.
 
 <strong>What:</strong> One specific detection inside a Policy, for example "detect a credit-card number" or "detect an attempt to ignore safety rules". A Rule answers four questions:
 
@@ -106,7 +106,7 @@ Seven detectors are registered. Custom directory packages can use the first four
 
 `model/classifier` supports four profiles:
 
-- `topic-classification`: Topic Control and Company Policy.
+- `topic-classification`: Topic Control, including company business boundaries.
 - `safety-classification`: content safety.
 - `jailbreak-classification`: jailbreak detection.
 - `pii-classification`: personal information detection.

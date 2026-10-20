@@ -23,7 +23,6 @@ def preset_requests() -> list[dict]:
       import { expandProtectionPreset } from './server/policy-catalog/presets.ts';
       import { buildGuardrailPlan } from './server/domain/guardrail-plan.ts';
       import { generatedTestCases, applyValidationOverrides } from './server/domain/validation.ts';
-      import { defaultTestCaseOverrides } from './server/domain/default-expectations.ts';
       import { planToWire, validationTestToWire } from './server/control-channel/protocol-codec.ts';
       import { loadSync } from '@grpc/proto-loader';
       import { loadPackageDefinition } from '@grpc/grpc-js';
@@ -32,26 +31,23 @@ def preset_requests() -> list[dict]:
         includeDirs: ['../proto/tasklattice/guard/control/v1'], longs: String, enums: String, defaults: true, oneofs: true,
       });
       const codec = loadPackageDefinition(definition).tasklattice.guard.control.v1.RunnerControl.service.Connect;
-      const extendedIds = [
-        'local-government-identifiers', 'local-passports', 'local-contact-data',
-        'local-payment-data', 'local-network-addresses',
-        'local-sensitive-attribute-terms', 'local-risk-content-terms',
-      ];
-      // Ordinary single-Policy Guardrail drafts, not additional product presets.
-      const singlePolicyDrafts = extendedIds.map(id => {
-        const policy = policies.find(item => item.id === id);
-        if (!policy) throw new Error(`Missing extended Policy ${id}`);
-        return { id, policies: [{ policyId: id, policyVersion: policy.version, enabledRails: ['input', 'output'], parameterValues: {} }] };
-      });
-      const output = [...protectionPresets, ...singlePolicyDrafts].map(preset => {
-        const draft = { allowedTopics: [], restrictedTopics: [], policyBindings: expandProtectionPreset(preset, policies), safetyLevel: 'balanced', outputDelivery: 'full_buffered' };
-        if (extendedIds.includes(preset.id)) {
-          // Only authored expectations whose source and target are in this
-          // single Policy apply here. Cross-Policy Default expectations do not.
-          const binding = draft.policyBindings[0];
-          binding.testCaseOverrides = Object.fromEntries(Object.entries(defaultTestCaseOverrides(preset.id))
-            .filter(([, override]) => override.expectedMatches.every(match => match.policyId === preset.id)));
-        }
+      const compositions = protectionPresets.map(preset => ({ id: preset.id, bindings: expandProtectionPreset(preset, policies) }));
+      const china = compositions.find(preset => preset.id === 'china-mainland-runtime');
+      const combined = expandProtectionPreset(
+        protectionPresets.find(preset => preset.id === 'singapore-data-protection'), policies, china.bindings);
+      // This composed draft preserves the existing generic labelled-passport check.
+      // Review its one overlapping acceptance case explicitly, as a user would
+      // before publishing a newly combined Profile; do not change either template.
+      combined.find(binding => binding.policyId === 'local-passports').testCaseOverrides[
+        'pdpa-singapore/rule-sg-pdpa-pii-identifiers/passport_singapore-acceptance'] = {
+          sourcePolicyVersion: '4.0.0',
+          reason: 'The existing labelled-passport Rule runs first and redacts the complete labelled Singapore passport.',
+          expectedDecision: 'transform', expectedOutputContent: 'Acceptance sample: [REDACTED]',
+          expectedMatches: [{ policyId: 'local-passports', ruleId: 'identity/passport' }],
+        };
+      compositions.push({ id: 'china-plus-singapore', bindings: combined });
+      const output = compositions.map(preset => {
+        const draft = { allowedTopics: [], restrictedTopics: [], policyBindings: preset.bindings, safetyLevel: 'balanced', outputDelivery: 'full_buffered' };
         const plan = buildGuardrailPlan({ guardrailId: preset.id, guardrailVersion: '20260906-010000.001Z', policies, draft });
         const cases = applyValidationOverrides(generatedTestCases(preset.id, draft, policies), draft);
         const binary = codec.responseSerialize({ validationRequest: {
@@ -67,8 +63,8 @@ def preset_requests() -> list[dict]:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("preset_index", range(14))
-async def test_presets_and_extended_policies_pass_real_model_free_composition(preset_requests, preset_index) -> None:
+@pytest.mark.parametrize("preset_index", range(16))
+async def test_profiles_pass_real_model_free_composition(preset_requests, preset_index) -> None:
     preset = preset_requests[preset_index]
     request = protocol.ControllerMessage.FromString(base64.b64decode(preset["wire"])).validation_request
     status, metrics, results = await DefaultRunnerValidator(DefaultRunnerCompiler(), action_providers(*local_action_providers())).validate(request)

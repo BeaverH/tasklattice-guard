@@ -11,36 +11,7 @@ OWASP_LLM_2025_FRAMEWORK_LABEL = "OWASP LLM 2025"
 # Applications 2025 risk. The framework tag is intentionally Policy-level: it
 # helps users discover candidates without implying that every Rule in a Policy
 # covers every OWASP risk.
-OWASP_LLM_2025_POLICY_IDS = frozenset(
-    {
-        # LLM01 Prompt Injection and LLM07 System Prompt Leakage.
-        "builtin-prompt-injection",
-        "builtin-indirect-prompt-injection",
-        "builtin-jailbreak",
-        "builtin-system-prompt-leakage",
-        "prompt-injection-protection",
-        "filter-prompt-injection-jailbreak",
-        "filter-prompt-injection-data-exfiltration",
-        "filter-prompt-injection-system-prompt",
-        "claims-agent-safety",
-        # LLM02 Sensitive Information Disclosure.
-        "builtin-secrets",
-        "builtin-pii",
-        "pattern-matching",
-        "baseline-pii-protection",
-        "advanced-au-pii-protection",
-        "gdpr-eu-pii-protection",
-        "pdpa-singapore",
-        "uae-regulatory-compliance",
-        # LLM05 Improper Output Handling.
-        "filter-prompt-injection-sql",
-        "filter-prompt-injection-malicious-code",
-        "block-code-execution",
-        # Scoped runtime assurance for LLM09 Misinformation.
-        "builtin-contextual-grounding",
-        "builtin-automated-reasoning",
-    }
-)
+OWASP_LLM_2025_POLICY_IDS = frozenset(['builtin-indirect-prompt-injection', 'builtin-memory-poisoning', 'builtin-jailbreak', 'builtin-pii', 'builtin-contextual-grounding', 'builtin-automated-reasoning', 'local-injection-protection', 'local-credentials', 'local-payment-data', 'local-government-identifiers', 'local-contact-data', 'local-passports', 'local-data-use-boundaries', 'local-fraud-prevention', 'block-code-execution'])
 
 
 def framework_tags_for_policy(policy_id: str) -> tuple[PolicyTag, ...]:

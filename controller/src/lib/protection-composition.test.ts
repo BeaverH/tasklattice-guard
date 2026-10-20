@@ -8,6 +8,18 @@ const binding = (id: string): GuardrailPolicyBinding => ({
 });
 
 describe("business protection composition", () => {
+  it("combines regional Rule selections within one capability while retaining current settings and execution order", () => {
+    const current = { ...binding("local-government-identifiers"), enabled_rule_ids: ["au-abn", "au-medicare"],
+      rule_order: ["au-medicare"], rule_actions: { "au-abn": "allow" as const }, enabled_rails: ["input"] as ["input"] };
+    const regional = { ...binding(current.policy_id), enabled_rule_ids: ["sg-nric", "au-abn"], rule_order: ["sg-nric", "au-abn"] };
+    const merged = mergePresetBindings([current], [regional]);
+    expect(merged).toEqual([{ ...current, enabled_rule_ids: ["au-abn", "au-medicare", "sg-nric"],
+      rule_order: ["au-medicare", "au-abn", "sg-nric"] }]);
+    expect(mergePresetBindings(merged, [regional])).toEqual(merged);
+    expect(current.enabled_rule_ids).toEqual(["au-abn", "au-medicare"]);
+    expect(mergePresetBindings([current], [{ ...regional, policy_version: "another-version" }])).toEqual([current]);
+  });
+
   it("edits a directory without regrouping other Policies or overriding order", () => {
     const first = binding("privacy-a");
     const middle = binding("attacks");

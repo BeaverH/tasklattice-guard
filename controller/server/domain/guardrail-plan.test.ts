@@ -84,7 +84,7 @@ describe("Controller Guardrail plan", () => {
 
   it.each([
     "builtin-content-safety", "builtin-jailbreak", "builtin-pii",
-    "builtin-company-policy", "builtin-contextual-grounding", "builtin-automated-reasoning",
+    "builtin-contextual-grounding", "builtin-automated-reasoning",
   ])("compiles the catalog Rule override for %s without changing the source Policy", (id) => {
     const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
     const policy = policies.find((item) => item.id === id)!;
@@ -324,7 +324,7 @@ describe("Controller Guardrail plan", () => {
 
   it("preserves interleaved Policy order and resolves Rule > Policy > template actions", () => {
     const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
-    const pattern = policies.find((item) => item.id === "pattern-matching")!;
+    const pattern = policies.find((item) => item.id === "local-contact-data")!;
     const keyword = policies.find((item) => item.id === "keyword-blocking")!;
     const makeBinding = (policy: typeof pattern) => ({
       ...nativeBinding(policy.id), policyVersion: policy.version,
@@ -343,11 +343,11 @@ describe("Controller Guardrail plan", () => {
     }] });
     const steps = plan.steps as Array<{ parameters: Array<[string, string]>; phases: string[] }>;
     expect(steps.map((item) => Object.fromEntries(item.parameters).policy_id)).toEqual([
-      "pattern-matching", "builtin-secrets", "keyword-blocking",
+      "local-contact-data", "builtin-secrets", "keyword-blocking",
     ]);
     const actions = JSON.parse(Object.fromEntries(steps[0]!.parameters).rule_actions_json!)[pattern.id];
     expect(actions["pattern/email"]).toBe("transform");
-    expect(actions["pattern/passport_us"]).toBe("block");
+    expect(actions["pattern/us_phone"]).toBe("block");
     expect(steps[2]!.phases).toEqual(["output"]);
     const modules = plan.modules as Array<{ id: string; phase: string; depends_on: string[]; input_view: string }>;
     for (const phase of ["input", "output"]) {
@@ -357,7 +357,7 @@ describe("Controller Guardrail plan", () => {
         expect(item.depends_on).toEqual(index ? [ordered[index - 1]!.id] : []);
       });
     }
-    expect(pattern.rules.find((item) => item.id === "pattern/passport_us")?.effect).toBe("transform");
+    expect(pattern.rules.find((item) => item.id === "pattern/us_phone")?.effect).toBe("transform");
     expect(draft.policyBindings[0]!.ruleActions).toEqual({ "pattern/email": "transform" });
   });
 

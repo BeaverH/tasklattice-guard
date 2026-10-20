@@ -67,11 +67,13 @@ export function CreateGuardrailWizard({
   onOpenChange,
   onCreated,
   returnFocusRef,
+  initialProfileId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (id: string) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  initialProfileId?: string;
 }) {
   const { t: uiText } = useTranslation();
   const { t, i18n } = useTranslation();
@@ -152,13 +154,14 @@ export function CreateGuardrailWizard({
   useEffect(() => {
     if (!open || !catalogReady || !presetsQuery.isSuccess || initialProfileApplied.current) return;
     initialProfileApplied.current = true;
-    const profile = presetsQuery.data.items.find(item => item.category === "general" && item.isDefault);
+    const profile = initialProfileId ? presetsQuery.data.items.find(item => item.id === initialProfileId)
+      : presetsQuery.data.items.find(item => item.category === "general" && item.isDefault);
     if (profile && !bindings.length && selectedPreset === "blank" && step === 0) {
       setSelectedPreset(profile.id);
       setBindings(structuredClone(profile.bindings));
       setPresetFeedback(t("protection.applied", { count: profile.bindings.length }));
     }
-  }, [open, catalogReady, presetsQuery.isSuccess, presetsQuery.data, bindings.length, selectedPreset, step, t]);
+  }, [open, catalogReady, presetsQuery.isSuccess, presetsQuery.data, bindings.length, selectedPreset, step, t, initialProfileId]);
 
   const language = user?.preferred_language ?? (i18n.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en");
   const analyzeIntent = useMutation({
@@ -376,6 +379,7 @@ export function CreateGuardrailWizard({
                   }} />
               )}
               {presetFeedback ? <p role="status" className="text-sm font-medium text-primary">{presetFeedback}</p> : null}
+              {initialProfileId && presetsQuery.isSuccess && !presetsQuery.data.items.some(item => item.id === initialProfileId) ? <p role="alert" className="text-sm text-destructive">{t("policyLibrary.collections.notFound")}</p> : null}
               {presetUndo && pendingPreset === null ? <Button variant="outline" className="min-h-11 justify-self-start" onClick={() => {
                 setBindings(presetUndo.bindings); setSelectedPreset(presetUndo.selected); setPresetUndo(null); setPresetFeedback(t("protection.wizard.undone"));
               }}>{t("protection.wizard.undoPreset")}</Button> : null}
@@ -680,12 +684,8 @@ function BoundaryPreview({ label, values }: { label: string; values: string[] })
 }
 
 function recommendedTopicPolicy(policies: Policy[]) {
-  const preferred = ["builtin-topic-safety", "builtin-company-policy"];
-  for (const id of preferred) {
-    const policy = policies.find((item) => item.id === id);
-    if (policy && isBindablePolicy(policy)) return policy;
-  }
-  return undefined;
+  const policy = policies.find((item) => item.id === "builtin-topic-safety");
+  return isBindablePolicy(policy) ? policy : undefined;
 }
 
 function isBindablePolicy(policy: Policy | undefined): policy is Policy {
@@ -709,6 +709,7 @@ function getPolicyBindingsBlocker(bindings: GuardrailPolicyBinding[], policies: 
         },
       };
     }
+    if (validation.parameterIssues.length) return { key: "guardrailWizard.nextBlocked.parameterValues", values: { name: policy.name, reason: validation.parameterIssues.join(" ") } };
     if (validation.missingReasoningPolicy) return { key: "guardrailWizard.nextBlocked.reasoningPolicy", values: { name: policy.name } };
   }
   if (hasTopicControlBinding(bindings, policies) && mode === "strict" && !lines(allowedTopics).length) {

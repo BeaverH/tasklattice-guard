@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { modelParameterDeclarationIssues, parameterReferences } from "./policy-parameters.js";
 import { patternValidatorSchema } from "./pattern-validator.js";
 import { riskSeverities } from "./security-severity.js";
 
@@ -52,7 +53,7 @@ export type PolicyResource = { id: string; definition: PolicyDefinition; revisio
 export type ResourceValidation = { id: string; policyId: string; revision: number; status: string; results: Array<{ caseId: string; name: string; passed: boolean; reason: string; actualDecision: string; outputContent: string; matchedRuleIds: string[]; modelInvocations?: number; actualReasoningResult?: string | null; findings?: Array<Record<string, unknown>> }>; failureReason: string | null };
 
 export function definitionIssues(definition: PolicyDefinition): string[] {
-  const issues: string[] = [];
+  const issues: string[] = modelParameterDeclarationIssues(definition);
   const add = (condition: boolean, message: string) => { if (condition) issues.push(message); };
   add(!definition.rules.length, "Add at least one Rule.");
   add(new Set(definition.rules.map(r => r.id)).size !== definition.rules.length, "Rule IDs must be unique.");
@@ -74,12 +75,12 @@ export function definitionIssues(definition: PolicyDefinition): string[] {
     }
     if (rule.detector.ref === "model/grounding") {
       for (const key of ["grounding_threshold", "relevance_threshold"]) {
-        add(!validThreshold(params[key] ?? 0.7), `Rule ${rule.id}: ${key} must be between 0 and 1.`);
+        add(!parameterReferences(params[key]).length && !validThreshold(params[key] ?? 0.7), `Rule ${rule.id}: ${key} must be between 0 and 1.`);
       }
     }
     if (rule.detector.ref === "service/formal-verification") {
       add(typeof params.policy_id !== "string" || !params.policy_id.trim() || typeof params.policy_version !== "string" || !params.policy_version.trim(), `Rule ${rule.id}: provide a formal policy ID and version.`);
-      add(!validThreshold(params.confidence_threshold ?? 0.8), `Rule ${rule.id}: confidence_threshold must be between 0 and 1.`);
+      add(!parameterReferences(params.confidence_threshold).length && !validThreshold(params.confidence_threshold ?? 0.8), `Rule ${rule.id}: confidence_threshold must be between 0 and 1.`);
     }
     if (rule.detector.ref === "text/regex") {
       add(typeof params.expression !== "string" || !params.expression.trim(), `Rule ${rule.id}: enter a regular expression.`);

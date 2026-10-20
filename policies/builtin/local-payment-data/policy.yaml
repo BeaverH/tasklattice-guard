@@ -1,13 +1,12 @@
-# yaml-language-server: $schema=../../schemas/policy.schema.json
 schema_version: 2
 kind: Policy
 metadata:
   id: local-payment-data
   name: Payment & bank identifiers
-  description: Redact reviewed payment-card, IBAN, Singapore and Canadian bank-account formats. Format
-    matching does not validate account ownership or payment authorization.
+  description: Redact reviewed payment-card, IBAN, Singapore and Canadian bank-account formats. Format matching
+    does not validate account ownership or payment authorization.
   source: built_in
-  version: 3.0.0
+  version: 4.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -17,20 +16,58 @@ metadata:
     value: pii_detection
     label: PII Detection
     source: declared
-  - namespace: collection
-    value: focused-protection
-    label: Focused protection
+  - namespace: framework
+    value: gdpr
+    label: GDPR
+    source: declared
+  - namespace: framework
+    value: pdpa
+    label: Singapore PDPA
+    source: declared
+  - namespace: framework
+    value: pipl-cn
+    label: PIPL (China)
+    source: declared
+  - namespace: jurisdiction
+    value: au
+    label: Australia
+    source: declared
+  - namespace: jurisdiction
+    value: cn
+    label: China mainland
+    source: declared
+  - namespace: jurisdiction
+    value: eu
+    label: European Union
+    source: declared
+  - namespace: jurisdiction
+    value: sg
+    label: Singapore
+    source: declared
+  - namespace: jurisdiction
+    value: uae
+    label: United Arab Emirates
     source: declared
   safety_level: balanced
   output_delivery: full_buffered
 parameters: []
+execution:
+  mode: sequential
+  input: previous_output
+  stop_on: block
 rules:
-- rules/financial-pii-credit_card.yaml
-- rules/financial-pii-iban.yaml
-- rules/pattern-ca_bank_account.yaml
-- rules/pattern-sg_bank_account.yaml
+- rules/financial-pii--credit_card.yaml
+- rules/financial-pii--iban.yaml
+- rules/pattern--ca_bank_account.yaml
+- rules/pattern--sg_bank_account.yaml
+- rules/cn-personal-information--unionpay-card.yaml
+- rules/gdpr-eu-financial-data--eu_iban_enhanced.yaml
+- rules/gdpr-eu-financial-data--iban.yaml
+- rules/pattern--eu_iban_enhanced.yaml
+- rules/sg-pdpa-financial-data--sg_bank_account.yaml
+- rules/financial-pii--visa.yaml
+- rules/financial-pii--mastercard.yaml
+- rules/financial-pii--amex.yaml
+- rules/financial-pii--discover.yaml
 tests:
 - tests/acceptance.yaml
-- tests/regression.yaml
-- tests/local-bank-account-formats-acceptance.yaml
-- tests/local-bank-account-formats-regression.yaml

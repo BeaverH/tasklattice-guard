@@ -1,14 +1,12 @@
-# yaml-language-server: $schema=../../schemas/policy.schema.json
 schema_version: 2
 kind: Policy
 metadata:
   id: local-sensitive-attribute-terms
   name: Sensitive attribute terms
-  description: Redact configured demographic and protected-attribute words, including benign mentions.
-    This optional vocabulary filter does not detect discrimination, infer a person's attributes or determine
-    legality.
+  description: Redact configured demographic and protected-attribute words, including benign mentions. This
+    optional vocabulary filter does not detect discrimination, infer a person's attributes or determine legality.
   source: built_in
-  version: 2.0.0
+  version: 4.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -18,22 +16,33 @@ metadata:
     value: pii_detection
     label: PII Detection
     source: declared
-  - namespace: collection
-    value: focused-protection
-    label: Focused protection
+  - namespace: jurisdiction
+    value: au
+    label: Australia
     source: declared
   safety_level: balanced
   output_delivery: full_buffered
 parameters: []
+execution:
+  mode: sequential
+  input: previous_output
+  stop_on: block
 rules:
-- rules/pattern-gender_sexual_orientation.yaml
-- rules/pattern-race_ethnicity_national_origin.yaml
-- rules/pattern-religion.yaml
-- rules/pattern-age_discrimination.yaml
-- rules/pattern-disability.yaml
-- rules/pattern-marital_family_status.yaml
-- rules/pattern-military_status.yaml
-- rules/pattern-public_assistance.yaml
+- rules/pattern--gender_sexual_orientation.yaml
+- rules/pattern--race_ethnicity_national_origin.yaml
+- rules/pattern--religion.yaml
+- rules/pattern--age_discrimination.yaml
+- rules/pattern--disability.yaml
+- rules/pattern--marital_family_status.yaml
+- rules/pattern--military_status.yaml
+- rules/pattern--public_assistance.yaml
+- rules/protected-class-information--gender_sexual_orientation.yaml
+- rules/protected-class-information--race_ethnicity_national_origin.yaml
+- rules/protected-class-information--religion.yaml
+- rules/protected-class-information--age_discrimination.yaml
+- rules/protected-class-information--disability.yaml
+- rules/protected-class-information--marital_family_status.yaml
+- rules/protected-class-information--military_status.yaml
+- rules/protected-class-information--public_assistance.yaml
 tests:
 - tests/acceptance.yaml
-- tests/regression.yaml

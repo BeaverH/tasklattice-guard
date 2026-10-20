@@ -619,6 +619,8 @@ export type PolicyParameter = {
 };
 
 export type Policy = {
+  /** Resource may be deleted, subject to reference checks. */
+  deletable?: boolean;
   definition?: import("../../shared/policy-definition").PolicyDefinition;
   maintenance?: { revision: number; maintainer: string };
   compliance?: import("../../shared/policy-compliance").PolicyCompliance;

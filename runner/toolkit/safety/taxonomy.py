@@ -195,7 +195,6 @@ _EVALUATOR_DEFAULTS = {
     "jailbreak": "TALI-MODEL-SECURITY-JAILBREAK",
     "system_prompt_leakage": "TALI-MODEL-SECURITY-PROMPT-LEAKAGE",
     "topic_control": "TALI-BUSINESS-POLICY-OFF-TOPIC",
-    "company_policy": "TALI-BUSINESS-POLICY",
     "contextual_grounding": "TALI-RESPONSE-INTEGRITY-UNGROUNDED",
     "automated_reasoning": "TALI-BUSINESS-POLICY",
     "builtin_content_filter": "TALI-BUSINESS-POLICY",

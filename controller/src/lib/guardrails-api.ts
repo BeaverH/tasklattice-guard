@@ -458,7 +458,7 @@ export const createProgrammablePolicy = (input: { name: string; description: str
 export const updateProgrammablePolicy = (id: string, input: { name?: string; description?: string; owner?: string; draft?: ProgrammablePolicyDraft }) => controllerApi.requestController<Policy>(`/api/v1/policies/${encodeURIComponent(id)}`, {
   method: "PATCH", body: JSON.stringify(input),
 });
-export const deleteProgrammablePolicy = (id: string) => controllerApi.requestController<void>(`/api/v1/policies/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const deletePolicy = (id: string) => controllerApi.requestController<void>(`/api/v1/policies/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const validateProgrammablePolicy = (id: string) => controllerApi.requestController<PolicyValidation>(`/api/v1/policies/${encodeURIComponent(id)}/draft/checks`);
 export const getLatestProgrammablePolicyValidation = (id: string) => controllerApi.requestController<PolicyDraftValidationRun>(`/api/v1/policies/${encodeURIComponent(id)}/test-runs/latest`);
 export async function runProgrammablePolicyValidation(id: string): Promise<PolicyDraftValidationRun> {

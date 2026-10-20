@@ -29,6 +29,21 @@ async function helper() {
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); available.ready = true; });
 describe("Topic Policy configuration", () => {
+  it("appends general restrictions once without changing allowlist, mode or Rule selection", () => {
+    setup();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Model Topic Control: protection.topicRules.deny" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "topicControl.denied" }), { target: { value: "Existing business restriction" } });
+    const before = current();
+    const details = screen.getByText("protection.topicRules.commonRestrictions").closest("details")!;
+    details.open = true; fireEvent(details, new Event("toggle"));
+    const add = screen.getByRole("button", { name: "protection.topicRules.addCommonRestrictions" });
+    fireEvent.click(add);
+    expect(current()).toEqual({ ...before, parameter_values: { ...before.parameter_values, denied_topics: expect.stringMatching(/^Existing business restriction\nNews and current events/) } });
+    expect(current().parameter_values.denied_topics.split("\n")).toHaveLength(10);
+    expect(add.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(add);
+    expect(current().parameter_values.denied_topics.split("\n")).toHaveLength(10);
+  });
   it("toggles Rules independently and retains disabled list values", () => {
     setup();
     expect(current().enabled_rule_ids).toEqual([ALLOW]);

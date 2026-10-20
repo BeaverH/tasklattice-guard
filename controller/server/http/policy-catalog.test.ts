@@ -71,15 +71,15 @@ describe("Policy catalog HTTP compatibility", () => {
     expect(listResponse.status).toBe(200);
     expect(collection.count).toBe(PolicyCatalog.load(config.policyCatalogDir).list().length);
     expect(collection.items).toHaveLength(collection.count);
-    expect(collection.items).toHaveLength(65);
+    expect(collection.items).toHaveLength(26);
     expect(collection.items.every(item => !("source" in item))).toBe(true);
     expect(collection.items.some((item) => ["mas-ai-risk-management", "singapore-financial-conduct"].includes(item.id))).toBe(false);
-    expect(collection.items.find((item) => item.id === "pattern-matching")?.test_count).toBeGreaterThan(0);
+    expect(collection.items.find((item) => item.id === "local-contact-data")?.test_count).toBeGreaterThan(0);
 
-    const detailResponse = await app.request("/api/v1/policies/pattern-matching");
+    const detailResponse = await app.request("/api/v1/policies/local-contact-data");
     const detail = await detailResponse.json() as { id: string; implementation: string; tags: Array<{ id: string }> };
     expect(detailResponse.status).toBe(200);
-    expect(detail).toMatchObject({ id: "pattern-matching", implementation: "rules" });
+    expect(detail).toMatchObject({ id: "local-contact-data", implementation: "rules" });
     expect(detail.tags).toEqual(expect.arrayContaining([expect.objectContaining({ id: "framework:owasp-llm-2025" })]));
   });
 
@@ -89,7 +89,7 @@ describe("Policy catalog HTTP compatibility", () => {
     expect(response.status).toBe(200);
     const data = await response.json() as { directories: unknown[]; items: Array<{ id: string; policies: unknown[]; policyBindings: Array<{ policyId: string; policyVersion: string }> }> };
     expect(data.directories).toHaveLength(8);
-    expect(data.items).toHaveLength(7);
+    expect(data.items).toHaveLength(15);
     for (const preset of data.items) {
       expect(preset.policyBindings).toHaveLength(preset.policies.length);
       expect(preset.policyBindings.every((binding) => binding.policyVersion.length > 0)).toBe(true);

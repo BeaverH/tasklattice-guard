@@ -81,9 +81,9 @@ async def test_monitor_runs_jev_preserves_evidence_and_never_enforces(behavior):
         await runtime.shutdown()
 
 
-def test_jev_configuration_does_not_advertise_company_policy_or_output():
+def test_jev_configuration_does_not_advertise_other_contracts_or_output():
     request = jev_candidate()
-    request.configuration.bindings[0].contract_refs.append("tali.guard.company-policy.v1")
+    request.configuration.bindings[0].contract_refs.append("tali.guard.content-safety.v1")
     with pytest.raises(ValueError, match="input Topic Control"):
         dynamic_runtime_action_providers(request.configuration, {"provider-1": "synthetic"})
     request = candidate("output", "topic_control", JEV_TOPIC_PROFILE, "tali.guard.topic-control.semantic.v1")

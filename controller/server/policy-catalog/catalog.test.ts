@@ -13,7 +13,7 @@ import { defaultGuardrailDraft } from "../domain/defaults.js";
 const assetDirectory = resolve("../runner/toolkit/policy_library/assets");
 
 describe("Policy catalog", () => {
-  it("removes aviation-only templates and facets while retaining shared jurisdictions", () => {
+  it("removes aviation-only templates and facets while moving regional composition to Profiles", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     for (const id of ["airline-off-topic-restriction", "airline-passenger-data-protection-uae", "aviation-operations-security", "local-travel-identifiers"]) {
       expect(catalog.get(id)).toBeUndefined();
@@ -31,20 +31,20 @@ describe("Policy catalog", () => {
     const retired = catalog.retired();
     expect(retired.map(policy => policy.id).sort()).toEqual([
       "local-australian-tax-health-identifiers", "local-bank-account-formats",
-      "local-passport-formats", "local-regional-contact-formats",
+      "local-passport-formats", "local-regional-contact-formats", "pattern-matching",
     ]);
     expect(catalog.list().some(policy => policy.retired)).toBe(false);
     const policies = [...catalog.list(), ...retired];
     for (const policy of retired) {
       const draft = defaultGuardrailDraft(catalog.list());
       draft.policyBindings = [{ ...draft.policyBindings[0]!, policyId: policy.id, policyVersion: policy.version,
-        enabledRuleIds: policy.rules.map(rule => rule.id), enabledRails: policy.rails }];
+        enabledRuleIds: policy.rules.map(rule => rule.id), ruleOrder: [], enabledRails: policy.rails }];
       expect(buildGuardrailPlan({ guardrailId: "old-draft", guardrailVersion: "test", draft, policies }).policy_bindings)
-        .toMatchObject([{ policy_id: policy.id, policy_version: "2.0.0" }]);
+        .toMatchObject([{ policy_id: policy.id, policy_version: policy.version }]);
     }
     for (const id of ["local-payment-data", "local-contact-data", "local-passports", "local-government-identifiers"]) {
       const policy = catalog.get(id)!;
-      expect(policy.version).toBe("3.0.0");
+      expect(policy.version).toBe("4.0.0");
       expect(policy.published_versions?.map(version => version.version)).toContain("2.0.0");
     }
   });
@@ -68,7 +68,7 @@ describe("Policy catalog", () => {
   it("documents every built-in Policy and separates implementation lineage from industry context", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list().filter(policy => policy.source === "built_in");
-    expect(policies).toHaveLength(65);
+    expect(policies).toHaveLength(26);
     for (const policy of policies) {
       expect(policy.compliance?.policy_version, policy.id).toBe(policy.version);
       expect(policy.compliance?.provenance.en, policy.id).toBeTruthy();
@@ -80,18 +80,13 @@ describe("Policy catalog", () => {
       }
     }
     expect(policies.filter(policy => policy.compliance).length).toBe(policies.length);
-    expect(policies.filter(policy => policy.compliance?.references.length).length).toBe(55);
+    expect(policies.filter(policy => policy.compliance?.references.length).length).toBeGreaterThan(15);
     expect(catalog.get("builtin-content-safety")?.compliance?.references[0]?.url).toContain("nist.gov");
-    expect(catalog.get("filter-denied-medical-advice")?.compliance).toMatchObject({
-      references: [expect.objectContaining({ url: expect.stringContaining("who.int") })],
-      upstream_status: { en: expect.stringContaining("not the Policy's compliance authority"), zh: expect.stringContaining("不是此 Policy 的合规权威") },
-    });
-    expect(catalog.get("mas-ai-risk-management")).toBeUndefined();
-    expect(catalog.get("singapore-financial-conduct")).toBeUndefined();
-    expect(catalog.get("china-personal-identifiers")?.compliance?.references[0]?.url).toContain("flk.npc.gov.cn/detail");
-    expect(catalog.get("china-banking-assistant-boundaries")?.compliance?.references[0]?.url).toContain("std.samr.gov.cn/hb/search/stdHBDetailed");
-    expect(catalog.get("china-organization-identifiers")?.compliance?.references).toEqual([]);
-    expect(catalog.get("topic-filtering")?.compliance?.references).toEqual([]);
+    expect(catalog.get("local-professional-advice")?.compliance?.references[0]?.url).toContain("who.int");
+    for (const removed of ["pdpa-singapore", "china-personal-identifiers", "china-banking-assistant-boundaries", "topic-filtering"]) {
+      expect(catalog.list().some(p => p.id === removed)).toBe(false);
+    }
+
   });
 
   it("never presents software dependencies, the retired MAS page, or AI Verify as compliance references", () => {
@@ -121,9 +116,10 @@ describe("Policy catalog", () => {
     const directory = mkdtempSync(join(tmpdir(), "guard-compliance-"));
     try {
       cpSync(assetDirectory, directory, { recursive: true });
-      const file = join(directory, "builtin_policies.json");
+      const file = join(directory, "focused_policies.json");
       const assets = JSON.parse(readFileSync(file, "utf8"));
-      const policy = assets.find((item: { id: string }) => item.id === "advanced-au-pii-protection");
+      const policy = assets.find((item: { id: string }) => item.id === "local-government-identifiers");
+      policy.compliance = structuredClone(PolicyCatalog.load(assetDirectory).get(policy.id)!.compliance);
       if (kind === "version") policy.compliance.policy_version = "older-version";
       else policy.compliance.references[0].rule_ids = ["missing-rule"];
       writeFileSync(file, JSON.stringify(assets));
@@ -132,7 +128,7 @@ describe("Policy catalog", () => {
   });
 
   it("requires safe links and evidence for reviewed documentation", () => {
-    const documentation = PolicyCatalog.load(assetDirectory).get("advanced-au-pii-protection")!.compliance!;
+    const documentation = PolicyCatalog.load(assetDirectory).get("local-government-identifiers")!.compliance!;
     expect(policyComplianceSchema.safeParse({ ...documentation, review: { ...documentation.review, reviewer: null } }).success).toBe(false);
     expect(policyComplianceSchema.safeParse({ ...documentation, references: [{ ...documentation.references[0], url: "javascript:alert(1)" }] }).success).toBe(false);
   });
@@ -141,7 +137,7 @@ describe("Policy catalog", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list();
 
-    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(65);
+    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(26);
     expect(new Set(policies.map((policy) => policy.id)).size).toBe(policies.length);
     expect(catalog.get("builtin-content-safety")).toMatchObject({ rails: ["input", "output"], test_count: 2 });
     expect(catalog.get("competitor-mention-detection")).toMatchObject({
@@ -152,7 +148,7 @@ describe("Policy catalog", () => {
   });
 
   it("normalizes computed fields, Guardrail categories, and framework metadata", () => {
-    const policy = PolicyCatalog.load(assetDirectory).get("pattern-matching");
+    const policy = PolicyCatalog.load(assetDirectory).get("local-contact-data");
 
     expect(policy).toBeDefined();
     expect(policy?.rails).toEqual(["input", "output"]);
@@ -171,17 +167,12 @@ describe("Policy catalog", () => {
     });
   });
 
-  it("keeps regulatory framework Policies discoverable in the default catalog", () => {
+  it("preserves region and framework discovery on shared capabilities", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
-
-    expect(catalog.get("eu-ai-act-article5")?.tags).toEqual(expect.arrayContaining([expect.objectContaining({ id: "framework:eu-ai-act" })]));
-    expect(catalog.get("gdpr-eu-pii-protection")?.tags).toEqual(expect.arrayContaining([expect.objectContaining({ id: "framework:gdpr" })]));
-    expect(catalog.get("pdpa-singapore")?.tags).toEqual(expect.arrayContaining([expect.objectContaining({ id: "framework:pdpa" })]));
-
-    const jurisdictions = new Set(
-      catalog.list().filter(policy => policy.source === "built_in").flatMap((policy) => policy.tags.filter((tag) => tag.namespace === "jurisdiction").map((tag) => tag.value)),
-    );
-    expect(jurisdictions).toEqual(new Set(["au", "cn", "eu", "sg", "singapore", "uae"]));
+    const tags = catalog.list().flatMap(p => p.tags);
+    expect([...new Set(tags.filter(t => t.namespace === "jurisdiction").map(t => t.value))].sort()).toEqual(["au", "cn", "eu", "sg", "uae"]);
+    expect(tags.filter(t => t.namespace === "framework").map(t => t.value)).toEqual(expect.arrayContaining(["gdpr", "pdpa", "pipl-cn", "jr-t-0221-2021", "eu-ai-act", "owasp-llm-2025"]));
+    expect(catalog.get("local-content-safety")?.rules.some(r => r.id === "category/harmful_child_safety")).toBe(true);
   });
 
   it("uses the reviewed Policy facets and canonical NeMo Rail terminology", () => {

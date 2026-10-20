@@ -52,12 +52,12 @@ def test_invalid_conditions_fail_before_execution(node):
         validate_conditions({"match":node})
 
 
-def test_company_policy_reuses_the_topic_classifier_contract():
-    company=policy("builtin-company-policy").rules[0]
-    topic=policy("builtin-topic-safety").rules[0]
-    assert company.detector.ref == topic.detector.ref == "model/classifier"
-    assert company.detector_options == topic.detector_options == {"profile":"topic-classification"}
-    assert company.implementation.action_name == topic.implementation.action_name
+def test_business_boundaries_use_two_rules_with_one_topic_classifier_contract():
+    rules = policy("builtin-topic-safety").rules
+    assert [rule.id for rule in rules] == ["topic/denylist", "topic/allowlist"]
+    assert all(rule.detector.ref == "model/classifier" for rule in rules)
+    assert all(rule.detector_options == {"profile": "topic-classification"} for rule in rules)
+    assert {rule.implementation.binding_id for rule in rules} == {"topic_control"}
 
 
 def test_binding_parameters_cannot_override_rule_risk():

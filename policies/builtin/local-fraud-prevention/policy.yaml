@@ -1,0 +1,48 @@
+schema_version: 2
+kind: Policy
+metadata:
+  id: local-fraud-prevention
+  name: Fraud & Account Abuse
+  description: Local identity-check evasion, credential solicitation, phishing, financial misrepresentation,
+    market manipulation and claims-fraud patterns.
+  source: built_in
+  version: 4.0.0
+  tags:
+  - namespace: protection
+    value: business_rules
+    label: Business Rules
+    source: declared
+  - namespace: guardrail_category
+    value: agentic_security
+    label: Agentic Security
+    source: declared
+  - namespace: framework
+    value: jr-t-0221-2021
+    label: JR/T 0221-2021
+    source: declared
+  - namespace: jurisdiction
+    value: cn
+    label: China mainland
+    source: declared
+  safety_level: balanced
+  output_delivery: full_buffered
+parameters: []
+execution:
+  mode: sequential
+  input: previous_output
+  stop_on: block
+rules:
+- rules/banking--identity-evasion.yaml
+- rules/banking--return-guarantee.yaml
+- rules/cn-banking--verification-code-theft.yaml
+- rules/cn-banking--sensitive-credential-solicitation.yaml
+- rules/cn-banking--identity-check-evasion.yaml
+- rules/cn-banking--misleading-return-guarantee.yaml
+- rules/claims-fraud-coaching-filter--claims_fraud_coaching.yaml
+- rules/claims-prior-auth-gaming-filter--claims_prior_auth_gaming.yaml
+- rules/internet--phishing.yaml
+- rules/internet--session-theft.yaml
+- rules/securities--inside-information.yaml
+- rules/securities--manipulation.yaml
+tests:
+- tests/acceptance.yaml

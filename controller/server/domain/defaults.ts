@@ -1,63 +1,22 @@
 import type { GuardrailDraftConfig } from "./guardrail-plan.js";
 import type { PolicyDto } from "../policy-catalog/catalog.js";
+import { defaultPolicySelection } from "../../shared/default-policy-selection.js";
 import { defaultTestCaseOverrides } from "./default-expectations.js";
 
 export const DEFAULT_GUARDRAIL_ID = "guardrail-default";
 export const DEFAULT_GUARDRAIL_NAME = "Default Guardrail";
 
-// Default is a composition of complete local and model Policies, not a separate
-// Rule collection. Policy definitions own their Rules, phases, and actions;
-// reviewed Default-local overrides can retain findings without enforcement.
-// Focused bindings replace the three mixed legacy collections. Credentials
-// precede numeric redaction; complete payment values precede broad tax formats;
-// regional bank and government identifiers precede broad contact formats.
-// This is an authored Policy order, never an action/severity ranking.
-const DEFAULT_POLICY_IDS = [
-  "builtin-indirect-prompt-injection",
-  "builtin-memory-poisoning",
-  // Inspect the original content before local transformations. Model bindings
-  // are required; missing/unavailable models must never downgrade this chain.
-  "builtin-jailbreak",
-  "builtin-content-safety",
-  "filter-denied-insults",
-  "filter-harm-toxic-abuse",
-  "filter-harmful-violence",
-  "filter-harmful-self-harm",
-  "filter-harmful-child-safety",
-  "filter-harmful-illegal-weapons",
-  "filter-bias-gender",
-  "filter-bias-racial",
-  "filter-bias-religious",
-  "filter-bias-sexual-orientation",
-  "local-prompt-manipulation",
-  "local-sql-injection",
-  "local-code-injection",
-  "local-rendered-content-injection",
-  "filter-prompt-injection-jailbreak",
-  "filter-prompt-injection-data-exfiltration",
-  "filter-prompt-injection-sql",
-  "filter-prompt-injection-malicious-code",
-  "filter-prompt-injection-system-prompt",
-  "local-credentials",
-  "local-payment-data",
-  "local-government-identifiers",
-  "local-passports",
-  "local-contact-data",
-  "local-network-addresses",
-  "local-sensitive-attribute-terms",
-  "local-risk-content-terms",
-] as const;
-
+// Capability additions remain opt-in. Preserve the reviewed Rule order and handling.
 /**
  * Build the reserved baseline from the Runner-owned Policy catalog.
  *
- * The binding snapshot materializes each complete Policy for compilation and
- * observability. All Rules and inherited Test Cases are retained. Ordering and
+ * The binding snapshot materializes the reviewed Rules for compilation and
+ * observability. New catalog Rules are opt-in. Ordering and
  * reviewed test expectations belong to Default, never to the source templates.
  */
 export function defaultGuardrailDraft(policies: readonly PolicyDto[]): GuardrailDraftConfig {
   const byId = new Map(policies.map((policy) => [policy.id, policy]));
-  const selected = DEFAULT_POLICY_IDS.map((policyId) => {
+  const selected = defaultPolicySelection.map(({ policyId, ruleIds }) => {
     const policy = byId.get(policyId);
     if (!policy) throw new Error(`Default Guardrail Policy ${policyId} is missing from the Runner catalog.`);
     if (!policy.rules.length) throw new Error(`Default Guardrail Policy ${policyId} has no Rules.`);
@@ -65,6 +24,8 @@ export function defaultGuardrailDraft(policies: readonly PolicyDto[]): Guardrail
       || policy.rules.some((rule) => !["local", "platform"].includes(rule.implementation.execution))) {
       throw new Error(`Default Guardrail Policy ${policyId} must use verified local or platform Model implementations.`);
     }
+    const knownRules = new Set(policy.rules.map(rule => rule.id));
+    if (ruleIds.some(id => !knownRules.has(id))) throw new Error(`Default Guardrail Policy ${policyId} is missing a reviewed Rule.`);
     return {
       policyId: policy.id,
       policyVersion: policy.version,
@@ -72,10 +33,10 @@ export function defaultGuardrailDraft(policies: readonly PolicyDto[]): Guardrail
       parameterValues: Object.fromEntries(policy.parameters.flatMap((parameter) => (
         parameter.default === null || parameter.default === undefined ? [] : [[parameter.name, parameter.default]]
       ))),
-      enabledRuleIds: policy.rules.map((rule) => rule.id),
-      ruleOrder: [],
+      enabledRuleIds: [...ruleIds],
+      ruleOrder: [...ruleIds],
       testCaseOverrides: defaultTestCaseOverrides(policy.id),
-      ruleActions: policy.id === "filter-denied-insults"
+      ruleActions: policy.id === "local-content-safety"
         ? { "category/denied_insults": "allow" as const }
         : {},
       enabledRails: [...policy.rails],

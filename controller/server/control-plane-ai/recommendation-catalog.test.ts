@@ -11,8 +11,8 @@ describe("Document recommendation catalog", () => {
     const focusedEmail = source.find((policy) => policy.rules.some((rule) => rule.id === "pattern/email"));
     expect(focusedEmail).toBeDefined();
     expect(recommendations.some((policy) => policy.id === focusedEmail!.id)).toBe(true);
-    expect(source.some((policy) => policy.id === "baseline-pii-protection")).toBe(true);
-    expect(recommendations.some((policy) => policy.id === "baseline-pii-protection")).toBe(true);
+    expect(source.some((policy) => policy.id === "local-government-identifiers")).toBe(true);
+    expect(recommendations.some((policy) => policy.id === "local-government-identifiers")).toBe(true);
   });
 
   it("provides real direction, dependency and limitation metadata without implementation bodies", () => {

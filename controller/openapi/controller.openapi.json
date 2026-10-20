@@ -876,16 +876,6 @@
               }
             ]
           },
-          "company_policy.input": {
-            "anyOf": [
-              {
-                "type": "null"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
           "content_safety.input": {
             "anyOf": [
               {
@@ -1344,6 +1334,12 @@
             },
             "type": "array"
           },
+          "enabledRuleIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "parameterValues": {
             "$ref": "#/components/schemas/getPoliciesByIdDefinitionResponseDefinitionTestingParameters"
           },
@@ -1352,6 +1348,15 @@
           },
           "policyVersion": {
             "type": "string"
+          },
+          "ruleOrder": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "testCaseOverrides": {
+            "$ref": "#/components/schemas/getGuardrailProfilesResponseItemsItemPoliciesItemTestCaseOverrides"
           }
         },
         "required": [
@@ -1359,6 +1364,62 @@
           "policyVersion",
           "enabledRails",
           "parameterValues"
+        ],
+        "type": "object"
+      },
+      "getGuardrailProfilesResponseItemsItemPoliciesItemTestCaseOverrides": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/getGuardrailProfilesResponseItemsItemPoliciesItemTestCaseOverridesValue"
+        },
+        "type": "object"
+      },
+      "getGuardrailProfilesResponseItemsItemPoliciesItemTestCaseOverridesValue": {
+        "properties": {
+          "expectedDecision": {
+            "enum": [
+              "allow",
+              "block",
+              "intervene",
+              "transform"
+            ],
+            "type": "string"
+          },
+          "expectedMatches": {
+            "items": {
+              "$ref": "#/components/schemas/getGuardrailProfilesResponseItemsItemPoliciesItemTestCaseOverridesValueExpectedMatchesItem"
+            },
+            "type": "array"
+          },
+          "expectedOutputContent": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "sourcePolicyVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourcePolicyVersion",
+          "reason",
+          "expectedDecision",
+          "expectedMatches"
+        ],
+        "type": "object"
+      },
+      "getGuardrailProfilesResponseItemsItemPoliciesItemTestCaseOverridesValueExpectedMatchesItem": {
+        "properties": {
+          "policyId": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "policyId",
+          "ruleId"
         ],
         "type": "object"
       },
@@ -3894,7 +3955,6 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
-          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -4130,16 +4190,6 @@
               }
             ]
           },
-          "company_policy.input": {
-            "anyOf": [
-              {
-                "type": "null"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
           "content_safety.input": {
             "anyOf": [
               {
@@ -4213,7 +4263,6 @@
         },
         "required": [
           "automated_reasoning.output",
-          "company_policy.input",
           "content_safety.input",
           "content_safety.output",
           "contextual_grounding.output",
@@ -4354,10 +4403,6 @@
               },
               {
                 "const": "automated_reasoning.output",
-                "type": "string"
-              },
-              {
-                "const": "company_policy.input",
                 "type": "string"
               },
               {
@@ -5985,6 +6030,9 @@
           "compliance": {
             "$ref": "#/components/schemas/postPoliciesByIdDefinitionPublishResponseCompliance"
           },
+          "deletable": {
+            "type": "boolean"
+          },
           "description": {
             "type": "string"
           },
@@ -6109,6 +6157,7 @@
           }
         },
         "required": [
+          "deletable",
           "published_versions",
           "implementation",
           "id",
@@ -9571,7 +9620,6 @@
             "items": {
               "enum": [
                 "automated_reasoning.output",
-                "company_policy.input",
                 "content_safety.input",
                 "content_safety.output",
                 "contextual_grounding.output",
@@ -9826,7 +9874,6 @@
           "capability": {
             "enum": [
               "automated_reasoning",
-              "company_policy",
               "content_safety",
               "contextual_grounding",
               "jailbreak",
@@ -9838,7 +9885,6 @@
           "id": {
             "enum": [
               "automated_reasoning.output",
-              "company_policy.input",
               "content_safety.input",
               "content_safety.output",
               "contextual_grounding.output",
@@ -15767,7 +15813,6 @@
                 "content_safety.output",
                 "jailbreak.input",
                 "topic_control.input",
-                "company_policy.input",
                 "pii_semantic.input",
                 "pii_semantic.output",
                 "contextual_grounding.output",
@@ -15896,7 +15941,6 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
-          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -16075,7 +16119,6 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
-          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -17649,6 +17692,13 @@
           "definition": {
             "$ref": "#/components/schemas/getPoliciesByIdDefinitionResponseDefinition"
           },
+          "deletable": {
+            "enum": [
+              false,
+              true
+            ],
+            "type": "boolean"
+          },
           "description": {
             "type": "string"
           },
@@ -17712,6 +17762,13 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "retired": {
+            "enum": [
+              false,
+              true
+            ],
+            "type": "boolean"
           },
           "rules": {
             "items": {
@@ -19297,6 +19354,9 @@
           "compliance": {
             "$ref": "#/components/schemas/postPoliciesByIdDefinitionPublishResponseCompliance"
           },
+          "deletable": {
+            "type": "boolean"
+          },
           "description": {
             "type": "string"
           },
@@ -19425,6 +19485,7 @@
           }
         },
         "required": [
+          "deletable",
           "published_versions",
           "implementation",
           "id",
@@ -21210,7 +21271,6 @@
           "content_safety.output",
           "jailbreak.input",
           "topic_control.input",
-          "company_policy.input",
           "pii_semantic.input",
           "pii_semantic.output",
           "contextual_grounding.output",
@@ -21258,19 +21318,6 @@
                     "type": "null"
                   }
                 ]
-              },
-              "company_policy.input": {
-                "anyOf": [
-                  {
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null
               },
               "content_safety.input": {
                 "anyOf": [

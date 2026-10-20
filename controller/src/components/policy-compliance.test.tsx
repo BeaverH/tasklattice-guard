@@ -7,7 +7,7 @@ import { PolicyCompliancePanel } from "./policy-compliance";
 const locale = vi.hoisted(() => ({ language: "en" }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: locale }) }));
 afterEach(() => { cleanup(); locale.language = "en"; });
-const policy = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).get("advanced-au-pii-protection")!;
+const policy = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).get("local-government-identifiers")!;
 
 it("renders version-bound provenance, blue external references, Rules, limits and review evidence", () => {
   render(<PolicyCompliancePanel policy={policy} />);

@@ -78,7 +78,7 @@ _BUILTIN_RUNTIME_ACTIONS = (
     (ACTION_INDIRECT_PROMPT_INJECTION, ("indirect_prompt_injection",), ("input",)),
     (ACTION_MEMORY_POISONING, ("memory_poisoning",), ("input",)),
     (ACTION_PROMPT_LEAKAGE, ("system_prompt_leakage",), ("output",)),
-    (ACTION_TOPIC_JUDGE, ("topic_control", "company_policy"), ("input", "output")),
+    (ACTION_TOPIC_JUDGE, ("topic_control",), ("input", "output")),
     (ACTION_GROUNDING, ("contextual_grounding",), ("output",)),
     (ACTION_AUTOMATED_REASONING, ("automated_reasoning",), ("output",)),
 )
@@ -113,7 +113,6 @@ def action_name_for(capability: str, contract_ref: str) -> str:
         "indirect_prompt_injection": ACTION_INDIRECT_PROMPT_INJECTION,
         "memory_poisoning": ACTION_MEMORY_POISONING,
         "system_prompt_leakage": ACTION_PROMPT_LEAKAGE,
-        "company_policy": ACTION_TOPIC_JUDGE,
         "contextual_grounding": ACTION_GROUNDING,
         "automated_reasoning": ACTION_AUTOMATED_REASONING,
     }.get(capability, _dynamic_action_name(capability))

@@ -30,7 +30,6 @@ const evaluatorProfiles = {
   "tali.taxonomy-judge.v1": new Set([
     "tali.guard.taxonomy-normalization.v1",
     "tali.guard.topic-control.semantic.v1",
-    "tali.guard.company-policy.v1",
   ]),
 } as const;
 

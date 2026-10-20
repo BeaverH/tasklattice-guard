@@ -145,7 +145,7 @@ async def test_large_standard_policy_chain_preserves_order_and_short_circuit(pha
 
 
 def test_local_rules_use_current_text_and_stop_on_reject(monkeypatch):
-    template = policy("pattern-matching")
+    template = policy("local-contact-data")
     rule = template.rules[0]
     first = replace(rule, id="z-first", expression="alpha", context_expression=None, effect="transform", redaction="[A]")
     second = replace(rule, id="a-second", expression="alpha", context_expression=None, effect="block")
@@ -166,7 +166,7 @@ def test_local_rules_use_current_text_and_stop_on_reject(monkeypatch):
 
 
 def test_guardrail_rule_order_is_independent_of_enabled_membership_and_template(monkeypatch):
-    template = policy("pattern-matching")
+    template = policy("local-contact-data")
     base = template.rules[0]
     definition = replace(template, id="local-order", rules=(
         replace(base, id="transform", expression="alpha", context_expression=None, effect="transform", redaction="[A]"),

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { parsePhraseEntries } from "../../shared/phrase-policy";
 import { PhrasePolicyEditor } from "./phrase-policy-editor";
 import { boundPolicy } from "@/lib/bound-policy";
+import { activePolicyParameters, policyBindingParameterIssues } from "../../shared/policy-parameters";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -150,7 +151,7 @@ export function PolicyBindingEditor({
                     ? t("guardrailWizard.noEnabledRules")
                     : validation.missingRails
                       ? t("protection.selectDirection")
-                    : null;
+                    : validation.parameterIssues[0] ?? null;
               const orderedRuleIds = [...new Set([...(binding.rule_order ?? []), ...policy.rules.map((rule) => rule.id)])];
               const orderedRules = orderedRuleIds.flatMap((id) => policy.rules.filter((rule) => rule.id === id));
               function moveRule(index: number, offset: number, button: HTMLButtonElement) {
@@ -270,7 +271,8 @@ export function PolicyBindingEditor({
                                 ) : (
                                   <Input
                                     className="field:min-h-11 field:bg-card"
-                                    type={parameter.kind === "secret" ? "password" : "text"}
+                                    type={parameter.kind === "secret" ? "password" : parameter.kind === "number" ? "number" : "text"}
+                                    step={parameter.kind === "number" ? "any" : undefined}
                                     value={binding.parameter_values[parameter.name] ?? parameter.default ?? ""}
                                     placeholder={parameter.placeholder}
                                     onChange={(event) => update(binding.policy_id, { parameter_values: { ...binding.parameter_values, [parameter.name]: event.target.value } })}
@@ -320,7 +322,8 @@ export function defaultPolicyBinding(policy: Policy): GuardrailPolicyBinding {
 
 export function getPolicyBindingValidation(binding: GuardrailPolicyBinding, policy: Policy) {
   const topicMissing = isSplitTopicPolicy(policy.id, policy.version) ? topicMissingParameters(binding.parameter_values, binding.enabled_rule_ids) : [];
-  const missingRequiredParameters = policy.parameters.filter((parameter) => {
+  const active = policy.definition ? activePolicyParameters(policy.definition, binding.enabled_rule_ids, binding.enabled_rails) : policy.parameters;
+  const missingRequiredParameters = active.filter((parameter) => {
     const value = binding.parameter_values[parameter.name] ?? parameter.default ?? "";
     if (parameter.kind === "phrase_entries") {
       try { parsePhraseEntries(value); return false; } catch { return true; }
@@ -329,6 +332,10 @@ export function getPolicyBindingValidation(binding: GuardrailPolicyBinding, poli
   });
   return {
     missingRequiredParameters,
+    parameterIssues: policy.definition ? policyBindingParameterIssues(policy.definition, binding.parameter_values,
+      binding.enabled_rule_ids, binding.enabled_rails, binding.reasoning_policy ? {
+        policyId: binding.reasoning_policy.policy_id, policyVersion: binding.reasoning_policy.policy_version,
+      } : null) : [],
     missingReasoningPolicy: binding.policy_id === "builtin-automated-reasoning"
       && !(binding.reasoning_policy?.policy_id.trim() && binding.reasoning_policy.policy_version.trim()),
     missingRules: binding.enabled_rule_ids.length === 0,

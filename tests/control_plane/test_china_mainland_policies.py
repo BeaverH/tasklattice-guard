@@ -8,16 +8,8 @@ from runner.toolkit.nemo.actions.content_filter import BuiltinContentFilter
 from runner.toolkit.policy_library import policies
 
 
-CHINA_POLICIES = tuple(
-    item
-    for item in policies()
-    if any(tag.id == "collection:china-mainland" for tag in item.tags)
-)
-CASES = tuple(
-    (item, case)
-    for item in CHINA_POLICIES
-    for case in item.test_cases
-)
+CHINA_POLICIES = tuple(p for p in policies() if any(r.id.startswith("cn-") for r in p.rules))
+CASES = tuple((p,c) for p in CHINA_POLICIES for c in p.test_cases if c.id.startswith("china-"))
 
 
 def _decision(result) -> str:
@@ -30,17 +22,11 @@ def _decision(result) -> str:
     return "transform"
 
 
-def test_china_mainland_collection_is_versioned_and_locally_executable() -> None:
-    assert {item.id for item in CHINA_POLICIES} == {
-        "china-personal-identifiers",
-        "china-organization-identifiers",
-        "china-prompt-manipulation",
-        "china-banking-assistant-boundaries",
-    }
-    for item in CHINA_POLICIES:
-        assert item.version == "1.0.0"
-        assert any(tag.id == "jurisdiction:cn" for tag in item.tags)
-        assert all(rule.implementation.execution == "local" for rule in item.rules)
+def test_china_rules_belong_to_shared_capabilities() -> None:
+    assert {p.id for p in CHINA_POLICIES} == {"local-government-identifiers", "local-contact-data", "local-payment-data", "local-injection-protection", "local-fraud-prevention"}
+    for policy in CHINA_POLICIES:
+        assert policy.version == "4.0.0"
+        assert all(rule.implementation.execution == "local" for rule in policy.rules)
 
 
 @pytest.mark.parametrize(
@@ -53,6 +39,7 @@ def test_china_mainland_policy_cases_execute_the_published_rules(policy, case) -
         text=case.content,
         phase=case.phase,
         policies=(policy.id,),
+        enabled_rules={policy.id: case.covered_rule_ids},
     )
     assert _decision(result) == case.expected_decision, result.reason
     if case.expected_decision == "transform":
@@ -73,10 +60,9 @@ def test_china_mainland_policy_cases_execute_the_published_rules(policy, case) -
     ],
 )
 def test_checksum_validation_does_not_redact_format_only_candidates(content: str) -> None:
-    result = BuiltinContentFilter().evaluate(definitions=library_definitions(("china-personal-identifiers", "china-organization-identifiers")),
-        text=content,
-        phase="input",
-        policies=("china-personal-identifiers", "china-organization-identifiers"),
-    )
+    ids = ("local-government-identifiers", "local-payment-data")
+    definitions = library_definitions(ids)
+    result = BuiltinContentFilter().evaluate(definitions=definitions, text=content, phase="input", policies=ids,
+        enabled_rules={pid: tuple(r.id for r in p.rules if r.id.startswith("cn-")) for pid,p in definitions.items()})
     assert result.verdict == "not_matched"
     assert result.content == content

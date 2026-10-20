@@ -8,27 +8,39 @@ import { expandProtectionPreset } from "./presets.js";
 const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
 
 describe("Protection presets", () => {
-  it("keeps broad disclosure filters opt-in instead of silently enabling them for every industry", () => {
-    const reviewedOnly = new Set([
-      "local-government-identifiers", "local-network-addresses",
-      "local-sensitive-attribute-terms", "local-risk-content-terms",
-    ]);
-    expect(policies.filter((policy) => reviewedOnly.has(policy.id))).toHaveLength(reviewedOnly.size);
-    for (const preset of protectionPresets) {
-      expect(expandProtectionPreset(preset, policies).filter((binding) => reviewedOnly.has(binding.policyId))).toEqual([]);
+  it("adds Singapore identifier Rules to an existing China capability selection without losing either region", () => {
+    const china = expandProtectionPreset(protectionPresets.find(p => p.id === "china-mainland-runtime")!, policies);
+    const singapore = protectionPresets.find(p => p.id === "singapore-data-protection")!;
+    const combined = expandProtectionPreset(singapore, policies, china);
+    const identifiers = combined.find(b => b.policyId === "local-government-identifiers")!;
+    expect(identifiers.enabledRuleIds).toContain("cn-personal-information/resident-identity-card");
+    for (const id of singapore.policies.find(p => p.policyId === identifiers.policyId)!.enabledRuleIds!) {
+      expect(identifiers.enabledRuleIds).toContain(id);
     }
+    expect(identifiers.ruleOrder![0]).toBe("cn-personal-information/resident-identity-card");
+    expect(expandProtectionPreset(singapore, policies, combined)).toEqual(combined);
+    expect(china.find(b => b.policyId === identifiers.policyId)!.enabledRuleIds).toHaveLength(1);
   });
 
-  it.each(protectionPresets)("$name expands complete, pinned, model-free Policies in reviewed order", (preset) => {
+  it("selects regional identifiers explicitly without enabling every identifier format", () => {
+    const china = expandProtectionPreset(protectionPresets.find(p => p.id === "china-mainland-runtime")!, policies);
+    const identifiers = china.find(b => b.policyId === "local-government-identifiers")!;
+    expect(identifiers.enabledRuleIds).toEqual(["cn-personal-information/resident-identity-card"]);
+    expect(identifiers.enabledRuleIds).not.toContain("pattern/au_abn");
+  });
+
+  it.each(protectionPresets)("$name expands selected, pinned, model-free Policies in reviewed order", (preset) => {
     const bindings = expandProtectionPreset(preset, policies);
     expect(bindings.map((binding) => binding.policyId)).toEqual(preset.policies.map((reference) => reference.policyId));
     for (const binding of bindings) {
       const policy = policies.flatMap(item => [item, ...item.published_versions ?? []])
         .find(item => item.id === binding.policyId && item.version === binding.policyVersion)!;
       expect(binding.policyVersion).toBe(policy.version);
-      expect(binding.enabledRuleIds).toEqual(policy.rules.map((rule) => rule.id));
+      const reference = preset.policies.find(r => r.policyId === binding.policyId)!;
+      expect(binding.enabledRuleIds).toEqual(reference.enabledRuleIds ?? policy.rules.map(rule => rule.id));
+      expect(binding.ruleOrder).toEqual(reference.ruleOrder ?? []);
       expect(policy.protection.execution).toBe("local");
-      expect(binding.testCaseOverrides).toEqual({});
+      expect(binding.testCaseOverrides).toEqual(preset.policies.find(r => r.policyId === binding.policyId)!.testCaseOverrides ?? {});
     }
     const plan = buildGuardrailPlan({ guardrailId: preset.id, guardrailVersion: "20260906-010000.001Z", policies, draft: {
       allowedTopics: [], restrictedTopics: [], safetyLevel: "balanced", outputDelivery: "full_buffered", policyBindings: bindings,
@@ -45,7 +57,7 @@ describe("Protection presets", () => {
       expect(preset.optionalPolicyIds.some(policyId => retired.has(policyId))).toBe(false);
     }
     const singapore = protectionPresets.find(preset => preset.id === "singapore-financial-assistant")!;
-    expect(singapore.version).toBe("1.0.2");
+    expect(singapore.version).toBe("2.0.0");
     expect(singapore.limitations.join(" ")).toContain("No MAS-specific control");
   });
 
@@ -53,12 +65,12 @@ describe("Protection presets", () => {
     const general = protectionPresets.find(preset => preset.id === "china-mainland-runtime")!;
     const banking = protectionPresets.find(preset => preset.id === "china-banking-assistant")!;
     expect(expandProtectionPreset(general, policies).map(binding => binding.policyId)).toEqual([
-      "local-credentials", "local-passports", "china-personal-identifiers", "china-prompt-manipulation",
+      "local-credentials", "local-passports", "local-government-identifiers", "local-contact-data", "local-payment-data", "local-injection-protection",
     ]);
     expect(expandProtectionPreset(banking, policies).map(binding => binding.policyId)).toEqual([
-      "local-credentials", "local-passports", "china-personal-identifiers", "china-prompt-manipulation", "china-banking-assistant-boundaries",
+      "local-credentials", "local-passports", "local-government-identifiers", "local-contact-data", "local-payment-data", "local-injection-protection", "local-fraud-prevention",
     ]);
-    expect(general.optionalPolicyIds).toEqual(expect.arrayContaining(["builtin-content-safety", "builtin-contextual-grounding", "china-organization-identifiers"]));
+    expect(general.optionalPolicyIds).toEqual(expect.arrayContaining(["builtin-content-safety", "builtin-contextual-grounding", "local-government-identifiers"]));
     expect(general.limitations.join(" ")).toContain("Runtime Enforced");
     expect(general.limitations.join(" ")).toContain("Requires Integration");
     expect(general.limitations.join(" ")).toContain("Governance Only");
@@ -71,7 +83,13 @@ describe("Protection presets", () => {
     bank.reverse();
     const before = structuredClone(bank);
     const combined = expandProtectionPreset(protectionPresets[2]!, policies, bank);
-    expect(combined.slice(0, bank.length)).toEqual(before);
+    expect(combined.slice(0, bank.length).map(b => b.policyId)).toEqual(before.map(b => b.policyId));
+    for (const previous of before) {
+      const next = combined.find(b => b.policyId === previous.policyId)!;
+      expect(next).toMatchObject({ policyVersion: previous.policyVersion, ruleActions: previous.ruleActions,
+        enabledRails: previous.enabledRails, parameterValues: previous.parameterValues });
+      expect(next.enabledRuleIds.slice(0, previous.enabledRuleIds.length)).toEqual(previous.enabledRuleIds);
+    }
     expect(bank).toEqual(before);
     expect(new Set(combined.map((binding) => binding.policyId)).size).toBe(combined.length);
     expect(expandProtectionPreset(protectionPresets[2]!, policies, combined)).toEqual(combined);

@@ -1,9 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { lazy, Suspense } from 'react';
+import DiffViewer from 'react-diff-viewer-continued';
 import type { RouterDraft } from '@/lib/traffic-routing-api';
 import { routingDiff } from './router-view-model';
 
-const DiffViewer = lazy(() => import('react-diff-viewer-continued'));
+// Load review UI with the workspace so a deployment cannot remove an older
+// lazy chunk between editing a route and opening its review.
 
 export function routingSnapshotText(snapshot: RouterDraft | null, names: Array<{ id: string; name: string }>): string {
   if (!snapshot) return '';
@@ -45,7 +46,6 @@ export function Changes({ before, after, names }: { before: RouterDraft | null; 
     </div>
     <p className="text-xs text-muted-foreground">{localize("routing.beforeAfterLineNumbersShowThePreviousAndProposed")}</p>
     <div className="min-w-0 overflow-x-auto rounded-lg border text-xs [&_table]:w-full [&_table]:table-fixed [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]">
-      <Suspense fallback={<p role="status" className="p-4">{localize("routing.loadingChanges")}</p>}>
         <DiffViewer oldValue={routingSnapshotText(before, names)} newValue={routingSnapshotText(after, names)} splitView={false} hideSummary showDiffOnly extraLinesSurroundingDiff={2} useDarkTheme={false} styles={{
           variables: { light: colors, dark: colors },
           diffContainer: { minWidth: 0, width: "100%", tableLayout: "fixed" },
@@ -53,7 +53,6 @@ export function Changes({ before, after, names }: { before: RouterDraft | null; 
           gutter: { width: '2.5rem', minWidth: '2.5rem', padding: '0 4px' },
           marker: { width: '1.25rem', padding: '0 4px' },
         }} />
-      </Suspense>
     </div>
   </section>;
 }

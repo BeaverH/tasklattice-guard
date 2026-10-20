@@ -79,11 +79,14 @@ and [self-hosted NIM request/response examples](https://docs.nvidia.com/nim/nemo
 
 ## TypeSafe Jev for input Topic Control
 
-Company Policy uses its own `company_policy.input` binding and the
-`tali.guard.company-policy.v1` contract. It does not inherit `topic_control.input`.
-Assign a compatible taxonomy judge or NeMoGuard Topic Control model separately;
-Jev remains limited to the Topic Control semantic contract. Missing Company
-bindings fail preparation instead of falling back to another detector's model.
+Business and company boundaries use the Topic Control Policy's independent
+Denylist and Allowlist Rules. Both use the single `topic_control.input` binding
+and `tali.guard.topic-control.semantic.v1` contract. Configure allowed tasks,
+denied tasks and strict/permissive mode on the Policy binding. The Denylist runs
+first and blocks matching tasks even when an allowed task is also present.
+Choose a compatible taxonomy judge, NeMoGuard Topic Control model or Jev for this
+binding. Company Policy and its separate model binding have been removed;
+existing configurations must be recreated using Topic Control.
 
 Register **TypeSafe AI** under **Settings → Providers** with the API base URL
 `https://api.typesafe.ai/v1` and your TypeSafe API key. Click **Choose models** to
@@ -110,7 +113,7 @@ Assign the model to **Guardrail Catalog → Input → Topic Control**, validate 
 candidate, save, then activate through the existing revision workflow. Registration
 checks callability; binding validation executes actual benign and off-topic samples
 through NeMo. The profile supports only `tali.guard.topic-control.semantic.v1`
-on input. It does not advertise output, Company Policy, or content safety.
+on input. It does not advertise output or content safety.
 NVIDIA Topic Control and the chat taxonomy judge remain selectable. Switching a
 binding uses the existing revision/rollback mechanism. Old artifacts that explicitly
 pin a native NVIDIA `topic_control` model still require that native dependency;

@@ -1,3 +1,4 @@
+import { activePolicyParameters, policyBindingParameterIssues, resolveModelRuleParameters } from "../../shared/policy-parameters.js";
 import type { PolicyDto } from "../policy-catalog/catalog.js";
 import type { ProgrammablePolicySnapshot } from "../policy-studio/model.js";
 import { flowRuleId } from "../policy-studio/model.js";
@@ -82,7 +83,6 @@ const contracts = {
   contentSafety: "tali.guard.content-safety.v1",
   topicRules: "tali.guard.topic-control.rules.v1",
   topicSemantic: "tali.guard.topic-control.semantic.v1",
-  companyPolicy: "tali.guard.company-policy.v1",
   contextualGrounding: "tali.guard.contextual-grounding.v1",
   automatedReasoning: "tali.guard.automated-reasoning.v1",
 } as const;
@@ -104,7 +104,6 @@ const capabilities: RuntimeCapability[] = [
   capability("system_prompt_leakage", "builtin-system-prompt-leakage", ["output"], "block", [always("exact", contracts.systemPromptLeakage)], "data_protection"),
   capability("content_safety", "builtin-content-safety", ["input", "output"], "block", [always("primary", contracts.contentSafety, true)], "interaction_safety"),
   capability("topic_control", "builtin-topic-safety", ["input"], "block", [always("rules", contracts.topicRules), afterUnknown("semantic", contracts.topicSemantic, "rules")], "business_assurance"),
-  capability("company_policy", "builtin-company-policy", ["input"], "block", [always("primary", contracts.companyPolicy, true)], "business_assurance"),
   capability("contextual_grounding", "builtin-contextual-grounding", ["output"], "block", [always("primary", contracts.contextualGrounding, true)], "business_assurance"),
   capability("automated_reasoning", "builtin-automated-reasoning", ["output"], "block", [always("primary", contracts.automatedReasoning, true)], "business_assurance"),
 ];
@@ -210,10 +209,11 @@ export function buildGuardrailPlan(input: {
             "pii-classification": ["pii", contracts.piiSemantic], "topic-classification": ["topic_control", contracts.topicSemantic],
           } as Record<string, [string, string]>)[profile] : rule.detector.ref === "model/grounding" ? ["contextual_grounding", contracts.contextualGrounding] : rule.detector.ref === "service/formal-verification" ? ["automated_reasoning", contracts.automatedReasoning] : undefined;
           if (!adapter) throw new Error(`Detector ${rule.detector.ref} has no executable capability contract.`);
-          const params = catalogPolicy.definition.rules.find(r => r.id === rule.id)?.detector.parameters ?? {};
+          const authoredRule = catalogPolicy.definition.rules.find(r => r.id === rule.id)!;
+          const params = resolveModelRuleParameters(catalogPolicy.definition, authoredRule, binding.parameterValues);
           const authoredParameters: Array<[string, string]> = [["declarative_rule", "true"], ["rule_id", rule.id]];
           for (const key of ["topic_mode", "allowed_topics", "restricted_topics", "grounding_threshold", "relevance_threshold", "policy_snapshot_id"]) {
-            if (params[key] !== undefined) authoredParameters.push([key, String(params[key]).replace(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g, (_, name: string) => binding.parameterValues[name] ?? "")]);
+            if (params[key] !== undefined) authoredParameters.push([key, String(params[key])]);
           }
           if (rule.detector.ref === "service/formal-verification" && params.policy_id && params.policy_version) {
             const snapshotId = `formal:${JSON.stringify([binding.policyId, binding.policyVersion, rule.id])}`;
@@ -252,7 +252,7 @@ export function buildGuardrailPlan(input: {
     }, binding, policy });
   }
 
-  if (resolved.some(({ capability, binding, authoredRule }) => !authoredRule && !isSplitTopicPolicy(binding.policyId, binding.policyVersion) && (capability.capability === "topic_control" || capability.capability === "company_policy")) && draft.topicControlMode !== "permissive" && !draft.allowedTopics.length) {
+  if (resolved.some(({ capability, binding, authoredRule }) => !authoredRule && !isSplitTopicPolicy(binding.policyId, binding.policyVersion) && capability.capability === "topic_control") && draft.topicControlMode !== "permissive" && !draft.allowedTopics.length) {
     throw new Error("Strict Topic Control requires at least one allowed topic. Unlisted tasks are off-topic.");
   }
 
@@ -372,7 +372,7 @@ export function buildGuardrailPlan(input: {
 
 function validateNativeDetectorContract(policy: PolicyDto, capability: string): void {
   const profiles: Record<string, string> = {
-    topic_control: "topic-classification", company_policy: "topic-classification",
+    topic_control: "topic-classification",
     content_safety: "safety-classification", jailbreak: "jailbreak-classification", pii: "pii-classification",
   };
   for (const rule of policy.rules) {
@@ -419,7 +419,7 @@ function parametersFor(
       ["policy_parameters_json", JSON.stringify(Object.fromEntries(declarative.filter((item) => Object.keys(item.binding.parameterValues).length).map((item) => [item.binding.policyId, item.binding.parameterValues])))],
     ];
   }
-  if (capabilityId === "topic_control" || capabilityId === "company_policy") {
+  if (capabilityId === "topic_control") {
     return [
       ["topic_mode", draft.topicControlMode ?? "strict"],
       ["allowed_topics", draft.allowedTopics.join("\n")],
@@ -476,7 +476,11 @@ function validateCatalogBinding(binding: GuardrailPolicyBindingConfig, policy: P
   const unknownRules = binding.enabledRuleIds.filter((item) => !ruleIds.has(item));
   if (unknownRules.length) throw new Error(`Policy ${policy.id} contains unknown enabled Rules: ${unknownRules.join(", ")}.`);
   if (!binding.enabledRuleIds.length) throw new Error(`Policy ${policy.id} must enable at least one Rule.`);
-  for (const parameter of policy.parameters) {
+  if (policy.definition) {
+    const issues = policyBindingParameterIssues(policy.definition, binding.parameterValues, binding.enabledRuleIds, binding.enabledRails, binding.reasoningPolicy);
+    if (issues.length) throw new Error(`Policy ${policy.id}: ${issues.join(" ")}`);
+  }
+  for (const parameter of policy.definition ? activePolicyParameters(policy.definition, binding.enabledRuleIds, binding.enabledRails) : policy.parameters) {
     if (parameter.required && !(binding.parameterValues[parameter.name] ?? parameter.default ?? "").trim()) {
       throw new Error(`Policy ${policy.id} requires parameter ${parameter.name}.`);
     }

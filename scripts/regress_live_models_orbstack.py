@@ -115,7 +115,7 @@ def worker(payload):
             specs = [
                 ("content_safety", "input", "nvidia/llama-3.1-nemotron-safety-guard-8b-v3", "tali.nemotron-safety-guard-v3.v1", ["tali.guard.content-safety.v1"]),
                 ("content_safety", "output", "nvidia/llama-3.1-nemotron-safety-guard-8b-v3", "tali.nemotron-safety-guard-v3.v1", ["tali.guard.content-safety.v1"]),
-                ("topic_control", "input", "nvidia/llama-3.1-nemoguard-8b-topic-control", "tali.nemoguard-topic-control.v1", ["tali.guard.topic-control.semantic.v1", "tali.guard.company-policy.v1"]),
+                ("topic_control", "input", "nvidia/llama-3.1-nemoguard-8b-topic-control", "tali.nemoguard-topic-control.v1", ["tali.guard.topic-control.semantic.v1"]),
                 ("jailbreak", "input", "nvidia/nemoguard-jailbreak-detect", "tali.nemoguard-jailbreak-detect.v1", ["tali.guard.jailbreak.v1"]),
             ]
             for capability, phase, model, profile, contracts in specs:

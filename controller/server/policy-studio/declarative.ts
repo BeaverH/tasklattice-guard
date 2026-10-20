@@ -1,3 +1,4 @@
+import { modelParameterDeclarationIssues } from "../../shared/policy-parameters.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { policyDefinitionSchema, type PolicyDefinition } from "../../shared/policy-definition.js";
@@ -36,6 +37,8 @@ export class DeclarativeCompiler {
     }), tests: asset.test_cases.map(test => ({ ...test, scope: test.kind === "rule_acceptance" && test.covered_rule_ids.length === 1 ? "rule" : "policy" })) });
   }
   compile(definition: PolicyDefinition): PolicyDto {
+    const issues = modelParameterDeclarationIssues(definition);
+    if (issues.length) throw new ValidationError(issues.join("\n"));
     const rules = definition.rules.map(rule => {
       const detector = this.detectors[rule.detector.ref];
       if (!detector || detector.version !== rule.detector.version) throw new ValidationError(`Detector ${rule.detector.ref}@${rule.detector.version} is unavailable.`);

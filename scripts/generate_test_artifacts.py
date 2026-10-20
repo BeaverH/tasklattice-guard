@@ -114,7 +114,13 @@ def _ordered_plan() -> dict[str, object]:
     from dataclasses import asdict
     from runner.toolkit.policy_library import policy
 
-    definition = policy("pattern-matching")
+    from dataclasses import replace
+    contacts = policy("local-contact-data")
+    credentials = policy("local-credentials")
+    definition = replace(contacts, id="fixture-redactions", rules=(
+        next(r for r in contacts.rules if r.id == "pattern/email"),
+        next(r for r in credentials.rules if r.id == "pattern/generic_api_key"),
+    ))
     plan = _plan()
     plan["compiler_version"] = "tasklattice-controller-plan-v4-ordered"
     redactions = {
@@ -123,12 +129,12 @@ def _ordered_plan() -> dict[str, object]:
         "phases": ["input", "output"], "on_unsafe": "block",
         "trigger": {"type": "always", "verdicts": []},
         "parameters": [
-            ["policy_id", "pattern-matching"], ["policy_version", "1.95.0"],
-            ["policy_ids", "pattern-matching"],
+            ["policy_id", "fixture-redactions"], ["policy_version", "1.95.0"],
+            ["policy_ids", "fixture-redactions"],
             ["policy_versions_json", json.dumps({definition.id: definition.version})],
             ["policy_definitions_json", json.dumps({definition.id: asdict(definition)}, ensure_ascii=False)],
-            ["enabled_rules_json", json.dumps({"pattern-matching": ["pattern/email", "pattern/generic_api_key"]})],
-            ["rule_actions_json", json.dumps({"pattern-matching": {"pattern/email": "transform", "pattern/generic_api_key": "transform"}})],
+            ["enabled_rules_json", json.dumps({"fixture-redactions": ["pattern/email", "pattern/generic_api_key"]})],
+            ["rule_actions_json", json.dumps({"fixture-redactions": {"pattern/email": "transform", "pattern/generic_api_key": "transform"}})],
         ],
     }
     plan["steps"] = [redactions, *plan["steps"]]
@@ -216,7 +222,7 @@ def _preset_payload(preset_id: str) -> dict:
       import {protectionPresets} from './shared/protection-presets.ts';
       import {expandProtectionPreset} from './server/policy-catalog/presets.ts';
       import {buildGuardrailPlan} from './server/domain/guardrail-plan.ts';
-      import {generatedTestCases} from './server/domain/validation.ts';
+      import {generatedTestCases, applyValidationOverrides} from './server/domain/validation.ts';
       import {PolicyCatalog} from './server/policy-catalog/catalog.ts';
       const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
       const preset = protectionPresets.find(item => item.id === process.argv[1]);
@@ -225,8 +231,9 @@ def _preset_payload(preset_id: str) -> dict:
         safetyLevel:'balanced', outputDelivery:'full_buffered'};
       console.log(JSON.stringify({
         plan:buildGuardrailPlan({guardrailId:'fixture-secrets', guardrailVersion:'20260904-010000.001Z', draft, policies}),
-        cases:generatedTestCases('fixture-secrets', draft, policies).map(item => ({
-          id:item.id, name:item.name, phase:item.phase, content:item.content, expectedDecision:item.expectedDecision,
+        cases:applyValidationOverrides(generatedTestCases('fixture-secrets', draft, policies), draft).map(item => ({
+          id:item.id, name:item.name, phase:item.phase, content:item.content, expectedDecision:item.expectationOverride?.expectedDecision ?? item.expectedDecision,
+          expectedOutputContent:item.expectationOverride?.expectedOutputContent,
           sourcePolicyId:item.sourcePolicyId, sourcePolicyVersion:item.sourcePolicyVersion,
         })),
       }));

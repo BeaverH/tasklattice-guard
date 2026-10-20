@@ -88,7 +88,7 @@ async def test_timeouts_missing_credentials_and_unsupported_rails():
     assert result.verdict == "error" and result.usage.model_calls[0].result == "timeout"
     def unexpected(_):
         pytest.fail("Must not call a provider for unsupported or expired requests")
-    for request in [replace(_topic_request(), rail_type="output"), replace(_topic_request(), capability="company_policy"),
+    for request in [replace(_topic_request(), rail_type="output"), replace(_topic_request(), capability="content_safety"),
                     replace(_topic_request(), deadline=time.monotonic() - 1)]:
         assert (await evaluator(unexpected).evaluate(request)).verdict == "error"
     no_key = JevTopicEvaluator(base_url="https://typesafe.test/v1", model="jev", api_key="", transport=httpx.MockTransport(unexpected))

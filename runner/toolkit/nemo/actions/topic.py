@@ -20,11 +20,10 @@ class ChatTopicEvaluator:
 
     id = "chat-topic"
     version = "1.0.0"
-    contracts = frozenset({"tali.guard.topic-control.semantic.v1", "tali.guard.company-policy.v1"})
+    contracts = frozenset({"tali.guard.topic-control.semantic.v1"})
     rails = frozenset({"input", "output"})
-    # Both capabilities classify an interaction against explicit, compiled
-    # business boundaries with the dedicated NVIDIA Topic Control model.
-    capabilities = frozenset({"topic_control", "company_policy"})
+    # Company and other business boundaries use the same topic allow/deny rules.
+    capabilities = frozenset({"topic_control"})
 
     def __init__(
         self,
@@ -45,7 +44,6 @@ class ChatTopicEvaluator:
                 raise ValueError("Unsupported topic judge capability.")
             self.capabilities = frozenset({capability})
             self.rails = frozenset({"input"})
-            self.contracts = frozenset({"tali.guard.company-policy.v1" if capability == "company_policy" else "tali.guard.topic-control.semantic.v1"})
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._provider_id = provider_id

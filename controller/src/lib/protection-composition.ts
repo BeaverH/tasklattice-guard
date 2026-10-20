@@ -1,6 +1,7 @@
 import { protectionDirectoryIds, type ProtectionDirectoryId } from "../../shared/protection-map";
 import type { GuardrailPolicyBinding, Policy } from "./api-types";
 import { boundPolicy } from "./bound-policy";
+import { appendProfileRules } from "../../shared/profile-rule-selection";
 
 /** Metadata owns classification; custom/older Policies stay discoverable. */
 export function policyDirectory(policy: Policy): ProtectionDirectoryId {
@@ -33,14 +34,23 @@ export function mergeDirectoryBindings(
   return [...merged, ...updates.values()];
 }
 
-/** A preset only adds missing, pinned Policy bindings. User choices win. */
+/** Add missing bindings and same-version Rules. Existing settings and order win. */
 export function mergePresetBindings(current: GuardrailPolicyBinding[], preset: GuardrailPolicyBinding[]): GuardrailPolicyBinding[] {
-  const selected = new Set(current.map((item) => item.policy_id));
-  return [...current, ...preset.filter((item) => {
-    if (selected.has(item.policy_id)) return false;
-    selected.add(item.policy_id);
-    return true;
-  }).map((item) => structuredClone(item))];
+  const result = structuredClone(current);
+  for (const incoming of preset) {
+    const existing = result.find(item => item.policy_id === incoming.policy_id);
+    if (!existing) result.push(structuredClone(incoming));
+    else if (existing.policy_version === incoming.policy_version) {
+      const selection = appendProfileRules(
+        { enabledRuleIds: existing.enabled_rule_ids, ruleOrder: existing.rule_order },
+        { enabledRuleIds: incoming.enabled_rule_ids, ruleOrder: incoming.rule_order });
+      if (selection) {
+        existing.enabled_rule_ids = selection.enabledRuleIds;
+        existing.rule_order = selection.ruleOrder;
+      }
+    }
+  }
+  return result;
 }
 
 export function completeResponsePolicies(bindings: GuardrailPolicyBinding[], policies: Policy[]): string[] {

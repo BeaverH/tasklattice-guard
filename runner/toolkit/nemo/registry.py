@@ -17,7 +17,6 @@ from ..compiler.domain import PlanCompilationError
 from ..evaluation.contracts import (
     MODEL_SAFETY_CAPABILITY_BY_CONTRACT,
     CONTRACT_TOPIC_SEMANTIC,
-    CONTRACT_COMPANY_POLICY,
     CONTRACT_CONTEXTUAL_GROUNDING,
     CONTRACT_AUTOMATED_REASONING,
 )
@@ -64,7 +63,6 @@ _EXECUTOR_ACTION_VERSIONS = {
 }
 _DECLARED_DEDICATED_CONTRACTS = {
     CONTRACT_TOPIC_SEMANTIC: (ACTION_TOPIC_JUDGE, "topic_control"),
-    CONTRACT_COMPANY_POLICY: (ACTION_TOPIC_JUDGE, "company_policy"),
     CONTRACT_CONTEXTUAL_GROUNDING: (ACTION_GROUNDING, "contextual_grounding"),
     CONTRACT_AUTOMATED_REASONING: (ACTION_AUTOMATED_REASONING, "automated_reasoning"),
 }
@@ -792,7 +790,7 @@ class _RuntimeBuilder:
                     or not set(binding.phases).issubset(provider.rails)
                     or (hasattr(provider, "supports") and any(not provider.supports(binding.capability, binding.contract_ref, phase)
                                                                for phase in binding.phases))):
-                    raise PlanCompilationError(f"No Topic/Company Evaluator Binding is available for: {binding.capability} -> {binding.contract_ref}.")
+                    raise PlanCompilationError(f"No Topic Control Evaluator Binding is available for: {binding.capability} -> {binding.contract_ref}.")
         unmapped_contracts = tuple(
             binding
             for binding in config.action_bindings

@@ -33,7 +33,7 @@ describe("portable Policy authoring", () => {
   });
   it("loads all existing definitions without source or runtime identity in the DSL", () => {
     const assets = JSON.parse(readFileSync(resolve(directory, "policy-definitions.generated.json"), "utf8"));
-    expect(Object.keys(assets)).toHaveLength(65);
+    expect(Object.keys(assets)).toHaveLength(26);
     for (const value of Object.values(assets)) {
       const definition = policyDefinitionSchema.parse(value);
       expect(definition.metadata).not.toHaveProperty("source");

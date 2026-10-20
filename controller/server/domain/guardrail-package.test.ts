@@ -107,7 +107,9 @@ describe("Guardrail release package", () => {
 
   it("refuses an Artifact built from another definition than its Policy node", () => {
     const { content } = fixture("default-local-v1");
-    const [first, ...rest] = nodesOf(content);
+    const nodes = nodesOf(content);
+    const first = nodes.find(node => planBuiltInDefinitions(content.plan).has(node.id))!;
+    const rest = nodes.filter(node => node !== first);
     const other = { ...first!, definition: { ...first!.definition, description: "Edited elsewhere" } };
     const parsed = parsePackage(packageOf(content, suite, [other, ...rest]));
     expect(() => verifyPackageVersion(parsed, parsed.versions[0]!, canonicalize)).toThrow(/different definition of Policy/);

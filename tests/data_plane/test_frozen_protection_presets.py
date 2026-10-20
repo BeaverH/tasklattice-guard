@@ -35,15 +35,15 @@ EXACT_TRANSFORMS = {
     ("local-passports", "Passport number: 12AB12345"): "[REDACTED]",
     ("local-contact-data", "Acceptance sample: A@A.AA"): "Acceptance sample: [email_REDACTED]",
     ("local-contact-data", "Acceptance sample: +1 (000) 000 0000"): "Acceptance sample: +[us_phone_REDACTED]",
-    ("singapore-customer-identifiers", "Acceptance sample: S1111111A"): "Acceptance sample: [sg_nric_REDACTED]",
-    ("singapore-customer-identifiers", "Acceptance sample: +65 6111 1111"): "Acceptance sample: [sg_phone_REDACTED]",
-    ("singapore-customer-identifiers", "Acceptance sample: bank account 111-11111-1"): "Acceptance sample: bank account [sg_bank_account_REDACTED]",
+    ("local-government-identifiers", "Acceptance sample: S1111111A"): "Acceptance sample: [sg_nric_REDACTED]",
+    ("local-contact-data", "Acceptance sample: +65 6111 1111"): "Acceptance sample: [sg_phone_REDACTED]",
+    ("local-payment-data", "Acceptance sample: bank account 111-11111-1"): "Acceptance sample: bank account [sg_bank_account_REDACTED]",
 }
 
 
 def expected_text(case):
     if case["expectedDecision"] == "transform":
-        return EXACT_TRANSFORMS[(case["sourcePolicyId"], case["content"])]
+        return case.get("expectedOutputContent") or EXACT_TRANSFORMS[(case["sourcePolicyId"], case["content"])]
     assert case["expectedDecision"] == "allow"
     return case["content"]
 

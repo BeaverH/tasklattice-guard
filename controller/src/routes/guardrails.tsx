@@ -309,7 +309,7 @@ export function GuardrailDetailPage() {
   const policies = policiesQuery.data?.items ?? EMPTY_POLICIES;
   const routers = routersQuery.data?.items.filter((item) => item.activeSnapshot?.routes.some(route => route.enabled && route.targets.some(target => target.guardrailId === guardrail.id && target.weightBps > 0))) ?? [];
   const canManageDraft = hasPermission(auth.user?.role, "guardrails", "write") && isGuardrailDraftManageable(guardrail);
-  const hasDraft = hasUnpublishedDraft(guardrail);
+  const hasDraft = !guardrail.is_default && hasUnpublishedDraft(guardrail);
   const currentTest = guardrail.latest_validation_run?.source_draft_version === guardrail.draft_revision ? guardrail.latest_validation_run : null;
   const testingDraft = isValidationRunning(currentTest);
   const openDraftReview = () => { setDraftJustSaved(false); setDraftAction("review"); };
@@ -324,6 +324,7 @@ export function GuardrailDetailPage() {
             <GuardrailProtectionMode guardrail={guardrail} />
             {guardrail.is_default ? <Badge variant="outline">{t("guardrails.defaultBadge")}</Badge> : guardrail.system_managed ? <Badge variant="outline">{t("guardrails.systemManaged")}</Badge> : null}
           </div>
+          {guardrail.is_default ? <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{t("guardrails.defaultNoticeDescription")}</p> : null}
           {guardrail.origin === "imported" ? <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Download className="size-3.5" aria-hidden="true" />{t("guardrailPackage.importedFrom", { source: guardrail.source_id ?? "" })}</p> : null}
           {guardrail.copy_origin && <p className="mt-2 text-sm text-muted-foreground">{uiText("uiCopy.copiedFrom")}{" "}{guardrail.copy_origin.sourceName} · {guardrail.copy_origin.sourceVersion ?? `draft r${guardrail.copy_origin.sourceDraftRevision}`} · {guardrail.copy_origin.sourceGuardrailId}</p>}
           {hasDraft ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -343,12 +344,12 @@ export function GuardrailDetailPage() {
             {hasDraft ? <MenuItem label={t("guardrails.draftChanges.view")} renderIcon={FileText} onClick={() => setDraftAction("changes")} /> : null}
             {canManageDraft && hasDraft && publishedVersions.length ? <MenuItem label={t("guardrails.draftChanges.discard")} renderIcon={RotateCcw} onClick={() => setDraftAction("discard")} /> : null}
             {canManageDraft ? <MenuItem label={t("guardrails.openPlayground")} renderIcon={FlaskConical} onClick={() => { void navigate({ to: "/playground", search: { guardrail: guardrail.id, target: "draft", version: undefined } }); }} /> : null}
-            <MenuItemDivider />
-            <MenuItem label={t("guardrails.deleteAction")} renderIcon={Trash2} kind="danger" onClick={() => {
+            {!guardrail.is_default ? <MenuItemDivider /> : null}
+            {!guardrail.is_default ? <MenuItem label={t("guardrails.deleteAction")} renderIcon={Trash2} kind="danger" onClick={() => {
               deleteMutation.reset();
               queryClient.removeQueries({ queryKey: queryKeys.guardrailDeletionImpact(guardrailId), exact: true });
               setDeleteOpen(true);
-            }} />
+            }} /> : null}
           </MenuButton> : null}
         </div>
       </div>
@@ -769,9 +770,10 @@ export function EditGuardrailSheet({ guardrail, policies, open, onOpenChange, on
   const parameterErrors = bindings.flatMap((binding) => {
     const policy = boundPolicy(policies, binding);
     if (!policy) return [t("guardrailWizard.nextBlocked.policyUnavailable", { name: `${binding.policy_id}@${binding.policy_version}` })];
-    const { missingRequiredParameters, missingRules, missingRails } = getPolicyBindingValidation(binding, policy);
+    const { missingRequiredParameters, missingRules, missingRails, parameterIssues } = getPolicyBindingValidation(binding, policy);
     if (missingRules) return [t("guardrailWizard.nextBlocked.enableRules", { name: policy.name })];
     if (missingRails) return [t("protection.selectDirection")];
+    if (parameterIssues.length) return parameterIssues.map(reason => `${policy.name}: ${reason}`);
     return missingRequiredParameters.length ? [t("guardrailWizard.nextBlocked.requiredFields", { name: policy.name, fields: missingRequiredParameters.map((parameter) => parameter.label).join(", ") })] : [];
   });
   const requestClose = () => { if (mutation.isPending) return; if (dirty) setDiscardRequested(true); else onOpenChange(false); };
@@ -800,4 +802,4 @@ function hasTopicControlBinding(bindings: GuardrailPolicyBinding[], policies: Po
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="grid gap-2"><Label>{label}</Label>{children}</label>; }
 function lines(value: string) { return value.split("\n").map((item) => item.trim()).filter(Boolean); }
 function notifyError(error: unknown, fallback: string) { toast.error(error instanceof Error ? error.message : fallback); }
-function isGuardrailDraftManageable(guardrail: Pick<Guardrail, "is_default" | "system_managed">) { return guardrail.is_default || !guardrail.system_managed; }
+function isGuardrailDraftManageable(guardrail: Pick<Guardrail, "is_default" | "system_managed">) { return !guardrail.is_default && !guardrail.system_managed; }

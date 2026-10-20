@@ -115,6 +115,8 @@ type PolicyParameter = z.output<typeof parameterSchema>;
 
 export type PolicyTag = z.output<typeof tagSchema> & { id: string };
 export type PolicyDto = {
+  /** Resource may be deleted, subject to reference checks. */
+  deletable?: boolean;
   /** Kept only to resolve existing pinned drafts; omitted from new selections. */
   retired?: boolean;
   definition?: import("../../shared/policy-definition.js").PolicyDefinition;
@@ -157,28 +159,21 @@ const RAIL_ORDER: PolicyDto["rails"] = ["input", "retrieval", "dialog", "executi
 // Runner toolkit catalog. These tags are centrally reviewed metadata, not an
 // assertion that every Rule covers every OWASP risk.
 const OWASP_LLM_2025_POLICY_IDS = new Set([
-  "builtin-prompt-injection",
   "builtin-indirect-prompt-injection",
+  "builtin-memory-poisoning",
   "builtin-jailbreak",
-  "builtin-system-prompt-leakage",
-  "prompt-injection-protection",
-  "filter-prompt-injection-jailbreak",
-  "filter-prompt-injection-data-exfiltration",
-  "filter-prompt-injection-system-prompt",
-  "claims-agent-safety",
-  "builtin-secrets",
   "builtin-pii",
-  "pattern-matching",
-  "baseline-pii-protection",
-  "advanced-au-pii-protection",
-  "gdpr-eu-pii-protection",
-  "pdpa-singapore",
-  "uae-regulatory-compliance",
-  "filter-prompt-injection-sql",
-  "filter-prompt-injection-malicious-code",
-  "block-code-execution",
   "builtin-contextual-grounding",
   "builtin-automated-reasoning",
+  "local-injection-protection",
+  "local-credentials",
+  "local-payment-data",
+  "local-government-identifiers",
+  "local-contact-data",
+  "local-passports",
+  "local-data-use-boundaries",
+  "local-fraud-prevention",
+  "block-code-execution"
 ]);
 
 export class PolicyCatalog {

@@ -1,3 +1,5 @@
+import { modelParameterFields, policyBindingParameterIssues } from "../../shared/policy-parameters";
+import { PolicyParameterEditor, PolicyTestParameters, ModelParameterInput, withModelParameters } from "./policy-parameter-editor";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Plus, Trash2, Play, Save, Upload, Download, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, LoaderCircle, CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -63,6 +65,7 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
   function change(next: PolicyDefinition) { editSerial.current++; setDefinition(next); setDirty(true); setReport(null); setNotice(""); setError(null); }
   function changeRule(next: DefinitionRule) { change({ ...definition, rules: definition.rules.map((r, i) => i === selected ? next : r) }); }
   const issues = definitionIssues(definition);
+  const testParameterIssues = policyBindingParameterIssues(definition, definition.testing?.parameters ?? {}, definition.rules.map(rule => rule.id));
   const rule = definition.rules[selected];
   useEffect(() => setDetectorError(false), [rule?.id, rule?.detector.ref]);
   async function persist() {
@@ -117,11 +120,11 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
   }
   const steps = ["basics", "rules", "tests", "review"].map(key => ({ label: l(key), description: l(`${key}Hint`) }));
   const identityReady = Boolean(definition.metadata.name.trim() && maintainer.trim());
-  const canTest = loaded && !busy && !testing && !invalidEditor && !issues.length && identityReady;
+  const canTest = loaded && !busy && !testing && !invalidEditor && !issues.length && !testParameterIssues.length && identityReady;
   const canPublish = loaded && !busy && !dirty && !invalidEditor && report?.status === "passed" && report.revision === revision;
   const blockedReason = invalidEditor ? l("fixJson") : !identityReady ? l("provideIdentity")
     : step === 1 && !definition.rules.length ? l("addYourFirstRuleToChooseADetector")
-    : step >= 2 && issues.length ? `${l("publicationRequirements")} · ${issues.length}`
+    : step >= 2 && (issues.length || testParameterIssues.length) ? `${l("publicationRequirements")} · ${issues.length + testParameterIssues.length}`
     : step === 3 && !busy && !canPublish ? l(testing ? "testsRunning" : "passBeforePublish") : null;
   function navigate(next: number) {
     if (busy) return;
@@ -163,6 +166,8 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
             <Field label={l("maintenanceMaintainer")}><Input className="field:h-11" value={maintainer} onChange={e => { editSerial.current++; setMaintainer(e.target.value); setDirty(true); setReport(null); setNotice(""); }} /></Field>
             <p className="text-xs leading-5 text-muted-foreground">{l("administratorsCanMaintainThisPolicyPublishingCreatesA")}</p>
           </div> : null}
+          {step === 1 ? <PolicyParameterEditor definition={definition} change={change} l={l} /> : null}
+          {step === 2 ? <><PolicyTestParameters definition={definition} change={change} l={l} />{testParameterIssues.length ? <ul role="alert" className="mb-4 list-disc pl-5 text-xs text-destructive">{testParameterIssues.map(issue => <li key={issue}>{issue}</li>)}</ul> : null}</> : null}
           {step === 1 || step === 2 ? <>
             {definition.rules.length ? ruleSelector : <div className="space-y-4 rounded-lg border border-dashed p-8"><p className="text-sm text-muted-foreground">{l("addYourFirstRuleToChooseADetector")}</p><Button variant="outline" onClick={() => { addRule(); setStep(1); }}><Plus />{l("addFirstRule")}</Button></div>}
             {rule && step === 1 ? <section className="space-y-5" key={rule.id}>
@@ -171,12 +176,13 @@ export function DeclarativePolicyStudio({ policyId, imported, onClose, onSaved, 
                 <Field label={l("ruleName")}><Input className="field:h-11" value={rule.name} onChange={e => changeRule({ ...rule, name: e.target.value })} /></Field>
                 <Field label="Detector"><NativeSelect className="field:h-11 w-full" value={rule.detector.ref} onChange={e => {
                   const ref = e.target.value as DefinitionRule["detector"]["ref"];
-                  changeRule({ ...rule, detector: { ref, version: "1.0.0", parameters: detectorDefaults(ref) }, stages: [ref === "model/grounding" || ref === "service/formal-verification" ? "output" : "input"], on_match: { action: "block" } });
+                  const next: DefinitionRule = { ...rule, detector: { ref, version: "1.0.0", parameters: detectorDefaults(ref) }, stages: [ref === "model/grounding" || ref === "service/formal-verification" ? "output" : "input"], on_match: { action: "block" } };
+                  change(withModelParameters(definition, next, l));
                 }}>{detectorRefs.map(ref => <option key={ref}>{ref}</option>)}</NativeSelect></Field>
                 <fieldset><legend className="text-xs font-medium">{l("checkStages")}</legend><div className="mt-2 flex h-11 items-center gap-5">{(["input", "output"] as const).map(stage => <label key={stage} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={rule.stages.includes(stage)} disabled={rule.detector.ref.startsWith("agent/")} onChange={e => changeRule({ ...rule, stages: e.target.checked ? [...rule.stages, stage] : rule.stages.filter(s => s !== stage) })} />{l(stage)}</label>)}</div></fieldset>
                 <Field label={l("onMatch")}><NativeSelect className="field:h-11 w-full" value={rule.on_match.action} onChange={e => changeRule({ ...rule, on_match: { ...rule.on_match, action: e.target.value as DefinitionRule["on_match"]["action"] } })}>{["block", "allow", ...(["text/keyword", "text/regex"].includes(rule.detector.ref) || rule.on_match.action === "transform" ? ["transform"] : [])].map(action => <option key={action}>{action}</option>)}</NativeSelect></Field>
               </div>
-              <DetectorFields rule={rule} change={changeRule} l={l} onError={setDetectorError} />
+              <DetectorFields rule={rule} parameters={definition.parameters} change={changeRule} onModelChange={next => change(withModelParameters(definition, next, l))} l={l} onError={setDetectorError} />
               {rule.on_match.action === "transform" ? <Field label={l("replacementText")}><Input className="field:h-11" value={rule.on_match.replacement ?? ""} onChange={e => changeRule({ ...rule, on_match: { ...rule.on_match, replacement: e.target.value } })} /></Field> : null}
             </section> : null}
             {rule && step === 2 ? <div className="space-y-4">
@@ -239,7 +245,7 @@ function JsonEditor({ value, onValid, onError }: { value: unknown; onValid: (val
   useEffect(() => { setText(JSON.stringify(value, null, 2)); setError(""); onError?.(false); }, [value, onError]);
   return <><Textarea aria-label="JSON definition" className="min-h-40 font-mono text-xs" value={text} onChange={e => { setText(e.target.value); try { const parsed: unknown = JSON.parse(e.target.value); onValid(parsed); setError(""); onError?.(false); } catch (e) { setError(String(e)); onError?.(true); } }} />{error ? <p role="alert" className="mt-2 text-xs text-destructive">{error}</p> : null}</>;
 }
-function DetectorFields({ rule, change, l, onError }: { rule: DefinitionRule; change: (rule: DefinitionRule) => void; l: (key: string) => string; onError: (error: boolean) => void }) {
+function DetectorFields({ rule, parameters, change, onModelChange, l, onError }: { rule: DefinitionRule; parameters: PolicyDefinition["parameters"]; change: (rule: DefinitionRule) => void; onModelChange: (rule: DefinitionRule) => void; l: (key: string) => string; onError: (error: boolean) => void }) {
   const p = rule.detector.parameters;
   const options = (p.detector_options ?? {}) as Record<string, unknown>;
   const update = (parameters: Record<string, unknown>) => change({ ...rule, detector: { ...rule.detector, parameters } });
@@ -249,11 +255,11 @@ function DetectorFields({ rule, change, l, onError }: { rule: DefinitionRule; ch
     {rule.detector.ref === "model/classifier" ? <>
       <Field label={l("classificationProfile")}><NativeSelect className="field:h-11 w-full" value={String(p.profile ?? "safety-classification")} onChange={e => {
         const profile = e.target.value;
-        change({ ...rule, stages: profile === "jailbreak-classification" ? ["input"] : rule.stages, detector: { ...rule.detector, parameters: profile === "topic-classification" ? { profile, topic_mode: "permissive", allowed_topics: "", restricted_topics: "" } : { profile } } });
+        onModelChange({ ...rule, stages: ["jailbreak-classification", "topic-classification"].includes(profile) ? ["input"] : rule.stages, detector: { ...rule.detector, parameters: { profile } } });
       }}>{["safety-classification", "jailbreak-classification", "pii-classification", "topic-classification"].map(profile => <option key={profile} value={profile}>{l(profile)}</option>)}</NativeSelect></Field>
-      {p.profile === "topic-classification" ? <><Field label={l("topicMode")}><NativeSelect className="field:h-11 w-full" value={String(p.topic_mode ?? "permissive")} onChange={e => update({ ...p, topic_mode: e.target.value })}><option value="permissive">{l("permissive")}</option><option value="strict">{l("strict")}</option></NativeSelect></Field><div className="grid grid-cols-2 gap-4"><Field label={l("allowedTopics")}><Textarea value={String(p.allowed_topics ?? "")} onChange={e => update({ ...p, allowed_topics: e.target.value })} /></Field><Field label={l("restrictedTopics")}><Textarea value={String(p.restricted_topics ?? "")} onChange={e => update({ ...p, restricted_topics: e.target.value })} /></Field></div></> : null}
-    </> : rule.detector.ref === "model/grounding" ? <div className="grid grid-cols-2 gap-4">{["grounding_threshold", "relevance_threshold"].map(key => <Field key={key} label={l(key)}><Input className="field:h-11" value={String(p[key] ?? 0.7)} onChange={e => update({ ...p, [key]: e.target.value })} /></Field>)}</div>
-      : <div className="space-y-4"><p className="text-xs text-muted-foreground">{l("formalPolicyHint")}</p><div className="grid grid-cols-2 gap-4">{["policy_id", "policy_version"].map(key => <Field key={key} label={l(key)}><Input className="field:h-11" value={String(p[key] ?? "")} onChange={e => update({ ...p, [key]: e.target.value })} /></Field>)}</div><Field label={l("confidence_threshold")}><Input className="field:h-11" value={String(p.confidence_threshold ?? 0.8)} onChange={e => update({ ...p, confidence_threshold: e.target.value })} /></Field></div>}
+    </> : null}
+    {rule.detector.ref === "service/formal-verification" ? <p className="text-xs text-muted-foreground">{l("formalPolicyHint")}</p> : null}
+    <div className="grid grid-cols-2 gap-4">{modelParameterFields(rule).map(field => <ModelParameterInput key={field.key} field={field} value={p[field.key]} parameters={parameters} update={value => update({ ...p, [field.key]: value })} l={l} />)}</div>
   </div>;
   if (rule.detector.ref === "text/regex") return <><Field label={l("regularExpressionPythonSyntax")}><Input className="field:h-11 field:font-mono" value={String(p.expression ?? "")} onChange={e => update({ ...p, expression: e.target.value })} /></Field><Field label={l("contextExpressionOptional")}><Input className="field:h-11 field:font-mono" value={String(p.context_expression ?? "")} onChange={e => update({ ...p, context_expression: e.target.value || null })} /></Field></>;
   if (rule.detector.ref === "text/keyword" && !rule.expand && !p.keywords && (!options.terms || Array.isArray(options.terms) && options.terms.every(t => typeof t === "string"))) return <Field label={l("matchingWordsOrPhrasesOnePerLine")}><Textarea value={(options.terms as string[] | undefined ?? []).join("\n")} onChange={e => update({ ...p, detector_options: { ...options, terms: e.target.value.split("\n") } })} /></Field>;

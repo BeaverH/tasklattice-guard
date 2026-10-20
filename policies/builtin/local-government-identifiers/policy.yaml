@@ -1,14 +1,13 @@
-# yaml-language-server: $schema=../../schemas/policy.schema.json
 schema_version: 2
 kind: Policy
 metadata:
   id: local-government-identifiers
   name: Government, tax & health identifiers
-  description: Redact reviewed government, tax, health and institutional identifier formats, including
-    spaced Australian tax and Medicare numbers. Broad numeric formats can overlap; this is format screening,
-    not identity verification.
+  description: Redact reviewed government, tax, health and institutional identifier formats, including spaced
+    Australian tax and Medicare numbers. Broad numeric formats can overlap; this is format screening, not identity
+    verification.
   source: built_in
-  version: 3.0.0
+  version: 4.0.0
   tags:
   - namespace: protection
     value: privacy
@@ -18,41 +17,77 @@ metadata:
     value: pii_detection
     label: PII Detection
     source: declared
-  - namespace: collection
-    value: focused-protection
-    label: Focused protection
+  - namespace: framework
+    value: gdpr
+    label: GDPR
+    source: declared
+  - namespace: framework
+    value: pdpa
+    label: Singapore PDPA
+    source: declared
+  - namespace: framework
+    value: pipl-cn
+    label: PIPL (China)
+    source: declared
+  - namespace: jurisdiction
+    value: au
+    label: Australia
+    source: declared
+  - namespace: jurisdiction
+    value: cn
+    label: China mainland
+    source: declared
+  - namespace: jurisdiction
+    value: eu
+    label: European Union
+    source: declared
+  - namespace: jurisdiction
+    value: sg
+    label: Singapore
+    source: declared
+  - namespace: jurisdiction
+    value: uae
+    label: United Arab Emirates
     source: declared
   safety_level: balanced
   output_delivery: full_buffered
 parameters: []
+execution:
+  mode: sequential
+  input: previous_output
+  stop_on: block
 rules:
-- rules/au-pii-tax-identifiers-au_tfn.yaml
-- rules/au-pii-tax-identifiers-au_abn.yaml
-- rules/au-pii-tax-identifiers-au_medicare.yaml
-- rules/pattern-uae_emirates_id.yaml
-- rules/pattern-ca_on_drivers_licence.yaml
-- rules/pattern-ca_immigration_doc.yaml
-- rules/pattern-fr_nir.yaml
-- rules/pattern-uoft_tcard.yaml
-- rules/pattern-sg_uen.yaml
-- rules/pattern-ca_ohip.yaml
-- rules/pattern-ca_sin.yaml
-- rules/pattern-eu_vat.yaml
-- rules/pattern-nl_bsn_contextual.yaml
-- rules/pattern-au_tfn.yaml
-- rules/pattern-uoft_student_id.yaml
-- rules/pattern-us_ssn.yaml
-- rules/pattern-us_ssn_no_dash.yaml
-- rules/pattern-br_cpf.yaml
-- rules/pattern-br_cpf_unformatted.yaml
-- rules/pattern-br_cnpj.yaml
-- rules/pattern-br_rg.yaml
-- rules/pattern-au_abn.yaml
-- rules/pattern-au_medicare.yaml
-- rules/pattern-sg_nric.yaml
-- rules/pattern-uoft_utorid.yaml
+- rules/au-pii-tax-identifiers--au_tfn.yaml
+- rules/au-pii-tax-identifiers--au_abn.yaml
+- rules/au-pii-tax-identifiers--au_medicare.yaml
+- rules/pattern--uae_emirates_id.yaml
+- rules/pattern--ca_on_drivers_licence.yaml
+- rules/pattern--ca_immigration_doc.yaml
+- rules/pattern--fr_nir.yaml
+- rules/pattern--uoft_tcard.yaml
+- rules/pattern--sg_uen.yaml
+- rules/pattern--ca_ohip.yaml
+- rules/pattern--ca_sin.yaml
+- rules/pattern--eu_vat.yaml
+- rules/pattern--nl_bsn_contextual.yaml
+- rules/pattern--au_tfn.yaml
+- rules/pattern--uoft_student_id.yaml
+- rules/pattern--us_ssn.yaml
+- rules/pattern--us_ssn_no_dash.yaml
+- rules/pattern--br_cpf.yaml
+- rules/pattern--br_cpf_unformatted.yaml
+- rules/pattern--br_cnpj.yaml
+- rules/pattern--br_rg.yaml
+- rules/pattern--sg_nric.yaml
+- rules/pattern--uoft_utorid.yaml
+- rules/international-pii-identifiers--nl_bsn_contextual.yaml
+- rules/international-pii-identifiers--br_cpf.yaml
+- rules/international-pii-identifiers--br_cpf_unformatted.yaml
+- rules/international-pii-identifiers--br_rg.yaml
+- rules/cn-business-identifier--unified-social-credit-code.yaml
+- rules/cn-personal-information--resident-identity-card.yaml
+- rules/gdpr-eu-national-identifiers--fr_nir.yaml
+- rules/gdpr-eu-business-identifiers--eu_vat.yaml
+- rules/sg-pdpa-business-identifiers--sg_uen.yaml
 tests:
-- tests/local-australian-tax-health-identifiers-acceptance.yaml
-- tests/local-australian-tax-health-identifiers-regression.yaml
 - tests/acceptance.yaml
-- tests/regression.yaml

@@ -1,3 +1,4 @@
+import { generalTopicRestrictions, appendGeneralTopicRestrictions } from "../../shared/topic-policy-presets";
 import { useId, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -34,6 +35,7 @@ export function TopicPolicyRules({ binding, policy, onChange }: {
         {enabled ? <div className="space-y-4">
           <label htmlFor={`${id}-${deny ? "deny" : "allow"}`} className="block text-sm font-medium">{t(deny ? "topicControl.denied" : "topicControl.allowed")}</label>
           <Textarea id={`${id}-${deny ? "deny" : "allow"}`} className="field:min-h-28" value={deny ? values.denied : values.allowed} placeholder={t("guardrailWizard.onePerLine")} onChange={event => parameters({ [deny ? "denied_topics" : "allowed_topics"]: event.target.value })} />
+          {deny ? <details className="rounded-lg border p-3"><summary className="min-h-11 cursor-pointer text-sm">{t("protection.topicRules.commonRestrictions")}</summary><p className="mb-3 text-xs leading-5 text-muted-foreground">{t("protection.topicRules.commonRestrictionsHint")}</p><ul className="mb-3 list-disc pl-5 text-xs leading-6">{generalTopicRestrictions.map(item => <li key={item.topic}>{item.topic}</li>)}</ul><Button variant="outline" disabled={appendGeneralTopicRestrictions(values.denied) === values.denied} onClick={() => parameters({ denied_topics: appendGeneralTopicRestrictions(values.denied) })}>{t("protection.topicRules.addCommonRestrictions")}</Button></details> : null}
           {!deny ? <TopicModeField mode={values.mode} onChange={mode => parameters({ topic_mode: mode })} /> : null}
         </div> : <p className="text-xs text-muted-foreground">{t("protection.topicRules.disabled")}</p>}
       </section>;

@@ -59,6 +59,16 @@ export type ProtectionPreset = {
     policyVersion: string;
     enabledRails: Array<"input" | "output">;
     parameterValues: Record<string, string>;
+    /** Omit to select the complete capability; built-in Profiles pin reviewed Rules. */
+    enabledRuleIds?: string[];
+    ruleOrder?: string[];
+    testCaseOverrides?: Record<string, {
+      sourcePolicyVersion: string;
+      reason: string;
+      expectedDecision: "allow" | "block" | "transform" | "intervene";
+      expectedOutputContent?: string;
+      expectedMatches: Array<{ policyId: string; ruleId: string }>;
+    }>;
   }>;
   suggestedTopics: string[];
   optionalPolicyIds: string[];

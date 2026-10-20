@@ -9,7 +9,6 @@ from typing import Any, Literal, Protocol, TypeAlias
 import httpx
 
 from ..evaluation.contracts import (
-    CONTRACT_COMPANY_POLICY,
     CONTRACT_CONTENT_SAFETY,
     CONTRACT_JAILBREAK,
     CONTRACT_PII_SEMANTIC,
@@ -151,7 +150,6 @@ EVALUATOR_PROFILES = {
             frozenset({
                 CONTRACT_TAXONOMY_NORMALIZATION,
                 CONTRACT_TOPIC_SEMANTIC,
-                CONTRACT_COMPANY_POLICY,
             }),
         ),
     )

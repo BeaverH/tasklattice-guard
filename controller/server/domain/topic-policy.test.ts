@@ -14,6 +14,13 @@ function steps(item: GuardrailPolicyBindingConfig) {
   return buildGuardrailPlan({ guardrailId: "split", guardrailVersion: "test", policies, draft: draft(item) }).steps as Array<{ parameters: Array<[string, string]>; on_unsafe: string }>;
 }
 describe("Topic Control Policy Rule isolation", () => {
+  it("exposes one model Policy for topic and company boundaries", () => {
+    const modelTopics = policies.filter(policy => policy.protection.execution === "model"
+      && policy.tags.some(tag => tag.namespace === "guardrail_category" && tag.value === "topic_control"));
+    expect(modelTopics.map(policy => policy.id)).toEqual(["builtin-topic-safety"]);
+    expect(modelTopics[0]!.rules.map(rule => rule.id)).toEqual([DENY, ALLOW]);
+    expect(PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).get("builtin-company-policy")).toBeUndefined();
+  });
   it.each([[ALLOW], [DENY], [ALLOW, DENY]])("executes only enabled Rules %j", (...rules) => {
     const compiled = steps(binding(rules));
     expect(compiled).toHaveLength(rules.length);
