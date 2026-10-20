@@ -18,6 +18,7 @@ const widthClasses = {
 } as const;
 
 export function EntitySheet({
+  allowPageUpdates = false,
   bodyClassName,
   children,
   closeDisabled = false,
@@ -31,6 +32,7 @@ export function EntitySheet({
   title,
   width = "lg",
 }: {
+  allowPageUpdates?: boolean;
   bodyClassName?: string;
   children: ReactNode;
   closeDisabled?: boolean;
@@ -47,6 +49,7 @@ export function EntitySheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        allowPageUpdates={allowPageUpdates}
         side="right"
         closeDisabled={closeDisabled}
         onCloseAutoFocus={(event) => {

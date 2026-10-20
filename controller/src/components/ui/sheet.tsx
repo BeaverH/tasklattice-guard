@@ -50,12 +50,14 @@ function SheetContent({
   side = "right",
   showCloseButton = true,
   closeDisabled = false,
+  allowPageUpdates = false,
   onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
   closeDisabled?: boolean
+  allowPageUpdates?: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -63,6 +65,7 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        data-page-update-blocked={allowPageUpdates ? undefined : "true"}
         // Keep Carbon menu portals inside Radix's focus and dismissal boundary.
         data-floating-menu-container
         data-side={side}

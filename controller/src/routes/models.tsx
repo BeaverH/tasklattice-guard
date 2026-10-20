@@ -1,4 +1,5 @@
 import { hasPermission } from "../../shared/rbac";
+import { usePageUpdateBlocker } from "@/lib/page-updates";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ModelPricingPanel } from "@/components/model-pricing";
 import { FormalValidationSheet } from "@/components/formal-validation-sheet";
@@ -131,6 +132,7 @@ export function GuardrailCatalogPage() {
   // Keep local choices separate from the polled draft. Updating one saved
   // binding must not discard another binding's validated, unsaved choice.
   const [assignmentEdits, setAssignmentEdits] = useState<Partial<Record<ModelAssignmentTarget, string | null>>>({});
+  usePageUpdateBlocker(Object.keys(assignmentEdits).length > 0);
   const assignments = query.data?.draft ? structuredClone(query.data.draft.assignments) : null;
   if (assignments) {
     for (const [target, modelId] of Object.entries(assignmentEdits)) {

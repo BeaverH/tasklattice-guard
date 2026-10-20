@@ -18,7 +18,6 @@ export function GuardrailRequestRate({ guardrailId, name, points, loading, error
     search={{ tab: "runtime", window: "1h", metric: "request_rate" }} hash="runtime-metrics"
     className="guardrail-request-rate" onClick={event => event.stopPropagation()}
     aria-label={t("guardrails.requestRateOpen", { name })} title={t("guardrails.requestRateHint")}>
-    <span className="guardrail-request-rate-heading"><span>{t("dashboard.metrics.request_rate")}</span><span>{t("guardrails.requestRateHour")}</span></span>
     {loading ? <><Skeleton className="h-9 w-full" /><span className="guardrail-request-rate-caption">{t("common.loading")}</span></>
       : unavailable ? <span className="guardrail-request-rate-unavailable">{t("guardrails.requestRateUnavailable")}</span>
         : <>

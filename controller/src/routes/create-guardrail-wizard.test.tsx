@@ -419,6 +419,31 @@ describe("Create Guardrail wizard", () => {
     })));
   });
 
+  it("shows unselected Topic and correctness Policies after applying a Profile, without enabling them", async () => {
+    const topic: Policy = { ...policy, id: "builtin-topic-safety", name: "Model Topic Control",
+      protection: { ...policy.protection!, execution: "model", modelCapabilities: ["topic_control"] } };
+    const correctness: Policy = { ...policy, id: "builtin-contextual-grounding", name: "Contextual Grounding",
+      protection: { ...policy.protection!, directory: "answer_reliability", execution: "model", modelCapabilities: ["contextual_grounding"] } };
+    apiMocks.getPolicies.mockResolvedValue({ items: [policy, topic, correctness], count: 3 });
+    apiMocks.getPresets.mockResolvedValue({ items: [{ id: "baseline", name: "Common baseline", category: "general", isDefault: true, bindings: [binding], limitations: [] }] });
+    renderWizard();
+    expect(await screen.findByText("Profile applied · 1 Policies selected")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Discover protections" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    for (const [category, name] of [["Topic Control", "Model Topic Control"], ["Correctness checks", "Contextual Grounding"]] as const) {
+      await selectSection(category);
+      expect(screen.getByRole("button", { name: "All protections" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("checkbox", { name })).toHaveProperty("checked", false);
+      // Filtering is explicit and never mutates the Profile's selections.
+      fireEvent.click(screen.getByRole("button", { name: "Selected (0)" }));
+      expect(screen.queryByRole("checkbox", { name })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "All protections" }));
+      expect(screen.getByRole("checkbox", { name })).toHaveProperty("checked", false);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
+    await waitFor(() => expect(apiMocks.preview).toHaveBeenCalledWith(expect.objectContaining({ policy_bindings: [binding] })));
+  });
+
   it("searches and filters without changing bindings, then returns from review to configuration", async () => {
     renderWizard();
     fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Filtered draft" } });

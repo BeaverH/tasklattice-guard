@@ -1194,6 +1194,14 @@ export function createHttpApp(input: {
   app.all("/api/*", context => context.json({ error: { code: "not_found", message: "API operation not found." } }, 404));
   const uiRoot = resolve(input.config.uiDist);
   if (existsSync(uiRoot)) {
+    // This small public build manifest must always reach the current replica.
+    // It contains no application data and must not fall through to SPA HTML.
+    app.use("/ui-version.json", async (context, next) => {
+      context.header("Cache-Control", "no-store");
+      await next();
+    });
+    app.get("/ui-version.json", serveStatic({ root: uiRoot, path: "ui-version.json" }));
+    app.all("/ui-version.json", context => context.json({ error: "UI build unavailable" }, 404));
     // Hashed build assets must never fall through to the SPA document. During
     // an upgrade an old/new hash may be unavailable on a particular replica.
     app.use("/assets/*", async (context, next) => {

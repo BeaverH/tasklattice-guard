@@ -52,7 +52,7 @@ export function GuardrailProtectionPicker({ policies, bindings, onChange, issueF
   const previousSection = useRef(section);
   const prefix = useId();
   const [query, setQuery] = useState("");
-  const [selectedOnly, setSelectedOnly] = useState(bindings.length > 0);
+  const [selectedOnly, setSelectedOnly] = useState(false);
 
   useEffect(() => {
     if (previousSection.current === section) return;

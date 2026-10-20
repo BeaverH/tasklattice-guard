@@ -92,7 +92,8 @@ function TableHead({
     <CarbonTableHeader
       data-slot="table-head"
       className={cn(
-        "h-12 px-4 text-left align-middle font-semibold whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        // Carbon resets its inner label to start; keep the column's alignment.
+        "h-12 px-4 text-left align-middle font-semibold whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&_.cds--table-header-label]:[text-align:inherit]",
         className,
       )}
       {...props}

@@ -29,7 +29,7 @@ export function GuardrailRegistry({
           <TableRow className="hover:bg-transparent">
             <TableHead className="resource-name-column">{t("guardrails.guardrail")}</TableHead>
             <TableHead className="resource-protection-column"><ColumnHelp label={t("guardrails.registryReadiness")} help={t("guardrails.registryReadinessHelp")} /></TableHead>
-            <TableHead className="resource-traffic-column"><ColumnHelp label={t("guardrails.registryTraffic")} help={t("guardrails.registryTrafficHelp")} /></TableHead>
+            <TableHead className="resource-traffic-column"><ColumnHelp label={t("dashboard.metrics.request_rate")} help={t("guardrails.registryTrafficHelp")} /></TableHead>
             <TableHead className="resource-updated-column">{t("guardrails.updated")}</TableHead>
             <TableHead className="resource-actions-column"><span className="sr-only">{t("common.actions")}</span></TableHead>
           </TableRow>

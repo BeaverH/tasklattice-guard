@@ -136,6 +136,10 @@ export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, Toke
   ["GET", "/api/v1/audit-events", "audit", "read"],
 ];
 export function requiredTokenPermission(method: string, path: string) {
+  // Default history is platform-managed, with usage checked again at deletion.
+  if (method === "DELETE" && /^\/api\/v1\/guardrails\/guardrail-default\/versions\/[^/]+$/.test(path)) {
+    return [method, path, "runners", "write"] as const;
+  }
   if (method === "POST" && /^\/api\/v1\/guardrails\/guardrail-default\/(?:test-runs|publish|versions\/[^/]+\/(?:test-runs|release|environment-check))$/.test(path)) {
     return [method, path, "runners", "write"] as const;
   }

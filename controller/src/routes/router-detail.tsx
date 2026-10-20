@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Activity, Cable, ClipboardCheck, GitBranch, History, LayoutDashboard, AlertTriangle, FlaskConical, Pencil } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearch, useNavigate, useBlocker } from "@tanstack/react-router";
+import { usePageUpdateBlocker } from "@/lib/page-updates";
 import { toast } from "@/components/ui/notifications";
 import { useAuth } from "@/lib/auth";
 import { endpointsQueryOptions } from "@/features/endpoints-query";
@@ -115,6 +116,7 @@ export function RouterWorkspace({ router }: { router: api.TrafficRouter }) {
   const openRevision = (revision: number) => { setSelectedChangeId(null); setSelectedRevision(revision); setTab("revisions"); };
   const opener = useRef<HTMLElement | null>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(base.draft);
+  usePageUpdateBlocker(editing || dirty || Boolean(review));
   const unpublished =
     dirty ||
     (router.draftRevision !== router.activeDraftRevision &&

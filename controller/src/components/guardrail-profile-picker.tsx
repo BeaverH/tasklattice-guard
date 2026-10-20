@@ -6,6 +6,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import "./guardrail-profile-picker.scss";
 
 const profileIcons: Record<string, LucideIcon> = {
   general: ShieldCheck,
@@ -39,7 +40,7 @@ export function GuardrailProfilePicker({ presets, selected, pending, onSelect, o
     <div className="space-y-2">
       <Label htmlFor={id} className="text-sm font-semibold">{uiText("uiCopy.profile")}</Label>
       <Select value={pending ?? selected} onValueChange={onSelect}>
-        <SelectTrigger id={id} className="field:min-h-11 field:h-auto w-full field:bg-card field:py-2.5 field:text-sm field:[&>span]:min-w-0 field:[&>span]:whitespace-normal field:[&>span]:text-left">
+        <SelectTrigger id={id} className="guardrail-profile-select field:min-h-11 field:h-auto w-full field:bg-card field:py-2.5 field:text-sm field:[&>span]:min-w-0 field:[&>span]:whitespace-normal field:[&>span]:text-left">
           <SelectValue>{profile ? profileLabel(profile) : blankLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent position="popper" align="start" className="">

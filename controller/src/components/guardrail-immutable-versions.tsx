@@ -149,7 +149,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
         {/* The runtime baseline is pinned; switching it is always explicit. */}
         {isPlatformAdministrator(auth.user?.role) && isDefault ?
           <DropdownMenuItem variant="edit" disabled={baseline.data?.version === version.version || version.status !== "ready"} onSelect={() => setAction({ kind: "baseline", version: version.version })}><ShieldCheck />{t("guardrailPackage.setBaseline")}</DropdownMenuItem> : null}
-        {canManage && !isDefault ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
+        {canManage ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
         : null}
       </DropdownMenuContent>
     </DropdownMenu></div>

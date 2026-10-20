@@ -316,3 +316,26 @@ for product tags, resource paths, authentication, idempotency, and retry behavio
 The Controller API manages configuration and accounts. Applications and gateways
 use the separate [Runner integration protocol](gateway-integration.md) for
 Input, Output, and streaming checks.
+
+## Console updates after deployment
+
+Production UI builds embed a unique identity in `index.html` and
+`ui-version.json`, including builds from uncommitted workspaces. Both documents
+use `Cache-Control: no-store`; hashed `/assets/` files retain immutable caching.
+Missing assets and manifests return uncacheable 404 responses instead of SPA HTML.
+
+Open pages check the build identity every 15 seconds while visible, and again
+on focus, network recovery, page restoration, or a Vite lazy-import failure.
+A changed build reloads the current URL automatically. Temporary network errors
+do not indicate an upgrade, and reloads have a per-tab cooldown for rolling
+deployments. Development mode continues to use Vite HMR.
+
+Editing drawers, forms, dirty Router/model configuration, focused inputs and
+pending mutations defer automatic reloads. Closing or saving the editor allows
+the pending update to proceed. Read-only testing reports allow updates so their
+rendering logic cannot remain on an older build.
+
+Pages opened before this mechanism was installed must load it once; subsequent
+deployments are detected automatically. When adding a full-page editor without
+a form, use `usePageUpdateBlocker` for its unsaved state. `SheetContent` protects
+drawers by default; use `allowPageUpdates` only for read-only content.

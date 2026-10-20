@@ -22,11 +22,27 @@ beforeAll(() => {
   writeFileSync(join(root, 'index.html'), html);
   writeFileSync(join(root, 'assets/index-current.css'), 'body { color: black; }');
   writeFileSync(join(root, 'assets/index-current.js'), 'export const ready = true;');
+  writeFileSync(join(root, 'ui-version.json'), JSON.stringify({ buildId: "build-current" }));
   app = createHttpApp({ config, auth: {} as ControllerAuth, service: {} as ControlPlaneService, runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics });
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe('SPA asset delivery across builds', () => {
+  it('serves the current build identity without caching, including after a static deployment', async () => {
+    const response = await app.request('/ui-version.json');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toEqual({ buildId: "build-current" });
+    writeFileSync(join(root, 'ui-version.json'), JSON.stringify({ buildId: "build-next" }));
+    const next = await app.request('/ui-version.json');
+    expect(await next.json()).toEqual({ buildId: "build-next" });
+    rmSync(join(root, 'ui-version.json'));
+    const missing = await app.request('/ui-version.json');
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('cache-control')).toBe('no-store');
+    expect(missing.headers.get('content-type')).toContain('application/json');
+  });
   it.each(['css', 'js', 'woff2'])('returns an uncacheable 404 for a missing %s instead of HTML', async extension => {
     const response = await app.request(`/assets/index-previous.${extension}`);
     expect(response.status).toBe(404);

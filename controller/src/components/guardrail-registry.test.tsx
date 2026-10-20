@@ -30,7 +30,7 @@ vi.mock("react-i18next", () => ({
         "modelPricing.openCosts": "View costs for {{name}}",
         "modelPricing.incomplete": "{{count}} calls unaccounted",
         "modelPricing.unpriced": "Unaccounted",
-        "guardrails.registryTraffic": "Traffic",
+        "dashboard.metrics.request_rate": "Request rate",
         "guardrails.requestRateOpen": "View Request rate for {{name}}",
         "guardrails.guardrail": "Guardrail",
         "guardrails.notRun": "Not run",
@@ -85,7 +85,7 @@ describe("GuardrailRegistry", () => {
     expect(screen.queryByRole("columnheader", { name: "Versions" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Month cost (USD)" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Testing Report" })).toBeNull();
-    expect(screen.getByRole("columnheader", { name: "Traffic" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Request rate" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Updated" })).toBeTruthy();
     expect(screen.queryByText("guardrails.registryUnrouted")).toBeNull();
   });

@@ -987,7 +987,7 @@ export class ControlPlaneService {
     }, { isolationLevel: "repeatable read", accessMode: "read only" });
   }
 
-  /** A version can be deleted once nothing routes to it, it is not Latest, and Runners have stopped serving it. */
+  /** A version can be deleted once no routing/baseline references remain and Runners have stopped serving it. */
   async deleteGuardrailVersion(input: { guardrailId: string; version: string; actorId: string }) {
     if (input.guardrailId === DEFAULT_GUARDRAIL_ID) await assertPlatformActor(this.db, input.actorId);
     await this.db.transaction(async tx => {

@@ -12,7 +12,9 @@ vi.mock("react-i18next", () => ({ initReactI18next: { type: "3rdParty", init: ()
   t: (key: string, values?: Record<string, unknown>) => Object.entries(values ?? {}).reduce((text, [key, value]) => `${text} ${key}:${value}`, key),
   i18n: { language: "en", exists: () => true },
 }) }));
-vi.mock("@/lib/controller-api", async original => ({ ...(await original<typeof import("@/lib/controller-api")>()), getControllerGuardrail: vi.fn(), getGuardrailVersionDeletionImpact: vi.fn() }));
+vi.mock("@/lib/controller-api", async original => ({ ...(await original<typeof import("@/lib/controller-api")>()), getControllerGuardrail: vi.fn(), getGuardrailVersionDeletionImpact: vi.fn(),
+  getSystemBaseline: vi.fn(async () => ({ guardrailId: "guardrail-default", version: "20261003-010000.000Z" })),
+}));
 vi.mock("@tanstack/react-router", () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 
 function version(day: number): GuardrailVersionDetail {
@@ -61,6 +63,20 @@ describe("Immutable version list and detail drawer", () => {
     expect(screen.queryByRole("menuitem", { name: "uiCopy.delete" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "guardrailPackage.setBaseline" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "immutableVersions.release" })).toBeNull();
+  });
+  it.each([false, true])("lets administrators inspect Default version deletion with baseline protection: %s", async baseline => {
+    auth.user.role = "admin";
+    const selected = version(baseline ? 3 : 2);
+    vi.mocked(getGuardrailVersionDeletionImpact).mockResolvedValue({
+      guardrailId: "guardrail-default", version: selected.version, deletable: !baseline,
+      references: baseline ? [{ kind: "baseline" }] : [], blockers: [], unrestorableRevisions: [],
+    });
+    mount({ isDefault: true, guardrailId: "guardrail-default" });
+    fireEvent.click(screen.getByRole("button", { name: `immutableVersions.versionActions version:${selected.version}` }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "uiCopy.delete" }));
+    await waitFor(() => expect(getGuardrailVersionDeletionImpact).toHaveBeenCalledWith("guardrail-default", selected.version));
+    expect(await screen.findByText(baseline ? "guardrails.versionReference.baseline" : "guardrails.versionNotReferenced")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "uiCopy.deleteVersion" }).hasAttribute("disabled")).toBe(baseline);
   });
   it("shows a retained failed outcome after its report expires without offering a dead report link", () => {
     const archived = { ...version(3), testing_evidence: { latest: { id: "expired-test", status: "failed" as const,
