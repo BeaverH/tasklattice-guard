@@ -33,6 +33,8 @@ export interface ValidationMetrics {
    * End-to-end case latency p95 in milliseconds.
    */
   'p95LatencyMs'?: (number);
+  'skipped'?: (number);
+  'executed'?: (number);
 }
 
 /**
@@ -67,4 +69,6 @@ export interface ValidationMetrics__Output {
    * End-to-end case latency p95 in milliseconds.
    */
   'p95LatencyMs': (number);
+  'skipped': (number);
+  'executed': (number);
 }

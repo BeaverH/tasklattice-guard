@@ -287,6 +287,8 @@ function mapVersion(value: controllerApi.GuardrailVersion, guardrail: controller
     released_at: value.releasedAt,
     release_run_id: value.validationRunId ?? null,
     testing_evidence: value.testingEvidence ?? null,
+    test_waiver: value.testWaiver ?? null,
+    source_validation_run_id: value.sourceValidationRunId ?? null,
     origin: value.origin ?? "local",
     environment_check: value.environmentCheck ?? null,
     provenance: value.provenance ?? null,
@@ -396,8 +398,8 @@ export async function publishGuardrail(guardrailId: string, expectedDraftRevisio
 }
 
 /** Run a version's own test suite against its signed Artifact in this environment. */
-export const testGuardrailVersion = (guardrailId: string, version: string) =>
-  controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/guardrails/${encodeURIComponent(guardrailId)}/versions/${encodeURIComponent(version)}/test-runs`, { method: "POST" }).then(mapValidationRun);
+export const testGuardrailVersion = (guardrailId: string, version: string, testModelRules = true) =>
+  controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/guardrails/${encodeURIComponent(guardrailId)}/versions/${encodeURIComponent(version)}/test-runs`, { method: "POST", body: JSON.stringify({ testModelRules }) }).then(mapValidationRun);
 
 /** Release a pending version here; requires its passed test of exactly this content. */
 export const releaseGuardrailVersion = (guardrailId: string, version: string) =>
@@ -511,7 +513,7 @@ export const getGuardrailLoggingSettings = (id: string) => controllerApi.request
 export const updateGuardrailLoggingSettings = (id: string, level: LoggingLevel, acknowledgeCost = false) => controllerApi.requestController<CurrentLoggingSettings>(`/api/v1/guardrails/${encodeURIComponent(id)}/logging`, { method: "PATCH", body: JSON.stringify({ level, acknowledgeCost }) }).then(mapLogging);
 
 type ValidationObserver = { onProgress?: (run: ValidationRun) => void };
-export const createValidationRun = (guardrailId: string, observer?: ValidationObserver) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/guardrails/${encodeURIComponent(guardrailId)}/test-runs`, { method: "POST" }).then(run => waitForValidation(run, observer));
+export const createValidationRun = (guardrailId: string, observer?: ValidationObserver, testModelRules = true) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/guardrails/${encodeURIComponent(guardrailId)}/test-runs`, { method: "POST", body: JSON.stringify({ testModelRules }) }).then(run => waitForValidation(run, observer));
 export const resumeValidationRun = (runId: string, observer?: ValidationObserver) => controllerApi.requestController<controllerApi.ValidationRun>(`/api/v1/test-runs/${encodeURIComponent(runId)}?view=summary`).then(run => waitForValidation(run, observer));
 export async function getValidationRuns(guardrailId?: string, options: { cursor?: string | undefined; q?: string; status?: string } = {}): Promise<Collection<ValidationRun> & { nextCursor?: string | null; versionReports?: ValidationRun[] }> {
   const params = new URLSearchParams();
@@ -599,6 +601,8 @@ function mapValidationRun(value: controllerApi.ValidationRun): ValidationRun {
     id: value.id,
     guardrail_id: value.guardrailId,
     guardrail_version: value.guardrailVersion,
+    test_model_rules: value.testModelRules ?? true,
+    test_scope: value.testScope ?? null,
     source_draft_version: value.sourceDraftRevision,
     subject: value.subject ?? "draft",
     candidate_digest: value.candidateDigest ?? null,
@@ -608,6 +612,8 @@ function mapValidationRun(value: controllerApi.ValidationRun): ValidationRun {
     progress: value.progress ?? null,
     failure_reason: value.failureReason,
     metrics: {
+      skipped: value.metrics.skipped ?? 0,
+      executed: value.metrics.executed ?? value.metrics.total,
       total: value.metrics.total,
       passed: value.metrics.passed,
       compliance_rate: value.metrics.complianceRate,
@@ -635,6 +641,8 @@ function mapValidationResult(value: Record<string, unknown>): ValidationRun["res
     policy_id: stringValue(value.policyId) ?? "",
     expected_decision: stringValue(value.expectedDecision) ?? "",
     actual_decision: stringValue(value.actualDecision) ?? "error",
+    skipped: Boolean(value.skipped),
+    skip_reason: stringValue(value.skipReason) ?? "",
     passed: Boolean(value.passed),
     evaluator_ids: arrayOfStrings(value.evaluatorIds),
     latency_ms: numberValue(value.latencyMs) ?? 0,

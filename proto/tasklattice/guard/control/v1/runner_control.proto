@@ -18,6 +18,8 @@ service RunnerControl {
 // Runner-to-Controller stream envelope. Registration must be the first body;
 // every later body belongs to the registered runner and boot identity.
 message RunnerMessage {
+  reserved 20;
+  reserved "candidate_compile_result";
   // Former compile_result: publication now reuses the validated candidate.
   reserved 13;
   reserved "compile_result";
@@ -40,6 +42,8 @@ message RunnerMessage {
 
 // Controller-to-Runner stream envelope containing commands and desired state.
 message ControllerMessage {
+  reserved 18;
+  reserved "candidate_compile_request";
   // Former compile_request: publication now reuses the validated candidate.
   reserved 12;
   reserved "compile_request";

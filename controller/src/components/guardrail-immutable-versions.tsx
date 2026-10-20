@@ -1,4 +1,5 @@
-import { hasPermission } from "../../shared/rbac";
+import { TestModelRulesSwitch, ValidationScopeNotice } from "./validation-model-scope";
+import { hasPermission, isPlatformAdministrator } from "../../shared/rbac";
 import { isValidationRunning } from "./validation-run-progress";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
@@ -31,7 +32,7 @@ import { EnvironmentStatus } from "./guardrail-import-sheet";
 import { VersionTestSuite } from "./version-test-suite";
 import { Input } from "./ui/input";
 
-type VersionAction = { kind: "export" | "delete" | "baseline" | "release"; version: string };
+type VersionAction = { kind: "export" | "delete" | "baseline" | "release" | "test"; version: string };
 type Props = {
   openRequested?: boolean;
   onOpenRequestHandled?: () => void;
@@ -72,6 +73,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
   const { t, i18n } = useTranslation();
   const auth = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [testModelRules, setTestModelRules] = useState(true);
   const [action, setAction] = useState<VersionAction | null>(null);
   const [tab, setTab] = useState("overview");
   const [page, setPage] = useState(0);
@@ -102,11 +104,11 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       toast.success(t("guardrailPackage.baselineSet", { version }));
     },
   });
-  const canManage = hasPermission(auth.user?.role, "guardrails", "write");
+  const canManage = isDefault ? isPlatformAdministrator(auth.user?.role) : hasPermission(auth.user?.role, "guardrails", "write");
   const releaseOf = (version: GuardrailVersion) => versionReleaseState(version, validationRuns);
   const testVersion = useMutation({
-    mutationFn: (version: string) => testGuardrailVersion(guardrailId, version),
-    onSuccess: async (_run, version) => { await onChanged(); toast.success(t("immutableVersions.testStarted", { version })); },
+    mutationFn: (version: string) => testGuardrailVersion(guardrailId, version, testModelRules),
+    onSuccess: async (_run, version) => { setAction(null); await onChanged(); toast.success(t("immutableVersions.testStarted", { version })); },
     onError: error => { toast.error(error instanceof Error ? error.message : String(error)); },
   });
   const release = useMutation({
@@ -141,13 +143,13 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {/* Testing a version runs its own suite against its signed Artifact, here. */}
-        {canManage ? <DropdownMenuItem disabled={!version.test_suite_count || releaseOf(version).state === "testing" || testVersion.isPending} onSelect={() => testVersion.mutate(version.version)}><FlaskConical />{t("immutableVersions.runTests")}</DropdownMenuItem> : null}
+        {canManage ? <DropdownMenuItem disabled={!version.test_suite_count || releaseOf(version).state === "testing" || testVersion.isPending} onSelect={() => { setTestModelRules(true); setAction({ kind: "test", version: version.version }); }}><FlaskConical />{t("immutableVersions.runTests")}</DropdownMenuItem> : null}
         {canManage && version.status === "pending" ? <DropdownMenuItem variant="edit" disabled={releaseOf(version).state !== "releasable"} onSelect={() => setAction({ kind: "release", version: version.version })}><Rocket />{t("immutableVersions.release")}</DropdownMenuItem> : null}
         <DropdownMenuItem onSelect={() => setAction({ kind: "export", version: version.version })}><Download />{t("guardrails.exportEllipsis")}</DropdownMenuItem>
         {/* The runtime baseline is pinned; switching it is always explicit. */}
-        {canManage && isDefault ?
+        {isPlatformAdministrator(auth.user?.role) && isDefault ?
           <DropdownMenuItem variant="edit" disabled={baseline.data?.version === version.version || version.status !== "ready"} onSelect={() => setAction({ kind: "baseline", version: version.version })}><ShieldCheck />{t("guardrailPackage.setBaseline")}</DropdownMenuItem> : null}
-        {hasPermission(auth.user?.role, "guardrails", "write") ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
+        {canManage && !isDefault ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
         : null}
       </DropdownMenuContent>
     </DropdownMenu></div>
@@ -215,8 +217,8 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
                       <TabsTrigger value="files">{t("immutableVersions.files")}<Badge variant="outline">{currentDetail.artifacts.length}</Badge></TabsTrigger>
                     </TabsList>
                     <TabsContent value="overview" className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-7 pt-6">
-                      <ReleasePanel version={selectedVersion} release={releaseOf(selectedVersion)} canManage={canManage} testing={testVersion.isPending}
-                        onTest={() => testVersion.mutate(selectedVersion.version)} onRelease={() => setAction({ kind: "release", version: selectedVersion.version })}
+                      <ReleasePanel version={selectedVersion} release={releaseOf(selectedVersion)} canManage={canManage} canRelease={canManage} testing={testVersion.isPending}
+                        onTest={() => { setTestModelRules(true); setAction({ kind: "test", version: selectedVersion.version }); }} onRelease={() => setAction({ kind: "release", version: selectedVersion.version })}
                         onOpenRun={onOpenValidation} />
                       <ImmutablePosture detail={currentDetail} />
                       <ReleaseEnvironment version={selectedVersion}
@@ -253,6 +255,12 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       onCloseCompare();
       await onChanged();
     }} /> : null}
+    {action?.kind === "test" ? <EntitySheet open width="lg" onOpenChange={open => { if (!open && !testVersion.isPending) closeAction(); }} closeDisabled={testVersion.isPending}
+      title={t("immutableVersions.runTests")} eyebrow={guardrailName} description={action.version}
+      footer={<><Button variant="outline" disabled={testVersion.isPending} onClick={closeAction}>{t("common.cancel")}</Button><Button variant="testing" disabled={testVersion.isPending} onClick={() => testVersion.mutate(action.version)}><FlaskConical />{t("immutableVersions.runTests")}</Button></>}>
+      <TestModelRulesSwitch checked={testModelRules} onChange={setTestModelRules} disabled={testVersion.isPending} />
+      {testVersion.error ? <ErrorNotice error={testVersion.error} /> : null}
+    </EntitySheet> : null}
     {action?.kind === "baseline" ? <ConfirmationSheet open returnFocusRef={drawerOpen ? undefined : opener} onOpenChange={open => { if (!open && !switchBaseline.isPending) { setAction(null); switchBaseline.reset(); } }}
       eyebrow={t("guardrails.confirmActionEyebrow")} title={t("guardrailPackage.baselineTitle", { version: action.version })} description={t("guardrailPackage.baselineDescription")}
       cancelLabel={t("common.cancel")} confirmLabel={t("guardrailPackage.setBaseline")} pendingLabel={t("common.saving")} pending={switchBaseline.isPending}
@@ -270,6 +278,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
         confirmDisabled={evidence?.state !== "releasable"} confirmIcon={<Rocket />} onConfirm={() => release.mutate(action.version)}>
         {evidence?.run ? <p className="text-sm leading-6">{t("immutableVersions.releaseEvidence", { run: evidence.run.id, passed: evidence.run.metrics.passed, total: evidence.run.metrics.total,
           time: new Date(evidence.run.created_at).toLocaleString(i18n.language) })}</p> : null}
+        {evidence?.run ? <ValidationScopeNotice run={evidence.run} /> : target?.testing_evidence?.latest?.testModelRules === false ? <p className="text-sm">{t("validationScope.badge")}</p> : null}
         <p className="text-sm leading-6 text-muted-foreground">{t("immutableVersions.releaseImpact")}</p>
         {release.error ? <ErrorNotice error={release.error} /> : null}
       </ConfirmationSheet>;
@@ -279,7 +288,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
 }
 
 const RELEASE_BADGE: Record<VersionReleaseState, string> = {
-  released: "active", released_retest_failed: "failed", untested: "needs_validation", testing: "syncing", test_failed: "failed", releasable: "ready",
+  released_waiver: "warning", released: "active", released_retest_failed: "failed", untested: "needs_validation", testing: "syncing", test_failed: "failed", releasable: "ready",
 };
 
 /** Display state of a version's release here: pending (with its testing state) or released. */
@@ -293,8 +302,8 @@ function ReleaseStateBadge({ state }: { state: VersionReleaseState }) {
  * pending version (a passed test of exactly this content here), or which
  * report a released version was released with.
  */
-function ReleasePanel({ version, release, canManage, testing, onTest, onRelease, onOpenRun }: {
-  version: GuardrailVersion; release: ReturnType<typeof versionReleaseState>; canManage: boolean; testing: boolean;
+function ReleasePanel({ version, release, canManage, canRelease, testing, onTest, onRelease, onOpenRun }: {
+  version: GuardrailVersion; release: ReturnType<typeof versionReleaseState>; canManage: boolean; canRelease: boolean; testing: boolean;
   onTest: () => void; onRelease: () => void; onOpenRun: (run: ValidationRun) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -305,13 +314,18 @@ function ReleasePanel({ version, release, canManage, testing, onTest, onRelease,
         <div className="flex flex-wrap items-center gap-3"><h3 className="text-base font-semibold">{t("immutableVersions.releaseHeading")}</h3><ReleaseStateBadge state={release.state} /></div>
         <p className="max-w-3xl text-sm text-muted-foreground">{version.status === "pending" && !version.test_suite_count ? t("immutableVersions.noTestSuite") : t(`immutableVersions.releaseHints.${release.state}`)}</p>
         {version.status === "ready" && version.released_at ? <p className="text-xs text-muted-foreground">{t("immutableVersions.releasedAt", { time: new Date(version.released_at).toLocaleString(i18n.language) })}</p> : null}
+        {version.test_waiver ? <div className="space-y-1 border-l-2 border-amber-500 pl-3 text-sm">
+          <p>{t("immutableVersions.waiverReason", { reason: version.test_waiver.reason })}</p>
+          <p className="text-muted-foreground">{t("immutableVersions.waiverActor", { actor: version.test_waiver.actorId, time: new Date(version.test_waiver.createdAt).toLocaleString(i18n.language) })}</p>
+        </div> : null}
+        {run ? <ValidationScopeNotice run={run} /> : version.testing_evidence?.release?.testModelRules === false ? <p className="text-sm">{t("validationScope.badge")}</p> : null}
         {run ? <button type="button" className="text-sm text-primary hover:underline" onClick={() => onOpenRun(run)}>
           {t("immutableVersions.reportLink", { run: run.id, passed: run.metrics.passed, total: run.metrics.total })}</button> : null}
       </div>
       {canManage ? <div className="flex shrink-0 gap-2">
         <Button variant="testing" disabled={!version.test_suite_count || testing || release.state === "testing"} onClick={onTest}>
           {testing || release.state === "testing" ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t("immutableVersions.runTests")}</Button>
-        {version.status === "pending" ? <Button className="min-h-11" disabled={release.state !== "releasable"} onClick={onRelease}><Rocket />{t("immutableVersions.release")}</Button> : null}
+        {canRelease && version.status === "pending" ? <Button className="min-h-11" disabled={release.state !== "releasable"} onClick={onRelease}><Rocket />{t("immutableVersions.release")}</Button> : null}
       </div> : null}
     </div>
   </section>;

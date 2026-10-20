@@ -131,6 +131,7 @@ const testCaseInput = z.object({
   expectedReasoningResult: z.string().nullable().default(null),
 });
 const validationScopeInput = z.object({ caseId: z.string().min(1), excluded: z.boolean() });
+const validationTestOptions = z.object({ testModelRules: z.boolean().default(true) }).strict();
 const validationRunInput = z.object({ guardrailId: z.string().min(1) });
 const playgroundInteractionInput = z.object({
   guardrail_version: guardrailVersionInput,
@@ -780,7 +781,9 @@ export function createHttpApp(input: {
     return context.json(released);
   });
   app.post("/api/v1/guardrails/:id/versions/:version/test-runs", authenticated, async context => {
-    const run = await input.service.requestVersionTestRun({ guardrailId: context.req.param("id"), version: guardrailVersionInput.parse(context.req.param("version")), actorId: context.get("actor").id });
+    const body = await context.req.text();
+    const options = validationTestOptions.parse(body.trim() ? JSON.parse(body) : {});
+    const run = await input.service.requestVersionTestRun({ ...options, guardrailId: context.req.param("id"), version: guardrailVersionInput.parse(context.req.param("version")), actorId: context.get("actor").id });
     return context.json(run, 202);
   });
   app.get("/api/v1/guardrails/:id/versions/:version/test-suite", authenticated, async context => {
@@ -863,7 +866,10 @@ export function createHttpApp(input: {
     return context.body(null, 204);
   });
   app.post("/api/v1/guardrails/:guardrailId/test-runs", authenticated, async (context) => {
+    const body = await context.req.text();
+    const options = validationTestOptions.parse(body.trim() ? JSON.parse(body) : {});
     return context.json(await input.service.requestValidation({
+      ...options,
       guardrailId: context.req.param("guardrailId"),
       actorId: context.get("actor").id,
       compilerAvailable: input.runnerControl.hasDefaultCompiler(),

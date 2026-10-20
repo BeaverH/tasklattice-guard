@@ -1,3 +1,4 @@
+import { TestModelRulesSwitch, ValidationScopeNotice } from "./validation-model-scope";
 import { MAX_GUARDRAIL_VERSIONS } from "../../shared/guardrail-version-limit";
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -16,14 +17,15 @@ import { draftStateKey } from "@/lib/guardrail-draft-state";
 export { draftStateKey, hasUnpublishedDraft } from "@/lib/guardrail-draft-state";
 
 /** Tests and publication stay in the same drawer, over the user's current tab. */
-export function GuardrailDraftReviewSheet({ guardrail, policies, versions, policiesReady = true, policiesError = false, onRetryPolicies, initialPublish = false, justSaved = false, readOnly = false, onClose, onEdit, onChanged, onPublished }: {
+export function GuardrailDraftReviewSheet({ guardrail, policies, versions, policiesReady = true, policiesError = false, onRetryPolicies, initialPublish = false, initialTestModelRules = true, justSaved = false, readOnly = false, onClose, onEdit, onChanged, onPublished }: {
   guardrail: Guardrail; policies: Policy[]; versions: GuardrailVersion[];
   policiesReady?: boolean; policiesError?: boolean; onRetryPolicies?: () => void;
-  initialPublish?: boolean; justSaved?: boolean; readOnly?: boolean;
-  onClose: () => void; onEdit: () => void; onChanged: () => Promise<void>;
+  initialPublish?: boolean; initialTestModelRules?: boolean; justSaved?: boolean; readOnly?: boolean;
+  onClose: () => void; onEdit?: (() => void) | undefined; onChanged: () => Promise<void>;
   onPublished: (version: GuardrailVersion) => void;
 }) {
   const { t } = useTranslation();
+  const [testModelRules, setTestModelRules] = useState(initialTestModelRules);
   const [publishRevision, setPublishRevision] = useState<number | null>(initialPublish ? guardrail.draft_revision ?? null : null);
   const [observedRun, setObservedRun] = useState<ValidationRun | null>(null);
   const resumedRun = useRef<string | null>(null);
@@ -34,7 +36,7 @@ export function GuardrailDraftReviewSheet({ guardrail, policies, versions, polic
       if (runId) return resumeValidationRun(runId, { onProgress: observeRun });
       if (readiness.blocked) throw new Error(readiness.reason ?? t("protection.validationReadiness.blockedTitle"));
       setObservedRun(null);
-      return createValidationRun(guardrail.id, { onProgress: observeRun });
+      return createValidationRun(guardrail.id, { onProgress: observeRun }, testModelRules);
     },
     onSuccess: async () => { await onChanged(); },
     onError: async () => { await onChanged(); },
@@ -79,12 +81,13 @@ export function GuardrailDraftReviewSheet({ guardrail, policies, versions, polic
       <Button variant="outline" disabled={pending} onClick={() => { setPublishRevision(null); publish.reset(); }}>{t("common.back")}</Button>
       <Button disabled={pending || versionLimitReached || !canPublish || publishRevision !== guardrail.draft_revision} onClick={() => publish.mutate()}>{publish.isPending ? <LoaderCircle className="animate-spin" /> : <ShieldCheck />}{t(publish.isPending ? "guardrails.publishingVersion" : "guardrails.publishVersion")}</Button>
     </> : <>
-      <Button variant="ghost" className="mr-auto" disabled={pending} onClick={onEdit}><Pencil />{t("guardrails.continueEditing")}</Button>
+      {onEdit ? <Button variant="ghost" className="mr-auto" disabled={pending} onClick={onEdit}><Pencil />{t("guardrails.continueEditing")}</Button> : null}
       <Button variant="outline" disabled={pending} onClick={onClose}>{t(currentResult ? "common.close" : "guardrails.skipTest")}</Button>
       <Button variant="testing" disabled={pending || (!reconnect && readiness.blocked)} onClick={() => run.mutate(reconnect ? observedRun!.id : undefined)}>{run.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(run.isPending ? "guardrails.runningValidation" : reconnect ? "guardrails.testProgress.reconnect" : currentResult ? "validation.runAgain" : "guardrails.testNow")}</Button>
       {canPublish ? <Button disabled={pending} onClick={() => setPublishRevision(guardrail.draft_revision ?? null)}><ShieldCheck />{t("guardrails.publishVersion")}</Button> : null}
     </>}>
     <div className="space-y-5">
+      {!readOnly && !reviewingPublish ? <TestModelRulesSwitch checked={testModelRules} onChange={setTestModelRules} disabled={pending} /> : null}
       <div className="flex items-center justify-between gap-4 border-b pb-4" aria-live="polite">
         <div><p className="text-sm font-medium">{t("guardrails.draftRevisionLabel", { revision: guardrail.draft_revision ?? "—" })}</p><p className="mt-1 text-xs text-muted-foreground">{t("guardrails.policyCheckDetail", { count: guardrail.policy_bindings.length })}</p></div>
         <span className="text-sm font-medium">{t(run.isPending || reconnect ? "guardrails.draftTesting" : draftStateKey(guardrail))}</span>
@@ -95,7 +98,8 @@ export function GuardrailDraftReviewSheet({ guardrail, policies, versions, polic
       {!reviewingPublish ? <GuardrailValidationReadiness readiness={readiness} onRetry={() => { onRetryPolicies?.(); readiness.refresh(); }} /> : null}
       {run.isPending || reconnect ? <ValidationRunProgress run={observedRun} startedAt={run.submittedAt} interrupted={reconnect} /> : currentResult ? <>
         <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-medium">{t("guardrails.testReportsTab")}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{currentResult.id}</p></div><StateBadge state={currentResult.status} /></div>
-        <p className="text-sm">{t("guardrails.testResultSummary", { passed: currentResult.metrics.passed, total: currentResult.metrics.total, rate: currentResult.metrics.compliance_rate })}</p>
+        <ValidationScopeNotice run={currentResult} />
+        <p className="text-sm">{t("guardrails.testResultSummary", { passed: currentResult.metrics.passed, total: currentResult.metrics.executed ?? currentResult.metrics.total, rate: currentResult.metrics.compliance_rate })}</p>
         {currentResult.failure_reason ? <p role="alert" className="whitespace-pre-wrap text-sm text-destructive">{currentResult.failure_reason}</p> : null}
         {!reviewingPublish ? <ValidationCaseResults key={currentResult.id} results={currentResult.results} defaultFilter={currentResult.status === "passed" ? "all" : "failed"} /> : null}
       </> : <p className="text-sm text-muted-foreground">{t(result ? "guardrails.validationEvidenceStale" : "guardrails.savedDraftUntested")}</p>}

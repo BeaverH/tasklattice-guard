@@ -14,6 +14,7 @@ import {
   planToWire,
   trafficScopeToWire,
   validationTestToWire,
+  validationCaseFromWire,
 } from "./protocol-codec.js";
 
 const versionId = "20260904-073000.123Z";
@@ -60,6 +61,22 @@ const plan = {
 
 
 describe("Controller/Runner control protocol", () => {
+  it("preserves skipped cases without inventing an enforcement action on the real wire", () => {
+    const protoPath = resolve("../proto/tasklattice/guard/control/v1/runner_control.proto");
+    const definition = loadSync(protoPath, { includeDirs: [dirname(protoPath)], longs: String, enums: String, defaults: true, oneofs: true });
+    const descriptor = loadPackageDefinition(definition) as unknown as ProtoGrpcType;
+    const connect = descriptor.tasklattice.guard.control.v1.RunnerControl.service.Connect;
+    const encoded = connect.requestSerialize({ validationResult: { results: [{
+      caseId: "model-case", skipped: true, skipReason: "Model-dependent tests skipped.",
+      expectedDecision: "VALIDATION_DECISION_BLOCK", phase: "GUARDRAIL_PHASE_INPUT",
+    }] } });
+    const value = connect.requestDeserialize(encoded).validationResult!.results[0]!;
+    expect(validationCaseFromWire(value)).toMatchObject({
+      skipped: true, passed: false, actualDecision: "", action: "", modelInvocations: 0,
+    });
+    expect(() => validationCaseFromWire({ ...value, skipped: false })).toThrow("Invalid enforcement action");
+  });
+
   it.each(["reject", "pass", "mask", "unspecified", "typo", 800])(
     "rejects invalid enforcement action %s before Protobuf can discard it", action => {
       const inputs = [

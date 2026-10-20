@@ -5,6 +5,7 @@ import type { ValidationMetrics as _tasklattice_guard_control_v1_ValidationMetri
 import type { ValidationCaseResult as _tasklattice_guard_control_v1_ValidationCaseResult, ValidationCaseResult__Output as _tasklattice_guard_control_v1_ValidationCaseResult__Output } from '../../../../tasklattice/guard/control/v1/ValidationCaseResult.js';
 import type { Artifact as _tasklattice_guard_control_v1_Artifact, Artifact__Output as _tasklattice_guard_control_v1_Artifact__Output } from '../../../../tasklattice/guard/control/v1/Artifact.js';
 import type { ValidationRuntime as _tasklattice_guard_control_v1_ValidationRuntime, ValidationRuntime__Output as _tasklattice_guard_control_v1_ValidationRuntime__Output } from '../../../../tasklattice/guard/control/v1/ValidationRuntime.js';
+import type { ValidationScope as _tasklattice_guard_control_v1_ValidationScope, ValidationScope__Output as _tasklattice_guard_control_v1_ValidationScope__Output } from '../../../../tasklattice/guard/control/v1/ValidationScope.js';
 
 /**
  * Validation response. `accepted` reports whether the Runner executed the
@@ -51,6 +52,7 @@ export interface ValidationResult {
    * Runtime that compiled and executed the candidate.
    */
   'runtime'?: (_tasklattice_guard_control_v1_ValidationRuntime | null);
+  'testScope'?: (_tasklattice_guard_control_v1_ValidationScope | null);
   '_candidateArtifact'?: "candidateArtifact";
 }
 
@@ -99,5 +101,6 @@ export interface ValidationResult__Output {
    * Runtime that compiled and executed the candidate.
    */
   'runtime': (_tasklattice_guard_control_v1_ValidationRuntime__Output | null);
+  'testScope': (_tasklattice_guard_control_v1_ValidationScope__Output | null);
   '_candidateArtifact'?: "candidateArtifact";
 }

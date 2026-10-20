@@ -77,6 +77,12 @@ describe("ControlPlaneLayout", () => {
     expect(screen.queryByText("TaskLattice Guard")).toBeNull();
   });
 
+  it("lets platform administrators use the Default version and testing workspace", () => {
+    pathname = "/guardrails/guardrail-default"; role = "admin";
+    render(<ControlPlaneLayout />);
+    expect(screen.getByText("Page content")).toBeTruthy();
+  });
+
   it.each(["/settings/models", "/settings/guardrail-catalog", "/access", "/audit-log"])("prevents a user from mounting %s", path => {
     role = "user"; pathname = path;
     render(<ControlPlaneLayout />);

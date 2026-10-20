@@ -134,7 +134,7 @@ async def test_local_cases_allow_progress_to_flush_before_the_suite_finishes(mon
             pass
 
     async def prepared(*_args, **_kwargs):
-        return None, None, None
+        return None, None, protocol.Artifact(checksum="a" * 64)
 
     monkeypatch.setattr(module, "NeMoRuntime", Runtime)
     monkeypatch.setattr(module, "prepare", prepared)
@@ -192,6 +192,6 @@ def test_validation_accuracy_does_not_count_failure_or_unknown_as_detector_error
         {**base, "actualDecision": "allow", "passed": True, "escalated": False},
         {**base, "actualDecision": "allow", "passed": True, "escalated": False},
     ]
-    assert _metrics(results) == {"total": 8, "passed": 2, "complianceRate": 25,
+    assert _metrics(results) == {"total": 8, "skipped": 0, "executed": 8, "passed": 2, "complianceRate": 25,
                                 "falsePositiveRate": 12.5, "falseNegativeRate": 12.5,
                                 "escalationRate": 75, "p95LatencyMs": 30000}

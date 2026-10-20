@@ -45,6 +45,23 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); auth.user.role = "user"; });
 
 describe("Immutable version list and detail drawer", () => {
+  it("shows a waiver and its reason without claiming a passed test", () => {
+    const waived = { ...version(3), test_waiver: { id: "waiver", actorId: "platform-admin", reason: "Provider quota", createdAt: "2026-10-09T09:00:00Z", sourceRunId: "failed",
+      sourceTestStatus: "failed" as const, sourceTestMetrics: { total: 611, passed: 265 }, contentDigest: "checksum", testSuiteDigest: "suite", latestVersionRunId: null, latestVersionTestStatus: null } };
+    mount({ versions: [waived], selectedVersion: waived, detail: waived });
+    const dialog = open();
+    expect(within(dialog).getByText("immutableVersions.releaseStates.released_waiver")).toBeTruthy();
+    expect(within(dialog).getByText("immutableVersions.waiverReason reason:Provider quota")).toBeTruthy();
+    expect(within(dialog).queryByText("immutableVersions.releaseStates.released")).toBeNull();
+  });
+
+  it("keeps Default version publication and deletion out of the tenant menu", () => {
+    mount({ isDefault: true });
+    fireEvent.click(screen.getByRole("button", { name: `immutableVersions.versionActions version:${version(3).version}` }));
+    expect(screen.queryByRole("menuitem", { name: "uiCopy.delete" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "guardrailPackage.setBaseline" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "immutableVersions.release" })).toBeNull();
+  });
   it("shows a retained failed outcome after its report expires without offering a dead report link", () => {
     const archived = { ...version(3), testing_evidence: { latest: { id: "expired-test", status: "failed" as const,
       candidateDigest: "checksum", testSuiteDigest: "suite", createdAt: "2026-10-04T01:00:00Z", completedAt: "2026-10-04T01:01:00Z" } } };

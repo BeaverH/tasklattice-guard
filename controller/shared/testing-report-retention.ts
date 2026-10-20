@@ -3,6 +3,8 @@ export const TESTING_REPORT_RETENTION = { passed: 2, failed: 1 } as const;
 
 /** Compact local evidence only: no results, inputs, suite or compiled Artifact. */
 export type VersionTestEvidence = {
+  testModelRules?: boolean;
+  testScope?: import("./validation-scope.js").ValidationTestScope | null;
   id: string;
   status: "passed" | "failed";
   candidateDigest: string | null;

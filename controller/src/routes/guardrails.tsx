@@ -1,6 +1,6 @@
 import { guardrailRequestRatesQuery } from "@/features/guardrail-request-rates";
 import type { RuntimeMetricKey } from "@/features/runtime-metrics";
-import { hasPermission } from "../../shared/rbac";
+import { isPlatformAdministrator, hasPermission } from "../../shared/rbac";
 import { GuardrailProtectionMode, useGuardrailProtectionActions } from "@/components/guardrail-protection-mode";
 import { MAX_GUARDRAIL_VERSIONS } from "../../shared/guardrail-version-limit";
 import { ImmutableVersionView } from "@/components/guardrail-immutable-versions";
@@ -153,7 +153,8 @@ export function GuardrailDetailPage() {
   const endpointsQuery = useQuery({ queryKey: queryKeys.endpoints, queryFn: getEndpoints });
   const search = useSearch({ from: "/guardrails/$guardrailId" });
   const requestedSection = search.tab === "draft" ? "runtime" : search.tab ?? "runtime";
-  const section = requestedSection;
+  const canViewRuntime = hasPermission(auth.user?.role, "runtime", "read");
+  const section = !canViewRuntime && (requestedSection === "runtime" || requestedSection === "event") ? "testing" : requestedSection;
   const setSection = (tab: string) => void navigate({ to: "/guardrails/$guardrailId", params: { guardrailId }, search: previous => ({ ...previous, tab }) });
   const window: MetricWindow = search.window ?? "24h";
   const setWindow = (window: MetricWindow) => void navigate({ to: "/guardrails/$guardrailId", params: { guardrailId }, search: previous => ({ ...previous, window }) });
@@ -164,6 +165,7 @@ export function GuardrailDetailPage() {
   const setEditOpen = (open: boolean) => setDraftAction(open ? "edit" : null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [loggingOpen, setLoggingOpen] = useState(false);
+  const [draftTestModelRules, setDraftTestModelRules] = useState(true);
   const [selectedValidationRun, setSelectedValidationRun] = useState<ValidationRun | null>(null);
   const currentValidationRun = versionReports.find(run => run.id === selectedValidationRun?.id) ?? validationRunsQuery.data?.items.find(run => run.id === selectedValidationRun?.id) ?? selectedValidationRun;
   const [versionDetailRequested, setVersionDetailRequested] = useState(false);
@@ -253,9 +255,9 @@ export function GuardrailDetailPage() {
     onError: async () => { await deletionImpactQuery.refetch(); },
   });
   const validationMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (testModelRules: boolean) => {
       if (validationReadiness.blocked) throw new Error(validationReadiness.reason ?? t("protection.validationReadiness.blockedTitle"));
-      return createValidationRun(guardrailId);
+      return createValidationRun(guardrailId, undefined, testModelRules);
     },
     onSuccess: async (run) => {
       await refresh();
@@ -268,8 +270,8 @@ export function GuardrailDetailPage() {
     onError: (error) => notifyError(error, t("guardrails.operationFailed")),
   });
   const versionTestMutation = useMutation({
-    mutationFn: (version: string) => testGuardrailVersion(guardrailId, version),
-    onSuccess: async (run, version) => {
+    mutationFn: ({ version, testModelRules = true }: { version: string; testModelRules?: boolean }) => testGuardrailVersion(guardrailId, version, testModelRules),
+    onSuccess: async (run, { version }) => {
       setSelectedValidationRun(run);
       await refresh();
       toast.success(t("immutableVersions.testStarted", { version }));
@@ -308,15 +310,17 @@ export function GuardrailDetailPage() {
   const guardrail = guardrailQuery.data;
   const policies = policiesQuery.data?.items ?? EMPTY_POLICIES;
   const routers = routersQuery.data?.items.filter((item) => item.activeSnapshot?.routes.some(route => route.enabled && route.targets.some(target => target.guardrailId === guardrail.id && target.weightBps > 0))) ?? [];
+  const canTest = guardrail.is_default ? isPlatformAdministrator(auth.user?.role) : hasPermission(auth.user?.role, "guardrails", "write");
+  const canTestDraft = canTest && (guardrail.is_default || isGuardrailDraftManageable(guardrail));
   const canManageDraft = hasPermission(auth.user?.role, "guardrails", "write") && isGuardrailDraftManageable(guardrail);
   const hasDraft = !guardrail.is_default && hasUnpublishedDraft(guardrail);
   const currentTest = guardrail.latest_validation_run?.source_draft_version === guardrail.draft_revision ? guardrail.latest_validation_run : null;
   const testingDraft = isValidationRunning(currentTest);
-  const openDraftReview = () => { setDraftJustSaved(false); setDraftAction("review"); };
+  const openDraftReview = () => { setDraftTestModelRules(true); setDraftJustSaved(false); setDraftAction("review"); };
 
   return (
     <section className="py-6 sm:py-8">
-      <Link to="/guardrails" className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />{t("guardrails.back")}</Link>
+      <Link to={isPlatformAdministrator(auth.user?.role) ? "/settings/providers" : "/guardrails"} className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />{t("guardrails.back")}</Link>
       <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -334,8 +338,8 @@ export function GuardrailDetailPage() {
           </div> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {canManageDraft && hasDraft ? <Button variant="testing" onClick={openDraftReview}>{testingDraft ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(testingDraft ? "guardrails.viewTestProgress" : "guardrails.testDraft")}</Button> : null}
-          {canManageDraft && guardrail.tested_current && !guardrail.published_current ? <Button onClick={() => { setDraftJustSaved(false); setDraftAction("publish"); }}><ShieldCheck />{t("guardrails.publishVersion")}</Button> : null}
+          {canTestDraft && hasDraft ? <Button variant="testing" onClick={openDraftReview}>{testingDraft ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}{t(testingDraft ? "guardrails.viewTestProgress" : "guardrails.testDraft")}</Button> : null}
+          {canTestDraft && guardrail.tested_current && !guardrail.published_current ? <Button onClick={() => { setDraftJustSaved(false); setDraftAction("publish"); }}><ShieldCheck />{t("guardrails.publishVersion")}</Button> : null}
           {hasPermission(auth.user?.role, "guardrails", "write") ? <MenuButton ref={protectionActions.menuRef} label={t("routing.actions")} kind="tertiary" size="md" menuAlignment="bottom-end" className="guard-actions-menu">
             {protectionActions.menuItems}
             {canManageDraft ? <MenuItem label={t("guardrails.editAction")} renderIcon={Pencil} onClick={() => setEditOpen(true)} /> : null}
@@ -363,8 +367,8 @@ export function GuardrailDetailPage() {
       <Tabs value={section} onValueChange={setSection} className="mt-7">
         <div className="overflow-x-auto">
           <TabsList className="min-w-max" aria-label={t("guardrails.detailViews")}>
-            <TabsTrigger value="runtime"><Activity aria-hidden="true" />{t("guardrails.runtimeTab")}</TabsTrigger>
-            <TabsTrigger value="event"><ShieldAlert aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.eventTab")}{metricsQuery.data?.findings_summary?.total ? <Badge variant="outline" className={metricsQuery.data?.findings_summary?.critical ? "border-red-200 bg-red-50 font-mono text-[10px] text-red-700" : "font-mono text-[10px]"}>{metricsQuery.data?.findings_summary?.total}</Badge> : null}</span></TabsTrigger>
+            {canViewRuntime ? <TabsTrigger value="runtime"><Activity aria-hidden="true" />{t("guardrails.runtimeTab")}</TabsTrigger> : null}
+            {canViewRuntime ? <TabsTrigger value="event"><ShieldAlert aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.eventTab")}{metricsQuery.data?.findings_summary?.total ? <Badge variant="outline" className={metricsQuery.data?.findings_summary?.critical ? "border-red-200 bg-red-50 font-mono text-[10px] text-red-700" : "font-mono text-[10px]"}>{metricsQuery.data?.findings_summary?.total}</Badge> : null}</span></TabsTrigger> : null}
             <TabsTrigger value="immutable"><History aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.versions")}{versionsQuery.data ? <Badge variant="outline" className="font-mono text-[10px]">{guardrailVersions.length}/{MAX_GUARDRAIL_VERSIONS}</Badge> : null}</span></TabsTrigger>
             <TabsTrigger value="testing"><FileText aria-hidden="true" /><span className="flex items-center gap-2">{t("guardrails.validationHistoryTab")}{validationRunsQuery.data?.count ? <Badge variant="outline" className="font-mono text-[10px]">{validationRunsQuery.data.count}</Badge> : null}</span></TabsTrigger>
           </TabsList>
@@ -424,16 +428,16 @@ export function GuardrailDetailPage() {
             onOpenTarget={openValidationTarget}
             description={t("immutableVersions.testingDescription")}
             emptyDescription={t(hasDraft && !publishedVersions.length ? "resourceList.draftNextStep" : "immutableVersions.localTestingEmpty")}
-            action={hasPermission(auth.user?.role, "guardrails", "write") ? <GuardrailVersionTestControl guardrailName={guardrail.name} versions={guardrailVersions} runs={versionReports} loading={versionsQuery.isPending || validationRunsQuery.isPending} error={versionsQuery.error || validationRunsQuery.error} submitting={versionTestMutation.isPending} onRun={version => versionTestMutation.mutateAsync(version)} onRetry={() => { void versionsQuery.refetch(); void validationRunsQuery.refetch(); }} draft={canManageDraft ? { running: testingDraft, reason: validationReadiness.reason, onReview: openDraftReview } : undefined} /> : undefined}
+            action={canTest ? <GuardrailVersionTestControl guardrailName={guardrail.name} versions={guardrailVersions} runs={versionReports} loading={versionsQuery.isPending || validationRunsQuery.isPending} error={versionsQuery.error || validationRunsQuery.error} submitting={versionTestMutation.isPending} onRun={(version, testModelRules) => versionTestMutation.mutateAsync({ version, testModelRules })} onRetry={() => { void versionsQuery.refetch(); void validationRunsQuery.refetch(); }} draft={canTestDraft ? { running: testingDraft, reason: validationReadiness.reason, onReview: testModelRules => { openDraftReview(); setDraftTestModelRules(testModelRules); } } : undefined} /> : undefined}
           />
         </TabsContent>
       </Tabs>
 
       {canManageDraft && editOpen ? <EditGuardrailSheet guardrail={guardrail} policies={policies} open onOpenChange={setEditOpen} onSaved={async saved => { queryClient.setQueryData(queryKeys.guardrail(guardrailId), saved); setDraftJustSaved(true); setDraftAction(hasUnpublishedDraft(saved) ? "review" : null); await refresh(); }} /> : null}
       {draftAction === "changes" || draftAction === "discard" ? <GuardrailDraftChangesSheet guardrail={guardrail} initialDiscard={draftAction === "discard"} canManage={canManageDraft} onClose={() => setDraftAction(null)} onChanged={refresh} /> : null}
-      {draftAction === "review" || draftAction === "publish" ? <GuardrailDraftReviewSheet guardrail={guardrail} policies={policies} versions={guardrailVersions} policiesReady={policiesQuery.isSuccess} policiesError={policiesQuery.isError} onRetryPolicies={() => { void policiesQuery.refetch(); }} readOnly={!canManageDraft} justSaved={draftJustSaved} initialPublish={draftAction === "publish"} onClose={() => setDraftAction(null)} onEdit={() => setEditOpen(true)} onChanged={refresh} onPublished={version => { setDraftAction(null); setSelectedVersionOverride(version.version); setVersionDetailRequested(true); setSection("immutable"); }} /> : null}
+      {draftAction === "review" || draftAction === "publish" ? <GuardrailDraftReviewSheet guardrail={guardrail} policies={policies} versions={guardrailVersions} policiesReady={policiesQuery.isSuccess} policiesError={policiesQuery.isError} onRetryPolicies={() => { void policiesQuery.refetch(); }} readOnly={!canTestDraft} justSaved={draftJustSaved} initialPublish={draftAction === "publish"} initialTestModelRules={draftTestModelRules} onClose={() => setDraftAction(null)} onEdit={canManageDraft ? () => setEditOpen(true) : undefined} onChanged={refresh} onPublished={version => { setDraftAction(null); setSelectedVersionOverride(version.version); setVersionDetailRequested(true); setSection("immutable"); }} /> : null}
       {canManageDraft && testCasesOpen ? <EditGuardrailTestCasesSheet guardrail={guardrail} policies={policies} cases={testsQuery.data?.items ?? []} casesLoading={testsQuery.isLoading} casesError={testsQuery.error} onRetryCases={() => { void testsQuery.refetch(); }} onChanged={refresh} onClose={() => setTestCasesOpen(false)} /> : null}
-      <ValidationDetailSheet blockedReason={currentValidationRun?.subject === "version" ? null : validationReadiness.reason} run={currentValidationRun} guardrail={guardrail} canManage={canManageDraft} running={validationMutation.isPending || versionTestMutation.isPending} onRunAgain={() => validationMutation.mutate()} onRunVersionAgain={hasPermission(auth.user?.role, "guardrails", "write") && guardrailVersions.some(version => version.version === currentValidationRun?.guardrail_version && Boolean(version.test_suite_count)) ? run => versionTestMutation.mutate(run.guardrail_version) : undefined} onOpenTarget={openValidationTarget} onClose={() => setSelectedValidationRun(null)} />
+      <ValidationDetailSheet blockedReason={currentValidationRun?.subject === "version" ? null : validationReadiness.reason} run={currentValidationRun} guardrail={guardrail} canManage={canManageDraft} running={validationMutation.isPending || versionTestMutation.isPending} onRunAgain={(_, testModelRules) => validationMutation.mutate(testModelRules)} onRunVersionAgain={canTest && guardrailVersions.some(version => version.version === currentValidationRun?.guardrail_version && Boolean(version.test_suite_count)) ? run => versionTestMutation.mutate({ version: run.guardrail_version, testModelRules: run.test_model_rules ?? true }) : undefined} onOpenTarget={openValidationTarget} onClose={() => setSelectedValidationRun(null)} />
       {hasPermission(auth.user?.role, "guardrails", "write") && loggingOpen ? <EditGuardrailLoggingSheet guardrailId={guardrail.id} guardrailName={guardrail.name} onClose={() => setLoggingOpen(false)} /> : null}
       <DeleteGuardrailSheet
         guardrail={guardrail}

@@ -295,3 +295,17 @@ describe("Testing Report acceptance evidence", () => {
     expect(screen.getByRole("tooltip").textContent).toContain("Cases whose actual result satisfied the expected decision.");
   });
 });
+
+
+describe("Explicit skipped model evidence", () => {
+  it("keeps skipped cases out of failed and passed filters", () => {
+    const skipped = { ...result, case_id: "skipped", name: "Model safety", skipped: true, skip_reason: "Model-dependent tests skipped", passed: false, actual_decision: "", trace: [] };
+    render(<ValidationCaseResults results={[{ ...result, name: "Local failure" }, skipped]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Failed\s*1/ }));
+    expect(screen.queryByText("Model safety")).toBeNull();
+    expect(screen.getByText("Local failure")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /validationScope.skipped\s*1/ }));
+    expect(screen.getByText("Model safety")).toBeTruthy();
+    expect(screen.queryByText("Why this Case failed")).toBeNull();
+  });
+});

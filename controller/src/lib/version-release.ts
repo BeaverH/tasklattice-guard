@@ -4,7 +4,7 @@ import { latestTestEvidence, type VersionTestEvidence } from "../../shared/testi
 
 function evidenceOf(run: ValidationRun): VersionTestEvidence | null {
   if (run.status !== "passed" && run.status !== "failed") return null;
-  return { id: run.id, status: run.status, candidateDigest: run.candidate_digest, testSuiteDigest: run.test_suite_digest,
+  return { testModelRules: run.test_model_rules ?? true, testScope: run.test_scope ?? null, id: run.id, status: run.status, candidateDigest: run.candidate_digest, testSuiteDigest: run.test_suite_digest,
     createdAt: run.created_at, completedAt: run.completed_at ?? run.created_at };
 }
 
@@ -28,6 +28,7 @@ export function latestVersionTestEvidence(version: GuardrailVersion, runs: reado
  * pending version can be released follows from its test runs here.
  */
 export type VersionReleaseState =
+  | "released_waiver"
   | "released"
   | "released_retest_failed"
   | "untested"
@@ -41,6 +42,7 @@ export function versionReleaseState(version: GuardrailVersion, runs: readonly Va
   const completed = own.reduce<VersionTestEvidence | null>((latest, run) => latestTestEvidence(latest, evidenceOf(run)), version.testing_evidence?.latest ?? null);
   const retained = own.find(run => run.id === completed?.id) ?? null;
   if (version.status === "ready") {
+    if (version.test_waiver) return { state: "released_waiver", run: runs.find(run => run.id === version.test_waiver!.sourceRunId) ?? null };
     // A later failed test never revokes a release; it is shown for people to act on.
     const retest = completed && version.released_at && Date.parse(completed.completedAt) > Date.parse(version.released_at) ? completed : null;
     const releasedWith = runs.find(run => run.id === version.release_run_id) ?? null;

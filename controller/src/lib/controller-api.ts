@@ -168,6 +168,8 @@ export type Guardrail = {
 };
 
 export type GuardrailVersion = {
+  testWaiver?: import("../../shared/default-release").DefaultTestWaiver | null;
+  sourceValidationRunId?: string | null;
   testingEvidence?: import("../../shared/testing-report-retention").VersionTestingEvidence | null;
   hasSourceSnapshot?: boolean;
   /** Frozen Test Cases in this version; null when published before suites were frozen. */
@@ -303,6 +305,8 @@ export type Endpoint = {
 };
 
 export type ValidationRun = {
+  testModelRules?: boolean;
+  testScope?: import("../../shared/validation-scope").ValidationTestScope | null;
   id: string;
   guardrailId: string;
   guardrailVersion: string;
@@ -315,6 +319,8 @@ export type ValidationRun = {
   status: ValidationRunState;
   progress?: import("../../shared/validation-progress").ValidationProgress | null;
   metrics: {
+    skipped?: number;
+    executed?: number;
     total: number;
     passed: number;
     complianceRate: number;

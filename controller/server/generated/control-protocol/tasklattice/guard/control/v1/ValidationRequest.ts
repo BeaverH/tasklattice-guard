@@ -33,6 +33,11 @@ export interface ValidationRequest {
    * is not used. Absent for a draft, which is compiled into a candidate.
    */
   'artifact'?: (_tasklattice_guard_control_v1_Artifact | null);
+  /**
+   * Absent means full testing for existing clients. False only affects testing.
+   */
+  'testModelRules'?: (boolean);
+  '_testModelRules'?: "testModelRules";
 }
 
 /**
@@ -64,4 +69,9 @@ export interface ValidationRequest__Output {
    * is not used. Absent for a draft, which is compiled into a candidate.
    */
   'artifact': (_tasklattice_guard_control_v1_Artifact__Output | null);
+  /**
+   * Absent means full testing for existing clients. False only affects testing.
+   */
+  'testModelRules'?: (boolean);
+  '_testModelRules'?: "testModelRules";
 }

@@ -1,3 +1,4 @@
+import { TestModelRulesSwitch, ValidationScopeNotice } from "@/components/validation-model-scope";
 import { hasPermission } from "../../shared/rbac";
 import { EventPagination, useEventCursor } from "@/components/event-pagination";
 import { DeleteTestingReportSheet } from "@/components/delete-testing-report-sheet";
@@ -59,7 +60,7 @@ export function ValidationPage() {
   const guardrailIds = useMemo(() => [...guardrailNames.keys()].sort((left, right) => (guardrailNames.get(left) ?? left).localeCompare(guardrailNames.get(right) ?? right, i18n.language)), [guardrailNames, i18n.language]);
   const filtered = runs;
   const refresh = async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.allValidationRuns }), queryClient.invalidateQueries({ queryKey: queryKeys.guardrails })]); };
-  const rerun = useMutation({ mutationFn: (guardrailId: string) => createValidationRun(guardrailId), onSuccess: async (run) => { await refresh(); setSelected(run); toast[run.status === "passed" ? "success" : "error"](t(run.status === "passed" ? "guardrails.validationPassed" : "guardrails.validationFailed", { rate: run.metrics.compliance_rate })); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
+  const rerun = useMutation({ mutationFn: ({ guardrailId, testModelRules }: { guardrailId: string; testModelRules: boolean }) => createValidationRun(guardrailId, undefined, testModelRules), onSuccess: async (run) => { await refresh(); setSelected(run); toast[run.status === "passed" ? "success" : "error"](t(run.status === "passed" ? "guardrails.validationPassed" : "guardrails.validationFailed", { rate: run.metrics.compliance_rate })); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
 
   return (
     <section className="py-6 sm:py-8">
@@ -74,8 +75,8 @@ export function ValidationPage() {
           <EventPagination page={pagination.page} busy={runsQuery.isFetching} nextCursor={runsQuery.data?.nextCursor} onNext={pagination.next} onPrevious={pagination.previous} onLatest={pagination.latest} />
         </section>
       ) : null}
-      <CreateValidationSheet open={createOpen} onOpenChange={setCreateOpen} guardrails={guardrails} initialGuardrailId={requestedGuardrail} onCreated={async (run) => { setCreateOpen(false); await refresh(); setSelected(run); }} />
-      <ValidationDetailSheet run={selected} guardrail={selected ? guardrails.find((item) => item.id === selected.guardrail_id) : undefined} canManage={canManage} running={rerun.isPending} onRunAgain={(guardrailId) => rerun.mutate(guardrailId)} onClose={() => setSelected(null)} />
+      <CreateValidationSheet open={createOpen} onOpenChange={setCreateOpen} guardrails={guardrails.filter(g => !g.system_managed && !g.is_default)} initialGuardrailId={requestedGuardrail} onCreated={async (run) => { setCreateOpen(false); await refresh(); setSelected(run); }} />
+      <ValidationDetailSheet run={selected} guardrail={selected ? guardrails.find((item) => item.id === selected.guardrail_id) : undefined} canManage={canManage && selected?.guardrail_id !== "guardrail-default"} running={rerun.isPending} onRunAgain={(guardrailId, testModelRules) => rerun.mutate({ guardrailId, testModelRules })} onClose={() => setSelected(null)} />
     </section>
   );
 }
@@ -120,7 +121,7 @@ export function GuardrailValidationHistory({ runs, loading, error, canManage, ru
 
 function ValidationRow({ run, guardrailName, locale, showGuardrail = true, onOpen, onOpenTarget }: { run: ValidationRun; guardrailName?: string; locale: string; showGuardrail?: boolean; onOpen: () => void; onOpenTarget?: () => void }) {
   const { t } = useTranslation();
-  return <TableRow role="button" tabIndex={0} className="cursor-pointer" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}><TableCell className="pl-4"><strong className="block text-sm font-medium">{t("validation.validationRunNamed", { id: shortId(run.id) })}</strong><span className="mt-1 block max-w-52 truncate font-mono text-xs text-muted-foreground" title={reportNumber(run.id)}>{reportNumber(run.id)}</span></TableCell>{showGuardrail ? <TableCell><strong className="block text-sm font-medium">{guardrailName ?? run.guardrail_id}</strong>{guardrailName ? <span className="mt-1 block font-mono text-xs text-muted-foreground">{run.guardrail_id}</span> : null}</TableCell> : null}<TableCell className="text-xs"><ValidationTarget run={run} onOpen={onOpenTarget} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.total}</TableCell><TableCell className="testing-report-status whitespace-nowrap"><StateBadge state={isValidationRunning(run) ? "syncing" : run.status} label={isValidationRunning(run) ? t("guardrails.runningValidation") : undefined} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.compliance_rate}%</TableCell><TableCell className="font-mono text-xs">P95 {run.metrics.p95_latency_ms} ms</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground">{new Date(run.created_at).toLocaleString(locale)}</TableCell><TableCell><Button type="button" variant="ghost" size="icon" className="size-11" aria-label={t("validation.openValidationRun")} onClick={(event) => { event.stopPropagation(); onOpen(); }}><ChevronRight className="size-4 text-muted-foreground" /></Button></TableCell></TableRow>;
+  return <TableRow role="button" tabIndex={0} className="cursor-pointer" onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}><TableCell className="pl-4"><strong className="block text-sm font-medium">{t("validation.validationRunNamed", { id: shortId(run.id) })}</strong><span className="mt-1 block max-w-52 truncate font-mono text-xs text-muted-foreground" title={reportNumber(run.id)}>{reportNumber(run.id)}</span>{run.test_model_rules === false ? <Badge variant="outline" className="mt-1">{t("validationScope.badge")}</Badge> : null}</TableCell>{showGuardrail ? <TableCell><strong className="block text-sm font-medium">{guardrailName ?? run.guardrail_id}</strong>{guardrailName ? <span className="mt-1 block font-mono text-xs text-muted-foreground">{run.guardrail_id}</span> : null}</TableCell> : null}<TableCell className="text-xs"><ValidationTarget run={run} onOpen={onOpenTarget} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.total}</TableCell><TableCell className="testing-report-status whitespace-nowrap"><StateBadge state={isValidationRunning(run) ? "syncing" : run.status} label={isValidationRunning(run) ? t("guardrails.runningValidation") : undefined} /></TableCell><TableCell className="font-mono text-xs">{run.metrics.compliance_rate}%</TableCell><TableCell className="font-mono text-xs">P95 {run.metrics.p95_latency_ms} ms</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground">{new Date(run.created_at).toLocaleString(locale)}</TableCell><TableCell><Button type="button" variant="ghost" size="icon" className="size-11" aria-label={t("validation.openValidationRun")} onClick={(event) => { event.stopPropagation(); onOpen(); }}><ChevronRight className="size-4 text-muted-foreground" /></Button></TableCell></TableRow>;
 }
 
 function ValidationTarget({ run, onOpen }: { run: ValidationRun; onOpen?: () => void }) {
@@ -135,16 +136,18 @@ function CreateValidationSheet({ open, onOpenChange, guardrails, initialGuardrai
   const queryClient = useQueryClient();
   const [guardrailId, setGuardrailId] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [testModelRules, setTestModelRules] = useState(true);
   useEffect(() => { if (open) setGuardrailId(guardrails.some((item) => item.id === initialGuardrailId) ? initialGuardrailId : guardrails[0]?.id ?? ""); }, [guardrails, initialGuardrailId, open]);
   const guardrail = guardrails.find((item) => item.id === guardrailId);
   const casesQuery = useQuery({ queryKey: queryKeys.testCases(guardrailId), queryFn: () => getTestCases(guardrailId), enabled: open && Boolean(guardrailId) });
   const cases = casesQuery.data?.items ?? [];
   const activeCases = cases.filter((item) => !item.excluded);
-  const run = useMutation({ mutationFn: () => createValidationRun(guardrailId), onSuccess: async (result) => { toast[result.status === "passed" ? "success" : "error"](t(result.status === "passed" ? "guardrails.validationPassed" : "guardrails.validationFailed", { rate: result.metrics.compliance_rate })); await onCreated(result); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
+  const run = useMutation({ mutationFn: () => createValidationRun(guardrailId, undefined, testModelRules), onSuccess: async (result) => { toast[result.status === "passed" ? "success" : "error"](t(result.status === "passed" ? "guardrails.validationPassed" : "guardrails.validationFailed", { rate: result.metrics.compliance_rate })); await onCreated(result); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
   const remove = useMutation({ mutationFn: (caseId: string) => deleteTestCase(guardrailId, caseId), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: queryKeys.testCases(guardrailId) }); toast.success(t("guardrails.caseRemoved")); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
   const validationScope = useMutation({ mutationFn: ({ caseId, action }: { caseId: string; action: "exclude" | "restore" }) => action === "exclude" ? excludeGuardrailTestCase(guardrailId, caseId) : restoreGuardrailTestCase(guardrailId, caseId), onSuccess: async (_, variables) => { await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.testCases(guardrailId) }), queryClient.invalidateQueries({ queryKey: queryKeys.guardrail(guardrailId) }), queryClient.invalidateQueries({ queryKey: queryKeys.guardrails })]); toast.success(t(variables.action === "exclude" ? "guardrails.testCaseExcluded" : "guardrails.testCaseRestored")); }, onError: (error) => notifyError(error, t("guardrails.operationFailed")) });
   return <><EntitySheet open={open} onOpenChange={onOpenChange} eyebrow={t("validation.createEyebrow")} title={t("validation.createValidationRun")} description={t("validation.createValidationRunDescription")} width="lg" footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button><Button variant="testing" disabled={!guardrailId || !activeCases.length || run.isPending} onClick={() => run.mutate()}>{run.isPending ? <LoaderCircle className="animate-spin" /> : <Play />}{t(run.isPending ? "guardrails.runningValidation" : "validation.runRegression")}</Button></>}>
     <div className="space-y-5"><label className="grid gap-2 text-sm font-medium">{t("validation.chooseGuardrail")}<Select value={guardrailId} onValueChange={setGuardrailId}><SelectTrigger className="field:min-h-11 field:bg-card"><SelectValue /></SelectTrigger><SelectContent>{guardrails.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></label>
+      <TestModelRulesSwitch checked={testModelRules} onChange={setTestModelRules} disabled={run.isPending} />
       {guardrail ? <section className="rounded-xl border bg-muted/20 p-4"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{guardrail.name}</strong><StateBadge state={guardrail.status} /></div><p className="mt-3 text-xs font-medium">{t("validation.draftTarget", { revision: guardrail.tested_current ? guardrail.latest_validation_run?.source_draft_version ?? "—" : "current" })}</p></section> : null}
       <section className="overflow-hidden rounded-xl border"><header className="flex items-center justify-between gap-3 border-b bg-muted/25 px-4 py-3"><div><h3 className="text-sm font-semibold">{t("validation.testCases")}</h3><p className="mt-1 text-xs text-muted-foreground">{t("validation.validationScopeCount", { active: activeCases.length, excluded: cases.length - activeCases.length })}</p></div><Button variant="create" size="sm" onClick={() => setAddOpen(true)} disabled={!guardrail}><Plus />{t("guardrails.addTestCase")}</Button></header>{casesQuery.isLoading ? <div className="p-4"><Skeleton className="h-32" /></div> : cases.length ? <div className="max-h-72 divide-y overflow-y-auto">{cases.map((item) => <div key={item.id} className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3", item.excluded && "bg-muted/30 text-muted-foreground")}><div className="min-w-0"><div className="flex min-w-0 flex-wrap items-center gap-2"><strong className="truncate text-sm font-medium">{item.name}</strong><Badge variant="outline" className="font-normal">{testCaseTypeLabel(item.case_type, t)}</Badge>{item.excluded ? <Badge variant="secondary">{t("guardrails.excludedFromValidation")}</Badge> : null}</div><span className="mt-1 block text-xs text-muted-foreground">{humanize(item.policy_id)} · {humanize(item.phase)} · {humanize(item.expected_decision)}</span>{item.source_policy_id ? <span className="mt-1 block truncate font-mono text-xs text-muted-foreground">{item.source_policy_id}@{item.source_policy_version} · {item.source_case_id}</span> : null}</div>{item.origin === "custom" ? <Button type="button" size="icon" variant="destructive" className="size-11" aria-label={t("validation.deleteCase", { name: item.name })} disabled={remove.isPending} onClick={() => remove.mutate(item.id)}><Trash2 /></Button> : item.excluded ? <Button type="button" size="sm" variant="outline" className="min-h-11" disabled={validationScope.isPending} onClick={() => validationScope.mutate({ caseId: item.id, action: "restore" })}><RotateCcw />{t("guardrails.restoreTestCase")}</Button> : <Button type="button" size="sm" variant="outline" className="min-h-11 text-foreground" disabled={validationScope.isPending} onClick={() => validationScope.mutate({ caseId: item.id, action: "exclude" })}><Ban />{t("guardrails.excludeTestCase")}</Button>}</div>)}</div> : <div className="p-4"><InfoNotice title={t("guardrails.noCases")}>{t("guardrails.noCasesDescription")}</InfoNotice></div>}</section>
       <InfoNotice title={t("validation.releaseSemantics")}>{t("validation.releaseSemanticsDescription")}</InfoNotice>
@@ -152,7 +155,7 @@ function CreateValidationSheet({ open, onOpenChange, guardrails, initialGuardrai
   </EntitySheet>{guardrail ? <AddTestCaseSheet guardrail={guardrail} open={addOpen} onOpenChange={setAddOpen} onCreated={async () => { setAddOpen(false); await queryClient.invalidateQueries({ queryKey: queryKeys.testCases(guardrailId) }); }} /> : null}</>;
 }
 
-export function ValidationDetailSheet({ run: selectedRun, guardrail, canManage, running, blockedReason, onRunAgain, onRunVersionAgain, onOpenTarget, onClose }: { run: ValidationRun | null; guardrail?: Guardrail; canManage: boolean; running: boolean; blockedReason?: string | null; onRunAgain: (guardrailId: string) => void; onRunVersionAgain?: (run: ValidationRun) => void; onOpenTarget?: (run: ValidationRun) => void; onClose: () => void }) {
+export function ValidationDetailSheet({ run: selectedRun, guardrail, canManage, running, blockedReason, onRunAgain, onRunVersionAgain, onOpenTarget, onClose }: { run: ValidationRun | null; guardrail?: Guardrail; canManage: boolean; running: boolean; blockedReason?: string | null; onRunAgain: (guardrailId: string, testModelRules: boolean) => void; onRunVersionAgain?: (run: ValidationRun) => void; onOpenTarget?: (run: ValidationRun) => void; onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const detailQuery = useQuery({ queryKey: queryKeys.validationRun(selectedRun?.id ?? ""),
@@ -169,7 +172,7 @@ export function ValidationDetailSheet({ run: selectedRun, guardrail, canManage, 
   const canRerun = versionRun ? Boolean(onRunVersionAgain) : canManage;
   const busy = running || isValidationRunning(run);
   const results = [...run.results].sort((left, right) => resultPriority(left) - resultPriority(right));
-  return <EntitySheet open density="compact" onOpenChange={(next) => { if (!next) onClose(); }} eyebrow={t("validation.detailEyebrow")} title={t("validation.validationRunNamed", { id: shortId(run.id) })} description={`${guardrail?.name ?? run.guardrail_id} · ${new Date(run.created_at).toLocaleString(i18n.language)}`} width="xl" footer={<>{canManage ? <Button variant="destructive" className="mr-auto" disabled={busy} onClick={() => setDeletingReport(true)}><Trash2 />{t("validation.deleteReport")}</Button> : null}<Button variant="outline" onClick={onClose}>{t("common.close")}</Button>{canRerun ? <Button variant="testing" disabled={busy || Boolean(blockedReason)} title={blockedReason ?? undefined} onClick={() => versionRun ? onRunVersionAgain?.(run) : onRunAgain(run.guardrail_id)}>{busy ? <LoaderCircle className="animate-spin" /> : <Play />}{t("validation.runAgain")}</Button> : null}</>}>
+  return <EntitySheet open density="compact" onOpenChange={(next) => { if (!next) onClose(); }} eyebrow={t("validation.detailEyebrow")} title={t("validation.validationRunNamed", { id: shortId(run.id) })} description={`${guardrail?.name ?? run.guardrail_id} · ${new Date(run.created_at).toLocaleString(i18n.language)}`} width="xl" footer={<>{canManage ? <Button variant="destructive" className="mr-auto" disabled={busy} onClick={() => setDeletingReport(true)}><Trash2 />{t("validation.deleteReport")}</Button> : null}<Button variant="outline" onClick={onClose}>{t("common.close")}</Button>{canRerun ? <Button variant="testing" disabled={busy || Boolean(blockedReason)} title={blockedReason ?? undefined} onClick={() => versionRun ? onRunVersionAgain?.(run) : onRunAgain(run.guardrail_id, run.test_model_rules ?? true)}>{busy ? <LoaderCircle className="animate-spin" /> : <Play />}{t("validation.runAgain")}</Button> : null}</>}>
     <div className="space-y-3">
       {blockedReason ? <Alert variant="destructive"><AlertTitle>{t("protection.validationReadiness.blockedTitle")}</AlertTitle><AlertDescription className="text-current">{blockedReason}</AlertDescription></Alert> : null}
       {isValidationRunning(run) ? <ValidationRunProgress run={run} startedAt={Date.parse(run.created_at)} /> : null}
@@ -181,6 +184,7 @@ export function ValidationDetailSheet({ run: selectedRun, guardrail, canManage, 
         </div>
         <dl className="grid grid-cols-2 sm:grid-cols-4"><DetailFact label={t("validation.casesColumn")} value={String(run.metrics.total)} definition={t("validation.metricDefinitions.cases")} /><DetailFact label={t("validation.passRateColumn")} value={`${run.metrics.compliance_rate}%`} definition={t("validation.metricDefinitions.passRate")} /><DetailFact label={t("guardrails.falsePositive")} value={`${run.metrics.false_positive_rate}%`} definition={t("validation.metricDefinitions.falsePositive")} /><DetailFact label={t("guardrails.latency")} value={`${run.metrics.p95_latency_ms} ms`} definition={t("validation.metricDefinitions.p95Latency")} /></dl>
       </section>
+      <ValidationScopeNotice run={run} />
       <details className="text-xs leading-5 text-muted-foreground"><summary className="min-h-11 w-fit cursor-pointer content-center py-2 focus-visible:outline-2 focus-visible:outline-ring">{t("validation.reportScopeHelp")}</summary><p className="pb-2">{t(versionRun ? "immutableVersions.localTestReportDescription" : "validation.versionTargetReservedDescription")}</p></details>
       {run.excluded_case_ids?.length ? <p className="text-xs text-muted-foreground">{t("validation.excludedScopeTitle", { count: run.excluded_case_ids.length })}</p> : null}
       {detailQuery.error ? <div className="space-y-3"><ErrorNotice error={detailQuery.error} /><Button variant="outline" onClick={() => void detailQuery.refetch()}>{t("common.retry")}</Button></div> : run.details_loaded === false ? <Skeleton className="h-72" /> : <ValidationCaseResults key={run.id} results={results} defaultFilter={run.status === "failed" ? "failed" : "all"} excludedCaseIds={guardrail?.excluded_test_case_ids ?? []} busyCaseId={validationScope.isPending ? validationScope.variables?.caseId : undefined} onValidationScopeChange={canManage && !versionRun && guardrail ? (caseId, action) => validationScope.mutate({ guardrailId: guardrail.id, caseId, action }) : undefined} />}
@@ -194,45 +198,47 @@ export function DetailFact({ label, value, definition }: { label: string; value:
   return <div className="border-b px-3 py-2.5 last:border-b-0 sm:border-r sm:border-b-0 sm:last:border-r-0"><div className="flex items-center justify-between gap-2"><dt className="text-xs text-muted-foreground">{label}</dt><Tooltip open={helpOpen} onOpenChange={setHelpOpen}><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-xs" className="-my-3 -mr-3 size-11 text-muted-foreground shadow-none hover:text-foreground" aria-label={t("validation.metricDefinition", { metric: label })} onClick={() => setHelpOpen((current) => !current)}><Info className="size-3.5" /></Button></TooltipTrigger><TooltipContent side="top" align="end" sideOffset={6} className="max-w-72 items-start text-left leading-5">{definition}</TooltipContent></Tooltip></div><dd className="mt-0.5 font-mono text-sm font-medium">{value}</dd></div>;
 }
 
-type CaseResultFilter = "all" | "failed" | "passed";
+type CaseResultFilter = "all" | "failed" | "passed" | "skipped";
 
 export function ValidationCaseResults({ results, defaultFilter = "all", excludedCaseIds = [], busyCaseId, onValidationScopeChange }: { results: TestCaseResult[]; defaultFilter?: CaseResultFilter; excludedCaseIds?: string[]; busyCaseId?: string; onValidationScopeChange?: (caseId: string, action: "exclude" | "restore") => void }) {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<CaseResultFilter>(defaultFilter);
-  const failed = results.filter((result) => !result.passed).length;
-  const passed = results.length - failed;
-  const visible = results.filter((result) => filter === "all" || (filter === "failed" ? !result.passed : result.passed));
+  const skipped = results.filter(result => result.skipped).length;
+  const failed = results.filter((result) => !result.passed && !result.skipped).length;
+  const passed = results.length - failed - skipped;
+  const visible = results.filter((result) => filter === "all" || (filter === "skipped" ? result.skipped : !result.skipped && (filter === "failed" ? !result.passed : result.passed)));
   const filters: Array<{ value: CaseResultFilter; label: string; count: number }> = [
     { value: "all", label: t("validation.caseFilters.all"), count: results.length },
     { value: "failed", label: t("validation.caseFilters.failed"), count: failed },
     { value: "passed", label: t("validation.caseFilters.passed"), count: passed },
+    { value: "skipped", label: t("validationScope.skipped"), count: skipped },
   ];
-  return <section className="overflow-hidden rounded-sm border"><header className="border-b bg-muted/25 px-3 py-2.5"><h3 className="text-sm font-semibold">{t("validation.caseResults")}</h3><div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t("validation.filterCaseResults")}>{filters.map((item) => <Button key={item.value} type="button" size="sm" variant={filter === item.value ? "secondary" : "ghost"} className="min-h-11 px-3" aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}<span className={cn("font-mono text-xs", filter === item.value ? "text-current" : item.value === "failed" && item.count > 0 ? "text-destructive" : "text-muted-foreground")}>{item.count}</span></Button>)}</div></header><div className="divide-y">{!visible.length ? <p role="status" className="px-4 py-6 text-sm text-muted-foreground">{t(`validation.emptyCaseResults.${filter}`)}</p> : null}{visible.map((result) => <TestCaseResultRow key={result.case_id} result={result} excluded={excludedCaseIds.includes(result.case_id)} busy={busyCaseId === result.case_id} onValidationScopeChange={onValidationScopeChange} />)}</div></section>;
+  return <section className="overflow-hidden rounded-sm border"><header className="border-b bg-muted/25 px-3 py-2.5"><h3 className="text-sm font-semibold">{t("validation.caseResults")}</h3><div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t("validation.filterCaseResults")}>{filters.map((item) => <Button key={item.value} type="button" size="sm" variant={filter === item.value ? "secondary" : "ghost"} className="min-h-11 px-3" aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}<span className={cn("font-mono text-xs", filter === item.value ? "text-current" : item.value === "failed" && item.count > 0 ? "text-destructive" : "text-muted-foreground")}>{item.count}</span></Button>)}</div></header><div className="divide-y">{!visible.length ? <p role="status" className="px-4 py-6 text-sm text-muted-foreground">{t(filter === "skipped" ? "validationScope.empty" : `validation.emptyCaseResults.${filter}`)}</p> : null}{visible.map((result) => <TestCaseResultRow key={result.case_id} result={result} excluded={excludedCaseIds.includes(result.case_id)} busy={busyCaseId === result.case_id} onValidationScopeChange={onValidationScopeChange} />)}</div></section>;
 }
 
 export function TestCaseResultRow({ result, excluded = false, busy = false, onValidationScopeChange }: { result: TestCaseResult; excluded?: boolean; busy?: boolean; onValidationScopeChange?: (caseId: string, action: "exclude" | "restore") => void }) {
   const { t } = useTranslation();
   const hasExecutionError = isExecutionError(result);
-  return <details open={hasExecutionError} className={cn("group/case", !result.passed && "border-l-2 border-l-destructive bg-destructive/[0.035]")}>
+  return <details open={hasExecutionError} className={cn("group/case", !result.passed && !result.skipped && "border-l-2 border-l-destructive bg-destructive/[0.035]")}>
     <summary className="grid min-h-14 cursor-pointer list-none grid-cols-[minmax(0,1fr)_100px_72px_20px] items-center gap-3 px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <strong className={cn("min-w-0 break-words text-sm font-medium [overflow-wrap:anywhere]", !result.passed && "font-semibold text-destructive")}>{result.name}</strong>
-          {!result.passed ? <StateBadge state="failed" /> : null}
+          <strong className={cn("min-w-0 break-words text-sm font-medium [overflow-wrap:anywhere]", !result.passed && !result.skipped && "font-semibold text-destructive")}>{result.name}</strong>
+          {!result.passed && !result.skipped ? <StateBadge state="failed" /> : null}
           {excluded ? <Badge variant="secondary">{t("guardrails.excludedFromValidation")}</Badge> : null}
           <Badge variant="outline" className="shrink-0 font-normal">{testCaseTypeLabel(result.case_type, t)}</Badge>
         </div>
         <p className="mt-0.5 break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">{humanize(result.policy_id)} · {humanize(result.phase)}</p>
       </div>
-      <span className="justify-self-start"><StateBadge state={result.actual_decision} /></span>
-      <span className="whitespace-nowrap text-right font-mono text-xs tabular-nums text-muted-foreground">{result.latency_ms} ms</span>
+      <span className="justify-self-start">{result.skipped ? <Badge variant="secondary">{t("validationScope.skipped")}</Badge> : <StateBadge state={result.actual_decision} />}</span>
+      <span className="whitespace-nowrap text-right font-mono text-xs tabular-nums text-muted-foreground">{result.skipped ? "—" : `${result.latency_ms} ms`}</span>
       <ChevronDown className="size-3.5 text-muted-foreground transition-transform group-open/case:rotate-180" />
     </summary>
     <div className="space-y-4 border-t bg-card p-4">
-      {!result.passed ? <FailureDiagnosis result={result} /> : null}
+      {!result.passed && !result.skipped ? <FailureDiagnosis result={result} /> : null}
       <dl className="grid grid-cols-2 gap-4">
         <div><dt className="text-xs text-muted-foreground">{t("guardrails.expectedDecision")}</dt><dd className="mt-1.5"><StateBadge state={result.expected_decision} /></dd></div>
-        <div><dt className="text-xs text-muted-foreground">{t("guardrails.actualDecision")}</dt><dd className="mt-1.5"><StateBadge state={result.actual_decision} /></dd></div>
+        <div><dt className="text-xs text-muted-foreground">{t("guardrails.actualDecision")}</dt><dd className="mt-1.5">{result.skipped ? <Badge variant="secondary">{t("validationScope.skipped")}</Badge> : <StateBadge state={result.actual_decision} />}</dd></div>
       </dl>
       {result.reason ? <p className="break-words text-sm leading-5 [overflow-wrap:anywhere]">{result.reason}</p> : null}
       {result.preempting_matches?.length ? <section className="border-t pt-3">
@@ -250,7 +256,7 @@ export function TestCaseResultRow({ result, excluded = false, busy = false, onVa
         </dl>
       </details> : null}
       {result.trace.length ? <ExecutionTrace steps={playgroundTraceSteps(result.trace)} /> : null}
-      {!result.passed && result.source_policy_id && onValidationScopeChange ? <section className="flex items-center justify-between gap-4 border-t pt-3">
+      {!result.passed && !result.skipped && result.source_policy_id && onValidationScopeChange ? <section className="flex items-center justify-between gap-4 border-t pt-3">
         <div className="min-w-0"><h4 className="text-xs font-semibold">{excluded ? t("validation.caseExcludedTitle") : t("validation.excludeFailedCaseTitle")}</h4><p className="mt-1 text-xs leading-5 text-muted-foreground">{excluded ? t("validation.caseExcludedDescription") : t("validation.excludeFailedCaseDescription")}</p></div>
         <Button size="sm" variant="outline" className="min-h-11 shrink-0" disabled={busy} onClick={() => onValidationScopeChange(result.case_id, excluded ? "restore" : "exclude")}>{busy ? <LoaderCircle className="animate-spin" /> : excluded ? <RotateCcw /> : <Ban />}{t(excluded ? "guardrails.restoreTestCase" : "guardrails.excludeTestCase")}</Button>
       </section> : null}
@@ -272,7 +278,7 @@ function FailureDiagnosis({ result }: { result: TestCaseResult }) {
 export function targetLabel(run: ValidationRun, t: ReturnType<typeof useTranslation>["t"]) {
   return t("validation.versionTarget", { version: run.guardrail_version });
 }
-function isExecutionError(result: TestCaseResult) { return Boolean(result.actual_failure) || result.actual_decision.toLowerCase() === "error"; }
+function isExecutionError(result: TestCaseResult) { return !result.skipped && (Boolean(result.actual_failure) || result.actual_decision.toLowerCase() === "error"); }
 function decisionMatches(expected: string, actual: string) { return expected === "intervene" ? actual !== "allow" : expected === actual; }
 function ruleContractMatches(result: TestCaseResult) {
   if (result.preempting_matches?.length || result.expected_failure || !result.covered_rule_ids.length) return true;
@@ -280,7 +286,7 @@ function ruleContractMatches(result: TestCaseResult) {
   const targetMatched = result.covered_rule_ids.some((id) => matched.has(id));
   return result.expected_decision === "allow" ? !targetMatched : targetMatched;
 }
-function resultPriority(result: TestCaseResult) { return isExecutionError(result) ? 0 : result.passed ? 2 : 1; }
+function resultPriority(result: TestCaseResult) { return result.skipped ? 3 : isExecutionError(result) ? 0 : result.passed ? 2 : 1; }
 function reportNumber(id: string) { return id.replace(/^(?:policy-)?(?:validation|testing-report)-/, ""); }
 function shortId(id: string) { return reportNumber(id).slice(0, 8).toUpperCase(); }
 function humanize(value: string) { return value ? value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "—"; }

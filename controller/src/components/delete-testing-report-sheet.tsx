@@ -40,6 +40,7 @@ export function DeleteTestingReportSheet({ run, onClose, onDeleted }: { run: Val
     {impact.isPending ? <Skeleton className="h-24" /> : null}
     {impact.error ? <><ErrorNotice error={impact.error} /><Button variant="outline" onClick={() => { void impact.refetch(); }}>{t("common.retry")}</Button></> : null}
     {result?.running ? <Alert variant="warning"><AlertDescription>{t("validation.deleteReportRunning")}</AlertDescription></Alert> : null}
+    {result?.retainedByPlatformVersion ? <Alert variant="warning"><AlertDescription>{t("immutableVersions.sourceReportRetained")}</AlertDescription></Alert> : null}
     {result?.pendingVersion ? <section className="text-sm"><h3 className="font-medium">{t("validation.deleteReportPendingTitle", { version: result.pendingVersion })}</h3><p className="mt-1 leading-5 text-muted-foreground">{t("validation.deleteReportPending")}</p></section> : result?.replacementRunId ? <p className="text-sm text-muted-foreground">{t("validation.deleteReportRetainsRelease")}</p> : null}
     {result && (result.references.length > 0 || result.blockers.length > 0) ? <Alert variant="warning"><AlertTitle>{t("validation.deleteReportBlocked")}</AlertTitle><AlertDescription>
       <p>{t("validation.deleteReportUnbind")}</p>

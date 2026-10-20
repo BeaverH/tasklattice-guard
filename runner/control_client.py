@@ -451,6 +451,8 @@ class RunnerControlClient:
             with diagnostic_phase("guardrail.validation", run_id=request.run_id,
                                   guardrail_id=request.guardrail_id, cases=len(request.test_cases)):
                 outcome = await self._validator.run(request, on_progress=report_progress)
+            if request.HasField("test_model_rules") and not request.test_model_rules and cost_calls:
+                raise RuntimeError("Local-only validation recorded a model call, including preparation.")
             passed = outcome.status == "passed"
             result = protocol.ValidationResult(
                 runner_id=self._settings.runner_id,
@@ -471,10 +473,18 @@ class RunnerControlClient:
                     compiler_model_types=list(self._validator.compiler_model_types),
                 ),
             )
-            if passed and not request.HasField("artifact"):
+            if not request.HasField("artifact"):
                 # Publication reuses exactly this tested draft candidate. A
                 # released version was tested as it is and needs no candidate.
                 result.candidate_artifact.CopyFrom(outcome.artifact)
+            if outcome.test_scope is not None:
+                scope = outcome.test_scope
+                result.test_scope.CopyFrom(protocol.ValidationScope(
+                    test_model_rules=scope["testModelRules"], model_invocations=scope["modelInvocations"],
+                    execution_digest=scope["executionDigest"], full_artifact_loaded=scope["fullArtifactLoaded"],
+                    skipped_rules=[protocol.ValidationSkippedRule(policy_id=r["policyId"], rule_id=r["ruleId"], reason=r["reason"])
+                                   for r in scope["skippedRules"]],
+                ))
         except Exception as error:
             logger.exception("Guardrail Validation %s failed.", request.run_id)
             result = protocol.ValidationResult(

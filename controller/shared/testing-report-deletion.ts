@@ -6,6 +6,7 @@ export type TestingReportDeletionImpact = {
   version: string;
   deletable: boolean;
   running: boolean;
+  retainedByPlatformVersion?: boolean;
   /** A released version losing its final matching Passed report. */
   pendingVersion: string | null;
   replacementRunId: string | null;

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, notExists, or, sql } from "drizzle-orm";
 import { latestTestEvidence, matchesTestEvidence, TESTING_REPORT_RETENTION, type VersionTestEvidence } from "../../shared/testing-report-retention.js";
 import type { ControllerDatabase } from "../db/client.js";
 import { artifacts, auditEvents, guardrails, guardrailVersions, outboxEvents, validationRuns } from "../db/schema.js";
@@ -8,12 +8,13 @@ import { testSuiteDigest } from "../domain/test-suite.js";
 type Transaction = Parameters<Parameters<ControllerDatabase["transaction"]>[0]>[0];
 export const reportCompletionTime = sql<Date>`coalesce(${validationRuns.completedAt}, ${validationRuns.createdAt})`;
 export const testEvidenceColumns = {
+  testModelRules: validationRuns.testModelRules, testScope: validationRuns.testScope,
   id: validationRuns.id, status: validationRuns.status, candidateDigest: validationRuns.candidateDigest,
   testSuiteDigest: validationRuns.testSuiteDigest, createdAt: validationRuns.createdAt, completedAt: validationRuns.completedAt,
 };
-export function toTestEvidence(run: { id: string; status: string; candidateDigest: string | null; testSuiteDigest: string | null; createdAt: Date; completedAt: Date | null }): VersionTestEvidence | null {
+export function toTestEvidence(run: { testModelRules?: boolean; testScope?: VersionTestEvidence["testScope"]; id: string; status: string; candidateDigest: string | null; testSuiteDigest: string | null; createdAt: Date; completedAt: Date | null }): VersionTestEvidence | null {
   if (run.status !== "passed" && run.status !== "failed") return null;
-  return { id: run.id, status: run.status, candidateDigest: run.candidateDigest, testSuiteDigest: run.testSuiteDigest, createdAt: run.createdAt.toISOString(), completedAt: (run.completedAt ?? run.createdAt).toISOString() };
+  return { testModelRules: run.testModelRules ?? true, testScope: run.testScope ?? null, id: run.id, status: run.status, candidateDigest: run.candidateDigest, testSuiteDigest: run.testSuiteDigest, createdAt: run.createdAt.toISOString(), completedAt: (run.completedAt ?? run.createdAt).toISOString() };
 }
 
 /** Caller holds the Guardrail row lock, including during completion and startup cleanup. */
@@ -28,8 +29,12 @@ export async function pruneTestingReports(tx: Transaction, guardrailId: string):
         rank: sql<number>`row_number() over (partition by ${guardrailVersions.version} order by ${reportCompletionTime} desc, ${validationRuns.id} desc)`.as("retention_rank"),
       }).from(validationRuns).leftJoin(guardrailVersions, and(
         eq(guardrailVersions.guardrailId, validationRuns.guardrailId), eq(guardrailVersions.version, validationRuns.guardrailVersion),
-      )).where(and(eq(validationRuns.guardrailId, guardrailId), eq(validationRuns.status, status))).as("ranked_reports");
-      const expired = await tx.select({ id: ranked.id, status: ranked.status, candidateDigest: ranked.candidateDigest,
+      )).where(and(eq(validationRuns.guardrailId, guardrailId), eq(validationRuns.status, status),
+        notExists(tx.select({ id: guardrailVersions.version }).from(guardrailVersions).where(and(
+          eq(guardrailVersions.guardrailId, guardrailId), or(eq(guardrailVersions.sourceValidationRunId, validationRuns.id),
+            sql`${guardrailVersions.testWaiver}->>'latestVersionRunId' = ${validationRuns.id}`),
+        ))))).as("ranked_reports");
+      const expired = await tx.select({ testModelRules: ranked.testModelRules, testScope: ranked.testScope, id: ranked.id, status: ranked.status, candidateDigest: ranked.candidateDigest,
         testSuiteDigest: ranked.testSuiteDigest, createdAt: ranked.createdAt, completedAt: ranked.completedAt,
         version: ranked.version, subject: ranked.subject,
       }).from(ranked).where(gt(ranked.rank, TESTING_REPORT_RETENTION[status])).orderBy(desc(ranked.rank), ranked.id).limit(200);

@@ -21,7 +21,17 @@ describe("Unified flat testing targets", () => {
     expect(screen.getByRole("button", { name: `immutableVersions.runVersionTests ${version.version}` }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("immutableVersions.noTestSuite")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: `immutableVersions.runVersionTests ${goodVersion}` }));
-    expect(onRun).toHaveBeenCalledWith(goodVersion);
+    expect(onRun).toHaveBeenCalledWith(goodVersion, true);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("sends local-only scope when model tests are switched off", async () => {
+    const onRun = vi.fn(async () => {});
+    render(<GuardrailVersionTestControl {...defaults} onRun={onRun} />);
+    open();
+    fireEvent.click(screen.getByRole("switch", { name: "validationScope.toggle" }));
+    fireEvent.click(screen.getByRole("button", { name: `immutableVersions.runVersionTests ${version.version}` }));
+    expect(onRun).toHaveBeenCalledWith(version.version, false);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 

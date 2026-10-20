@@ -63,6 +63,8 @@ import type { ValidationProgress as _tasklattice_guard_control_v1_ValidationProg
 import type { ValidationRequest as _tasklattice_guard_control_v1_ValidationRequest, ValidationRequest__Output as _tasklattice_guard_control_v1_ValidationRequest__Output } from './tasklattice/guard/control/v1/ValidationRequest.js';
 import type { ValidationResult as _tasklattice_guard_control_v1_ValidationResult, ValidationResult__Output as _tasklattice_guard_control_v1_ValidationResult__Output } from './tasklattice/guard/control/v1/ValidationResult.js';
 import type { ValidationRuntime as _tasklattice_guard_control_v1_ValidationRuntime, ValidationRuntime__Output as _tasklattice_guard_control_v1_ValidationRuntime__Output } from './tasklattice/guard/control/v1/ValidationRuntime.js';
+import type { ValidationScope as _tasklattice_guard_control_v1_ValidationScope, ValidationScope__Output as _tasklattice_guard_control_v1_ValidationScope__Output } from './tasklattice/guard/control/v1/ValidationScope.js';
+import type { ValidationSkippedRule as _tasklattice_guard_control_v1_ValidationSkippedRule, ValidationSkippedRule__Output as _tasklattice_guard_control_v1_ValidationSkippedRule__Output } from './tasklattice/guard/control/v1/ValidationSkippedRule.js';
 import type { ValidationTestCase as _tasklattice_guard_control_v1_ValidationTestCase, ValidationTestCase__Output as _tasklattice_guard_control_v1_ValidationTestCase__Output } from './tasklattice/guard/control/v1/ValidationTestCase.js';
 import type { WeightedTarget as _tasklattice_guard_control_v1_WeightedTarget, WeightedTarget__Output as _tasklattice_guard_control_v1_WeightedTarget__Output } from './tasklattice/guard/control/v1/WeightedTarget.js';
 
@@ -163,6 +165,8 @@ export interface ProtoGrpcType {
           ValidationRequest: MessageTypeDefinition<_tasklattice_guard_control_v1_ValidationRequest, _tasklattice_guard_control_v1_ValidationRequest__Output>
           ValidationResult: MessageTypeDefinition<_tasklattice_guard_control_v1_ValidationResult, _tasklattice_guard_control_v1_ValidationResult__Output>
           ValidationRuntime: MessageTypeDefinition<_tasklattice_guard_control_v1_ValidationRuntime, _tasklattice_guard_control_v1_ValidationRuntime__Output>
+          ValidationScope: MessageTypeDefinition<_tasklattice_guard_control_v1_ValidationScope, _tasklattice_guard_control_v1_ValidationScope__Output>
+          ValidationSkippedRule: MessageTypeDefinition<_tasklattice_guard_control_v1_ValidationSkippedRule, _tasklattice_guard_control_v1_ValidationSkippedRule__Output>
           ValidationStatus: EnumTypeDefinition
           ValidationTestCase: MessageTypeDefinition<_tasklattice_guard_control_v1_ValidationTestCase, _tasklattice_guard_control_v1_ValidationTestCase__Output>
           WeightedTarget: MessageTypeDefinition<_tasklattice_guard_control_v1_WeightedTarget, _tasklattice_guard_control_v1_WeightedTarget__Output>

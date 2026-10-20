@@ -38,10 +38,14 @@ export const immutableVersionsEn = {
   releaseHeading: "Release in this environment",
   noTestSuite: "This version has no test suite, so it cannot be tested or released. Publish a new version that includes its test suite.",
   releaseStates: {
-    released: "Released", released_retest_failed: "Released · retest failed", untested: "Pending · not tested",
+    released_waiver: "Released · test waiver", released: "Released", released_retest_failed: "Released · retest failed", untested: "Pending · not tested",
     testing: "Pending · testing", test_failed: "Pending · test failed", releasable: "Pending · ready to release",
   },
+  waiverReason: "Waiver reason: {{reason}}",
+  sourceReportRetained: "This report is retained as evidence for a platform Default candidate or test waiver.",
+  waiverActor: "Recorded by {{actor}} at {{time}}",
   releaseHints: {
+    released_waiver: "A platform administrator waived test passage for this release. Original test outcomes are unchanged.",
     released: "Released here: it can be routed to, made the baseline and exported.",
     released_retest_failed: "A test after release failed. The release stands; decide whether to move traffic away with a Router change.",
     untested: "Run its own test suite here, against exactly this content. It can be released once the test passes.",
@@ -96,10 +100,14 @@ export const immutableVersionsZh: typeof immutableVersionsEn = {
   releaseHeading: "本环境的发布",
   noTestSuite: "此版本没有测试集，无法测试或发布。请发布一个包含测试集的新版本。",
   releaseStates: {
-    released: "已发布", released_retest_failed: "已发布 · 复测失败", untested: "待发布 · 未测试",
+    released_waiver: "已发布 · 测试豁免", released: "已发布", released_retest_failed: "已发布 · 复测失败", untested: "待发布 · 未测试",
     testing: "待发布 · 测试中", test_failed: "待发布 · 测试失败", releasable: "待发布 · 可发布",
   },
+  waiverReason: "豁免原因：{{reason}}",
+  sourceReportRetained: "此报告作为平台 Default 候选版本或测试豁免的依据保留，不能删除。",
+  waiverActor: "{{actor}} 于 {{time}} 记录",
   releaseHints: {
+    released_waiver: "平台管理员已豁免此版本的测试通过要求。原始测试结果保持不变。",
     released: "已在本环境发布：可以被 Router 引用、设为基线和导出。",
     released_retest_failed: "发布后的一次测试失败了。发布不会被撤销；请判断是否通过 Router 变更把流量切走。",
     untested: "在本环境对这份内容原样运行它自带的测试集，测试通过后即可发布。",

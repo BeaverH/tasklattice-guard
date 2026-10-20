@@ -96,6 +96,8 @@ message ValidationMetrics {
   double escalation_rate = 6;
   // End-to-end case latency p95 in milliseconds.
   int32 p95_latency_ms = 7;
+  int32 skipped = 8;
+  int32 executed = 9;
 }
 
 // Observed decision, evidence, and trace for one validation case.
@@ -154,6 +156,8 @@ message ValidationCaseResult {
   // Terminal Rule evidence preceding the source target in Policy/Rule execution order.
   // The target is not claimed as matched; this satisfies only the ordered composition contract.
   repeated ValidationExpectedMatch preempting_matches = 38;
+  bool skipped = 39;
+  string skip_reason = 40;
 }
 
 // Command to execute an immutable candidate plan against its test cases.
@@ -173,6 +177,23 @@ message ValidationRequest {
   // signed Artifact and runs the cases against it without compiling; `plan`
   // is not used. Absent for a draft, which is compiled into a candidate.
   Artifact artifact = 8;
+  // Absent means full testing for existing clients. False only affects testing.
+  optional bool test_model_rules = 9;
+}
+
+message ValidationSkippedRule {
+  string policy_id = 1;
+  string rule_id = 2;
+  string reason = 3;
+}
+
+message ValidationScope {
+  bool test_model_rules = 1;
+  repeated ValidationSkippedRule skipped_rules = 2;
+  int32 model_invocations = 3;
+  string execution_digest = 4;
+  // Full publication Artifact successfully loaded without invoking its models.
+  bool full_artifact_loaded = 5;
 }
 
 // Validation response. `accepted` reports whether the Runner executed the
@@ -200,6 +221,7 @@ message ValidationResult {
   optional Artifact candidate_artifact = 8;
   // Runtime that compiled and executed the candidate.
   ValidationRuntime runtime = 9;
+  ValidationScope test_scope = 10;
 }
 
 // Runtime fingerprint recorded with validation evidence.

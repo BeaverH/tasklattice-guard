@@ -278,6 +278,8 @@ export function validationTestToWire(value: unknown): ValidationTestCase {
 
 export function validationMetricsFromWire(value: ValidationMetrics__Output): ValidationMetrics {
   return {
+    skipped: value.skipped,
+    executed: value.executed || value.total - value.skipped,
     total: value.total,
     passed: value.passed,
     complianceRate: value.complianceRate,
@@ -290,18 +292,22 @@ export function validationMetricsFromWire(value: ValidationMetrics__Output): Val
 
 export function validationCaseFromWire(value: ValidationCaseResult__Output): ValidationCaseResult {
   return {
+    skipped: value.skipped,
+    skipReason: value.skipReason,
     caseId: value.caseId,
     name: value.name,
     policyId: value.policyId,
     expectedDecision: domainEnum("VALIDATION_DECISION", value.expectedDecision),
-    actualDecision: domainEnum("VALIDATION_DECISION", value.actualDecision),
+    actualDecision: value.skipped && value.actualDecision === "VALIDATION_DECISION_UNSPECIFIED"
+      ? "" : domainEnum("VALIDATION_DECISION", value.actualDecision),
     passed: value.passed,
     evaluatorIds: [...value.evaluatorIds],
     latencyMs: value.latencyMs,
     reason: value.reason,
     phase: domainEnum("GUARDRAIL_PHASE", value.phase) === "output" ? "output" : "input",
     inputContent: value.inputContent,
-    action: domainEnum("ENFORCEMENT_ACTION", value.action),
+    action: value.skipped && value.action === "ENFORCEMENT_ACTION_UNSPECIFIED"
+      ? "" : domainEnum("ENFORCEMENT_ACTION", value.action),
     outputContent: value.outputContent,
     findings: value.findings.map(findingFromWire),
     trace: value.trace.map(traceFromWire),

@@ -41,6 +41,9 @@ export function roleHome(role: string | null | undefined): "/settings/providers"
 
 export function pagePermission(pathname: string): { resource: PermissionResource; action: AccessAction } | null {
   const path = pathname.replace(/\/$/, "");
+  // The platform-maintained Default uses the ordinary version/test workspace.
+  // This does not open tenant authoring or runtime logs to administrators.
+  if (path === "/guardrails/guardrail-default") return { resource: "guardrails", action: "read" };
   if (["/settings", "/settings/health", "/settings/runner", "/settings/version"].includes(path)) {
     return { resource: "runners", action: "read" };
   }

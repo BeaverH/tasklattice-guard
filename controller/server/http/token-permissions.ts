@@ -67,7 +67,7 @@ export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, Toke
   ["POST", "/api/v1/guardrail-packages/:packageId/imports", "guardrails", "write"],
   ["POST", "/api/v1/guardrails/:id/versions/:version/environment-check", "guardrails", "write"],
   ["GET", "/api/v1/system/baseline", "guardrails", "read"],
-  ["PUT", "/api/v1/system/baseline", "guardrails", "write"],
+  ["PUT", "/api/v1/system/baseline", "runners", "write"],
   ["POST", "/api/v1/guardrails/:id/duplicate", "guardrails", "write"],
   ["PATCH", "/api/v1/guardrails/:id", "guardrails", "write"],
   ["POST", "/api/v1/guardrails/:id/publish", "guardrails", "write"],
@@ -136,6 +136,9 @@ export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, Toke
   ["GET", "/api/v1/audit-events", "audit", "read"],
 ];
 export function requiredTokenPermission(method: string, path: string) {
+  if (method === "POST" && /^\/api\/v1\/guardrails\/guardrail-default\/(?:test-runs|publish|versions\/[^/]+\/(?:test-runs|release|environment-check))$/.test(path)) {
+    return [method, path, "runners", "write"] as const;
+  }
   return tokenRoutePermissions.find(([verb, template]) => verb === method &&
     new RegExp(`^${template.replace(/:[^/]+/g, "[^/]+")}$`).test(path));
 }

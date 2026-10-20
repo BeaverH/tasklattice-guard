@@ -218,6 +218,10 @@ def validation_case_result_to_proto(
     value: Mapping[str, Any],
 ) -> protocol.ValidationCaseResult:
     shallow = dict(value)
+    if shallow.get("skipped"):
+        # No decision/action was observed. Leave the enum at UNSPECIFIED.
+        shallow.pop("actualDecision", None)
+        shallow.pop("action", None)
     findings = shallow.pop("findings", ())
     trace = shallow.pop("trace", ())
     result = _message_from_mapping(

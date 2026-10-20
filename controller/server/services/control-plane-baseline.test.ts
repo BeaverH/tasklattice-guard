@@ -247,6 +247,15 @@ describe("Validated candidate gate", () => {
       runtimeFingerprint: expect.objectContaining({ nemoVersion: "0.24.0" }) });
   });
 
+  it("retains a compiled failed candidate without changing its test outcome", async () => {
+    const content = candidate();
+    const test = harness([[], [{ guardrailId: run.guardrailId }], [{ id: run.guardrailId }], [run], request(content.plan)]);
+    const results = [{ caseId: "limited", passed: false, reason: "http_429" }];
+    await test.service.completeValidation({ runId: run.id, status: "failed", metrics: emptyValidationMetrics(), results: results as never, candidateArtifact: content });
+    expect(stored(test)).toMatchObject({ status: "failed", results, candidateDigest: expect.any(String), candidateArtifact: expect.any(Object) });
+    expect(test.updates.some(item => item.table === "controller_state")).toBe(false);
+  });
+
   it.each([
     ["missing", undefined, undefined],
     ["changed Rule action", (plan: Record<string, unknown>) => { (plan.steps as Array<{ on_unsafe: string }>)[0]!.on_unsafe = "allow"; }, undefined],

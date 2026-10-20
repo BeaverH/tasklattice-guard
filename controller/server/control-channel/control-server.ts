@@ -28,6 +28,7 @@ import { capabilityBindingDefinitions } from "../../shared/guardrail-catalog.js"
 import type { ModelConfigurationService } from "../model-config/service.js";
 import type { ControlPlaneService } from "../services/control-plane.js";
 import type { ArtifactContent } from "../domain/artifact-content.js";
+import { ConflictError } from "../domain/errors.js";
 import type { PoolAdmission, SignedArtifact } from "../domain/environment-check.js";
 import { controlChannelOptions } from "./transport.js";
 import {
@@ -455,6 +456,7 @@ export class RunnerControlServer {
       status: validationStatusFromWire(result.status),
       metrics,
       results,
+      ...(result.testScope ? { testScope: { ...result.testScope, skippedRules: result.testScope.skippedRules.map(r => ({ ...r })) } } : {}),
       ...(result.reason ? { reason: result.reason } : {}),
       ...(result.candidateArtifact ? { candidateArtifact: artifactFromWire(result.candidateArtifact) as unknown as ArtifactContent } : {}),
       ...(result.runtime ? { runtime: {
@@ -597,6 +599,7 @@ export class RunnerControlServer {
             ...(payload.artifact ? { artifact: artifactToWire(payload.artifact) } : { plan: planToWire(payload.plan ?? {}) }),
             runtimeProfile: string(payload.runtimeProfile),
             testCases: array(payload.testCases).map(validationTestToWire),
+            testModelRules: payload.testModelRules !== false,
           },
         });
       } catch (error) {
@@ -658,7 +661,7 @@ function normalizeLoad(load: RunnerHeartbeat__Output["load"]): RunnerLoad {
 
 function wireMessageType(message: ControllerBody): string {
   return [
-    "registrationAccepted", "desiredState", "protectionState", "compileRequest", "validationRequest", "drainRequest",
+    "registrationAccepted", "desiredState", "protectionState", "validationRequest", "drainRequest",
   ].find((key) => key in message) ?? "unknown";
 }
 

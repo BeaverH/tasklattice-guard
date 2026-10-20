@@ -337,6 +337,9 @@ export const guardrailVersions = pgTable("guardrail_version", {
   // and suite when imported. Null while pending.
   validationRunId: text("validation_run_id"),
   testingEvidence: jsonb("testing_evidence").$type<VersionTestingEvidence>(),
+  // Retain the real source report separately from passed release evidence.
+  sourceValidationRunId: text("source_validation_run_id"),
+  testWaiver: jsonb("test_waiver").$type<import("../../shared/default-release.js").DefaultTestWaiver>(),
   releasedAt: timestamp("released_at", { withTimezone: true }),
   releasedBy: text("released_by").references(() => user.id),
   inspection: jsonb("inspection").$type<GuardrailInspection>(),
@@ -415,6 +418,8 @@ export const testCases = pgTable("guardrail_test_case", {
 ]);
 
 export const validationRuns = pgTable("guardrail_validation_run", {
+  testModelRules: boolean("test_model_rules").notNull().default(true),
+  testScope: jsonb("test_scope").$type<import("../../shared/validation-scope.js").ValidationTestScope>(),
   id: text("id").primaryKey(),
   guardrailId: text("guardrail_id").notNull().references(() => guardrails.id),
   guardrailVersion: text("guardrail_version").notNull(),

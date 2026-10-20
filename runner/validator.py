@@ -37,6 +37,8 @@ from .protocol_codec import (
     validation_test_from_proto,
 )
 from .serialization import plan_from_dict
+from .validation_scope import local_test_plan, skipped_case
+from .protocol_codec import plan_to_proto
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,7 @@ class ValidationOutcome:
     metrics: dict[str, Any]
     results: list[dict[str, Any]]
     artifact: protocol.Artifact
+    test_scope: dict[str, Any] | None = None
 
 
 class DefaultRunnerValidator:
@@ -93,6 +96,21 @@ class DefaultRunnerValidator:
 
         await report("preparing")
         registry, plan, artifact = await prepare(self._prepare, request, on_cancel=cleanup)
+        test_models = not request.HasField("test_model_rules") or request.test_model_rules
+        skipped_rules = []
+        execution_digest = artifact.checksum
+        if not test_models:
+            # _prepare loads the complete publication Artifact first. Only the
+            # private test runtime is projected; outcome.artifact remains full.
+            await registry.shutdown()
+            scoped, skipped_rules = local_test_plan(plan_from_proto(artifact.plan))
+            scoped_request = protocol.ValidationRequest(
+                run_id=request.run_id, guardrail_id=request.guardrail_id,
+                candidate_version=request.candidate_version,
+                plan=plan_to_proto(scoped), runtime_profile="auto",
+            )
+            registry, plan, execution_artifact = await prepare(self._prepare, scoped_request, on_cancel=cleanup)
+            execution_digest = execution_artifact.checksum
         runtime = NeMoRuntime(registry)
         try:
             cases = [validation_test_from_proto(item) for item in request.test_cases]
@@ -109,7 +127,7 @@ class DefaultRunnerValidator:
                 # without yielding; a bounded batch lets gRPC flush progress/heartbeats
                 # instead of starving the control channel behind the entire test suite.
                 async with slots:
-                    result = await self._evaluate(runtime, plan, case)
+                    result = (skipped_case(case, skipped_rules) if skipped_rules else None) or await self._evaluate(runtime, plan, case)
                     completed += 1
                     passed += int(result["passed"])
                     now = time.monotonic()
@@ -125,9 +143,15 @@ class DefaultRunnerValidator:
             await report("finalizing", completed, passed)
         finally:
             await runtime.shutdown()
-        required = [item for item in results if item["required"]]
+        required = [item for item in results if item["required"] and not item.get("skipped")]
         status = "passed" if required and all(item["passed"] for item in required) else "failed"
-        return ValidationOutcome(status, _metrics(results), results, artifact)
+        calls = sum(item.get("modelInvocations", 0) for item in results)
+        if not test_models and calls:
+            raise RuntimeError("Local-only validation unexpectedly invoked a model.")
+        return ValidationOutcome(status, _metrics(results), results, artifact, {
+            "testModelRules": test_models, "skippedRules": skipped_rules,
+            "modelInvocations": calls, "executionDigest": execution_digest, "fullArtifactLoaded": True,
+        })
 
     def _prepare(self, request: protocol.ValidationRequest):
         if request.HasField("artifact"):
@@ -463,6 +487,8 @@ def _test_content_view(case: dict[str, Any], phase: str, content: str) -> Conten
 
 
 def _metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    suite_total = len(results)
+    results = [item for item in results if not item.get("skipped")]
     total = len(results)
     passed = sum(bool(item["passed"]) for item in results)
     # Fail-open/closed decisions on unavailable or indeterminate evaluations are
@@ -476,7 +502,9 @@ def _metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     escalated = sum(bool(item["escalated"]) for item in results)
     latencies = sorted(int(item["latencyMs"]) for item in results) or [0]
     return {
-        "total": total,
+        "total": suite_total,
+        "skipped": suite_total - total,
+        "executed": total,
         "passed": passed,
         "complianceRate": _percent(passed, total),
         "falsePositiveRate": _percent(false_positive, total),

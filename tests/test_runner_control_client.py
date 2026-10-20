@@ -256,6 +256,21 @@ async def test_validation_replay_cache_evicts_by_bytes():
 
 
 @pytest.mark.asyncio
+async def test_failed_test_returns_compiled_candidate_without_marking_passed():
+    from unittest.mock import Mock
+    client = RunnerControlClient(_settings(), Store(), Metrics())
+    client._metrics.job = Mock()
+    client._store.model_revision_id = "models-1"
+    artifact = protocol.Artifact(guardrail_id="guardrail-default", guardrail_version="candidate")
+    client._validator = SimpleNamespace(compiler_model_types=[], run=AsyncMock(return_value=SimpleNamespace(
+        status="failed", metrics={}, results=[], artifact=artifact, test_scope=None)))
+    await client._execute_validation(protocol.ValidationRequest(run_id="failed"))
+    result = (await client._outgoing.get()).validation_result
+    assert result.accepted and result.status == protocol.VALIDATION_STATUS_FAILED
+    assert result.candidate_artifact == artifact
+
+
+@pytest.mark.asyncio
 async def test_modes_overtake_model_preparation_and_report_nacks(tmp_path):
     import asyncio
     from runner.artifact_store import ArtifactStore

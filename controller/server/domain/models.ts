@@ -52,6 +52,8 @@ export type RuntimeEventInput = {
 };
 
 export type ValidationMetrics = {
+  skipped?: number;
+  executed?: number;
   total: number;
   passed: number;
   complianceRate: number;
@@ -62,6 +64,8 @@ export type ValidationMetrics = {
 };
 
 export type ValidationCaseResult = {
+  skipped?: boolean;
+  skipReason?: string;
   expectationOverride?: import("./guardrail-plan.js").ValidationExpectationOverride;
   templateExpectedDecision?: string;
   assertionFailures?: string[];

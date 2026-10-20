@@ -168,3 +168,35 @@ checks required inputs, types, threshold ranges and strict-mode allowlists befor
 generating a concrete immutable execution plan. Parameters used only by disabled
 model Rules do not block other Rules. The `0044_topic_binding_parameters` migration
 removes the retired general-topic Profile without rewriting Guardrails or Default.
+
+## Test scope and publication
+
+The **Test model rules** switch defaults to on. Both draft and immutable-version
+`POST /api/v1/guardrails/{id}/.../test-runs` APIs accept `testModelRules: false`.
+The Runner first compiles/verifies and loads the complete publication Artifact,
+then uses a private local-rule projection for testing. Model-dependent Rules,
+arbitrary Colang without a proven local implementation, and dependencies on
+excluded Rules are skipped. Mixed Policies keep their registered local Rules.
+
+Reports freeze `testModelRules` and `testScope`: skipped Policy/Rule identities,
+actual model invocations, the test execution digest, and full Artifact load
+confirmation. Cases have `skipped` and `skipReason`; Skipped is never Passed.
+Metrics distinguish total, executed, passed and skipped. Pass rates use executed
+cases. The console labels these reports **Model-dependent tests skipped**, including
+in the report list, detail, and publication review. They do not establish model
+quality or full-chain acceptance. A local-only run must record zero model calls.
+
+The existing test → publish/release flow applies to every Guardrail. Required
+executed cases must pass, at least one required case must execute, and Artifact
+and suite digests must match. Publication signs the original complete Artifact;
+model Rules stay enabled. Deleting/pruning a report preserves its scope in compact
+release evidence. Imported versions require their own tests in the destination.
+
+Default remains platform-maintained: tenant users have no edit, delete, test or
+publication action. Administrators test and publish it through the same endpoints
+and console workflow, with `runners:write` permission. Switching the baseline remains
+explicit using `PUT /api/v1/system/baseline` with a ready version and reason.
+
+The former Default candidate/waiver creation endpoints have been removed. Existing
+waiver reasons, actors, timestamps, source reports and audit records are retained
+and remain visible as historical evidence; failed reports are never rewritten.

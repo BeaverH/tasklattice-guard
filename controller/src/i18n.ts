@@ -1,3 +1,4 @@
+import { validationScopeEn, validationScopeZh } from "./validation-scope-i18n";
 import { modelPricingEn, modelPricingZh } from "./model-pricing-i18n";
 import { protectionModeEn, protectionModeZh } from "./protection-mode-i18n";
 import { declarativePolicyEn, declarativePolicyZh } from "./declarative-policy-i18n";
@@ -19,6 +20,7 @@ export type SupportedLanguage = "en" | "zh-CN";
 const resources = {
   en: {
     translation: {
+      validationScope: validationScopeEn,
       modelPricing: modelPricingEn,
       protectionMode: protectionModeEn,
       declarativePolicy: declarativePolicyEn,
@@ -3053,6 +3055,7 @@ const resources = {
   },
   "zh-CN": {
     translation: {
+      validationScope: validationScopeZh,
       modelPricing: modelPricingZh,
       protectionMode: protectionModeZh,
       declarativePolicy: declarativePolicyZh,

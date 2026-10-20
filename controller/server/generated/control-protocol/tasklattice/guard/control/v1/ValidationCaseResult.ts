@@ -99,6 +99,8 @@ export interface ValidationCaseResult {
    * The target is not claimed as matched; this satisfies only the ordered composition contract.
    */
   'preemptingMatches'?: (_tasklattice_guard_control_v1_ValidationExpectedMatch)[];
+  'skipped'?: (boolean);
+  'skipReason'?: (string);
   '_expectedReasoningResult'?: "expectedReasoningResult";
   '_actualReasoningResult'?: "actualReasoningResult";
   '_expectedFailure'?: "expectedFailure";
@@ -199,6 +201,8 @@ export interface ValidationCaseResult__Output {
    * The target is not claimed as matched; this satisfies only the ordered composition contract.
    */
   'preemptingMatches': (_tasklattice_guard_control_v1_ValidationExpectedMatch__Output)[];
+  'skipped': (boolean);
+  'skipReason': (string);
   '_expectedReasoningResult'?: "expectedReasoningResult";
   '_actualReasoningResult'?: "actualReasoningResult";
   '_expectedFailure'?: "expectedFailure";

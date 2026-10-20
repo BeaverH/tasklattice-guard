@@ -71,6 +71,8 @@ export type GuardrailPolicyBinding = {
 };
 
 export type ValidationMetrics = {
+  skipped?: number;
+  executed?: number;
   total: number;
   passed: number;
   compliance_rate: number;
@@ -125,6 +127,8 @@ export type RuntimeTraceStep = {
 };
 
 export type TestCaseResult = {
+  skipped?: boolean;
+  skip_reason?: string;
   expectation_override?: Record<string, unknown>;
   template_expected_decision?: string;
   assertion_failures?: string[];
@@ -166,6 +170,8 @@ export type TestCaseResult = {
 };
 
 export type ValidationRun = {
+  test_model_rules?: boolean;
+  test_scope?: import("../../shared/validation-scope").ValidationTestScope | null;
   id: string;
   guardrail_id: string;
   guardrail_version: string;
@@ -480,6 +486,8 @@ export type DeleteConfirmation = {
 };
 
 export type GuardrailVersion = {
+  test_waiver?: import("../../shared/default-release").DefaultTestWaiver | null;
+  source_validation_run_id?: string | null;
   testing_evidence?: import("../../shared/testing-report-retention").VersionTestingEvidence | null;
   guardrail_id: string;
   version: string;
