@@ -77,6 +77,8 @@ def test_default_preserves_order_actions_and_models_with_new_rules_opt_in():
         expected = []
         seen = set()
         for binding in old['bindings']:
+            if binding['policyId'] in {'builtin-jailbreak', 'builtin-content-safety'}:
+                continue
             for rid in binding['enabledRuleIds']:
                 contract = lookup[(binding['policyId'], rid)]
                 if phase not in contract['stages']:
@@ -95,10 +97,9 @@ def test_default_preserves_order_actions_and_models_with_new_rules_opt_in():
                     actual.append((signature(rule), binding['ruleActions'].get(rid)))
         assert actual == expected
     assert draft['outputDelivery'] == 'full_buffered'
-    assert [b['policyId'] for b in draft['policyBindings']][:4] == [
-        'builtin-indirect-prompt-injection', 'builtin-memory-poisoning',
-        'builtin-jailbreak', 'builtin-content-safety']
-    assert sum(len(b['enabledRuleIds']) for b in draft['policyBindings']) == 124
+    assert [b['policyId'] for b in draft['policyBindings']][:2] == [
+        'builtin-indirect-prompt-injection', 'builtin-memory-poisoning']
+    assert sum(len(b['enabledRuleIds']) for b in draft['policyBindings']) == 122
 
 
 def test_topic_preset_covers_previous_examples_without_an_independent_profile():

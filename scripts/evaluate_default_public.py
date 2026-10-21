@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.evaluation_contract import load_snapshot, normalize, summarize_actions, target_identity
 LOCK = Path(__file__).with_name("default_public_sources.lock.json")
-DEFAULT_OUTPUT = ROOT / "output/default-public-evaluation/model-baseline"
+DEFAULT_OUTPUT = ROOT / "output/default-public-evaluation/local-baseline"
 DEFAULT_SOURCES = ROOT / "output/default-public-evaluation/sources"
 MAPPING_VERSION = "default-public-v1"
 CURRENT_CASE_ID = ContextVar("default_public_case_id", default=None)
@@ -435,16 +435,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--diagnostics-only", action="store_true", help="Run authored probes without public dataset files.")
     parser.add_argument("--resume", action="store_true", help="Append only missing cases after verifying runtime, data and dependency hashes.")
     parser.add_argument("--local-components-only", action="store_true",
-                        help="Explicit ablation of local Policies; NOT the current Default baseline.")
+                        help="Require local Policies only; current Default is already local.")
     parser.add_argument("--model-config", type=Path, help="Non-secret DataPlaneModelConfiguration in Protobuf JSON format.")
     parser.add_argument("--frozen-plan", type=Path, help="Execute the exact archived plan; never rebuild against current Default.")
     parser.add_argument("--snapshot-sha256", help="Required SHA-256 of --frozen-plan bytes.")
     parser.add_argument("--credential-env", action="append", default=[], metavar="REF=ENV_NAME",
                         help="Map each credential_ref to an existing environment variable; never pass keys directly.")
     args = parser.parse_args(argv)
-    if args.local_components_only == bool(args.model_config):
-        parser.error("Choose --model-config for current Default or --local-components-only for an explicit ablation")
-    if args.local_components_only and args.credential_env:
+    if args.local_components_only and args.model_config:
+        parser.error("Local-only evaluation cannot use --model-config")
+    if not args.model_config and args.credential_env:
         parser.error("Local component evaluation does not use credentials")
     if args.resume and args.model_config:
         parser.error("Model runs need a fresh output directory; backend model state cannot be verified for resume")
@@ -457,8 +457,8 @@ def main(argv: list[str] | None = None) -> int:
     built = build_default_plan(local_components_only=args.local_components_only,
                                frozen_plan=args.frozen_plan, snapshot_sha256=args.snapshot_sha256)
     target = target_identity({"default": built["plan"]},
-        scope="frozen_snapshot" if args.frozen_plan else ("local_components_only" if args.local_components_only else "model_dependent_default"),
-        snapshot_sha256=args.snapshot_sha256, models=model_evidence, local_only=args.local_components_only)
+        scope="frozen_snapshot" if args.frozen_plan else ("local_components_only" if args.local_components_only else "local_default"),
+        snapshot_sha256=args.snapshot_sha256, models=model_evidence, local_only=not bool(args.model_config))
     output.mkdir(parents=True, exist_ok=True)
     started = utc_now()
     receipts = verify_sources(args.sources, download=args.download) if not args.diagnostics_only else []

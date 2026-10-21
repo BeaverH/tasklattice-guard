@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "../../shared/canonical-json.js";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
@@ -9,30 +12,30 @@ import { DeclarativeCompiler } from "../policy-studio/declarative.js";
 
 const policies = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
 const expectedPolicyIds = [
-  "builtin-indirect-prompt-injection", "builtin-memory-poisoning", "builtin-jailbreak", "builtin-content-safety",
+  "builtin-indirect-prompt-injection", "builtin-memory-poisoning",
   "local-content-safety", "local-injection-protection", "local-credentials", "local-payment-data",
   "local-government-identifiers", "local-passports", "local-contact-data", "local-network-addresses",
   "local-sensitive-attribute-terms", "local-risk-content-terms",
 ];
 
 describe("Default Guardrail capability composition", () => {
-  it("requires input jailbreak and input/output safety models before local transformations", () => {
+  it("runs the full Default with local providers and no model dependencies", () => {
     const draft = defaultGuardrailDraft(policies);
     const plan = buildGuardrailPlan({ guardrailId: DEFAULT_GUARDRAIL_ID, guardrailVersion: "20261019-000000.001Z", draft, policies });
     const coverage = publishedProtectionCoverage(plan)!;
     expect(draft.outputDelivery).toBe("full_buffered");
-    expect(coverage.requiredModelBindings).toEqual(["jailbreak.input", "content_safety.input", "content_safety.output"]);
+    expect(coverage.requiredModelBindings).toEqual([]);
     expect(coverage.hasUnknownDependencies).toBe(false);
-    expect(isModelIndependent(coverage)).toBe(false);
-    expect(plan.steps.map(s => s.capability).slice(0, 4)).toEqual(["indirect_prompt_injection", "memory_poisoning", "jailbreak", "content_safety"]);
+    expect(isModelIndependent(coverage)).toBe(true);
+    expect(plan.steps.map(s => s.capability).slice(0, 2)).toEqual(["indirect_prompt_injection", "memory_poisoning"]);
     expect(plan.policy_bindings.map(b => b.policy_id)).toEqual(expectedPolicyIds);
   });
 
-  it("retains 124 distinct reviewed Rules and the insults observation override", () => {
+  it("retains 122 distinct reviewed Rules and the insults observation override", () => {
     const original = structuredClone(policies);
     const draft = defaultGuardrailDraft(policies);
     expect(draft.policyBindings.map(b => b.policyId)).toEqual(expectedPolicyIds);
-    expect(draft.policyBindings.reduce((n, b) => n + b.enabledRuleIds.length, 0)).toBe(124);
+    expect(draft.policyBindings.reduce((n, b) => n + b.enabledRuleIds.length, 0)).toBe(122);
     const content = draft.policyBindings.find(b => b.policyId === "local-content-safety")!;
     expect(content.enabledRuleIds).toHaveLength(10);
     expect(content.ruleActions).toEqual({ "category/denied_insults": "allow" });
@@ -42,6 +45,19 @@ describe("Default Guardrail capability composition", () => {
       expect(new Set(binding.enabledRuleIds).size).toBe(binding.enabledRuleIds.length);
     }
     expect(policies).toEqual(original);
+  });
+
+  it("preserves every pre-change local Rule, order, action, parameter and test expectation", () => {
+    const before = JSON.parse(readFileSync(resolve("../tests/fixtures/default-local-contract.json"), "utf8"));
+    const draft = defaultGuardrailDraft(policies);
+    const cases = applyValidationOverrides(generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, policies), draft);
+    const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
+    expect(hash(draft)).toBe(before.draftSha256);
+    expect(hash(cases)).toBe(before.casesSha256);
+    expect(cases).toHaveLength(608);
+    for (const id of ["builtin-jailbreak", "builtin-content-safety"]) {
+      expect(policies.find(policy => policy.id === id)?.protection.execution).toBe("model");
+    }
   });
 
   it("does not enable new catalog Rules or their acceptance cases implicitly", () => {
@@ -78,17 +94,18 @@ describe("Default Guardrail capability composition", () => {
       }
     }
     const plan = buildGuardrailPlan({ guardrailId: DEFAULT_GUARDRAIL_ID, guardrailVersion: "20261020-000000.001Z", draft, policies: current });
-    expect(publishedProtectionCoverage(plan)?.requiredModelBindings).toEqual(["jailbreak.input", "content_safety.input", "content_safety.output"]);
+    expect(publishedProtectionCoverage(plan)?.requiredModelBindings).toEqual([]);
   });
 
   it("fails closed when a reviewed Policy, Rule or executable contract is unavailable", () => {
     expect(() => defaultGuardrailDraft(policies.filter(p => p.id !== "local-government-identifiers"))).toThrow(/is missing/);
-    for (const mutation of ["empty", "missing", "flow", "custom"]) {
+    for (const mutation of ["empty", "missing", "flow", "custom", "model"]) {
       const changed = structuredClone(policies);
       const policy = changed.find(p => p.id === "local-government-identifiers")!;
       if (mutation === "empty") policy.rules = [];
       if (mutation === "missing") policy.rules.shift();
       if (mutation === "flow") policy.rules[0]!.implementation.execution = "programmable";
+      if (mutation === "model") policy.protection.execution = "model";
       if (mutation === "custom") policy.protection.execution = "custom";
       expect(() => defaultGuardrailDraft(changed)).toThrow();
     }

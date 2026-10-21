@@ -150,7 +150,7 @@ describe("Models and Guardrail Catalog", () => {
     expect(screen.getAllByText("modelSettings.detectors.jailbreak_detection.title · modelSettings.inputRail").length).toBeGreaterThan(0);
   });
 
-  it("validates the selected Model before enabling Save", async () => {
+  it("allows saving before testing and preserves a preview receipt when tested", async () => {
     vi.mocked(validateModelAssignment).mockResolvedValue({ validationId: "candidate-validation",
       ...view.draft, validationReport: { ...view.draft.validationReport!, checks: [
         { id: "probe:jailbreak.input:safety-model", scope: "capability", status: "passed", evidenceKind: "nemo-rail-v1", message: "Passed" },
@@ -161,7 +161,7 @@ describe("Models and Guardrail Catalog", () => {
     fireEvent.keyDown(within(jailbreak).getByRole("combobox", { name: "modelSettings.modelColumn" }), { key: "ArrowDown" });
     fireEvent.click(await screen.findByRole("option", { name: /Qwen Guard · Mock provider/ }));
     const save = within(jailbreak).getAllByRole("button", { name: "modelSettings.saveAssignment" })[0]!;
-    expect(save.hasAttribute("disabled")).toBe(true);
+    expect(save.hasAttribute("disabled")).toBe(false);
     fireEvent.click(within(jailbreak).getAllByRole("button", { name: "modelSettings.validateAssignment" })[0]!);
     await waitFor(() => expect(save.hasAttribute("disabled")).toBe(false));
     expect(saveModelAssignment).not.toHaveBeenCalled();
@@ -185,7 +185,7 @@ describe("Models and Guardrail Catalog", () => {
     }));
   });
 
-  it("applies only ready changes from an invalid draft and allows deselecting ready bindings", async () => {
+  it("allows explicitly applying failed bindings and deselecting other changes", async () => {
     const configured = structuredClone(view);
     configured.draft!.state = "draft";
     configured.draft!.validationReport!.valid = false;
@@ -195,11 +195,12 @@ describe("Models and Guardrail Catalog", () => {
     renderPage(<GuardrailCatalogPage />);
     fireEvent.click(await screen.findByRole("button", { name: "modelSettings.reviewActivation" }));
     const review = await screen.findByRole("dialog");
-    expect(within(review).getByRole("checkbox", { name: "modelSettings.applyBinding jailbreak.input" }).hasAttribute("disabled")).toBe(true);
+    expect(within(review).getByRole("checkbox", { name: "modelSettings.applyBinding jailbreak.input" }).hasAttribute("disabled")).toBe(false);
+    expect(within(review).getByText("modelSettings.reviewNeedsValidation")).toBeTruthy();
     fireEvent.click(within(review).getByRole("checkbox", { name: "modelSettings.applyBinding content_safety.output" }));
     fireEvent.click(within(review).getByRole("button", { name: "modelSettings.activateRevisionAction" }));
     await waitFor(() => expect(activateModelConfiguration).toHaveBeenCalledWith({
-      bindingIds: ["content_safety.input"], expectedDraftToken: "review-token", expectedActiveId: null,
+      bindingIds: ["content_safety.input", "jailbreak.input"], expectedDraftToken: "review-token", expectedActiveId: null,
     }));
   });
 
@@ -342,7 +343,7 @@ describe("Models and Guardrail Catalog", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it("requires new Rail evidence instead of treating a legacy model probe as validated", async () => {
+  it("warns about missing Rail evidence while allowing activation", async () => {
     const legacy = structuredClone(view);
     for (const check of legacy.draft.validationReport!.checks) delete check.evidenceKind;
     vi.mocked(getModelConfiguration).mockResolvedValue(legacy);
@@ -351,7 +352,7 @@ describe("Models and Guardrail Catalog", () => {
     expect(activate.hasAttribute("disabled")).toBe(false);
     fireEvent.click(activate);
     const review = await screen.findByRole("dialog");
-    expect(within(review).getByRole("button", { name: "modelSettings.activateRevisionAction" }).hasAttribute("disabled")).toBe(true);
+    expect(within(review).getByRole("button", { name: "modelSettings.activateRevisionAction" }).hasAttribute("disabled")).toBe(false);
     expect(within(review).getByText("modelSettings.reviewNeedsValidation")).toBeTruthy();
     expect(screen.queryByText("modelSettings.railSamplesPassed")).toBeNull();
   });
@@ -386,7 +387,7 @@ describe("Models and Guardrail Catalog", () => {
     renderPage(<GuardrailCatalogPage />);
     const section = (await screen.findByRole("heading", { name: "modelSettings.controlPlane" })).closest("section")!;
     const activate = within(section).getByRole("button", { name: "modelSettings.activateControlPlane" });
-    expect(activate.hasAttribute("disabled")).toBe(true);
+    expect(activate.hasAttribute("disabled")).toBe(false);
     expect(within(section).queryByRole("button", { name: "modelSettings.saveAssignment" })).toBeNull();
     fireEvent.click(within(section).getByRole("button", { name: "modelSettings.validateAssignment" }));
     await waitFor(() => expect(activate.hasAttribute("disabled")).toBe(false));

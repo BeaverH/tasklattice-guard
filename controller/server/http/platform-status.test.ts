@@ -23,10 +23,11 @@ async function snapshot({ protection = configured, instances = [{ status: "ready
     CONTROLLER_POLICY_CATALOG_DIR: resolve("../runner/toolkit/policy_library/assets"), BETTER_AUTH_SECRET: "better-auth-secret-that-is-at-least-32-characters" });
   const app = createHttpApp({ config, auth: { handler: vi.fn(), api: {} } as unknown as ControllerAuth,
     service: { desiredGeneration: vi.fn().mockResolvedValue(7), defaultGuardrailReadiness: vi.fn().mockResolvedValue(protection),
+      requiredPlatformModelBindings: vi.fn().mockResolvedValue(protection.coverage?.requiredModelBindings ?? []),
       listRunnerPoolsWithCapacity: vi.fn().mockResolvedValue([{ isDefault: true, desiredReplicas: 1, instances,
         capacity: { readyRunners: capacity, status: "ready" } }]),
     } as unknown as ControlPlaneService,
-    models: { statusSummary: vi.fn().mockResolvedValue({
+    models: { modelHealth: vi.fn().mockResolvedValue({ status: "healthy", reason: "configured", bindings: [] }), statusSummary: vi.fn().mockResolvedValue({
       controlPlane: { status: "unconfigured", provider: null, model: null },
       dataPlane: { status: bindings.length ? "configured" : "unconfigured", provider: "Runner", models: bindings.map((id) => ({ id, model: "registered-model" })) },
     }) } as unknown as ModelConfigurationService,

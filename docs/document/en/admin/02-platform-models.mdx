@@ -4,7 +4,9 @@ title: "Configure Providers, Models, and protection capabilities"
 summary: "Connect a Provider, register and test a Model, then assign a compatible Model to the Rail that needs it."
 order: 1
 ---
-The Default Guardrail requires both model detection and local checks. Before first activation, configure and validate `jailbreak.input`, `content_safety.input`, and `content_safety.output`, then validate the Default draft. Missing bindings or failed model validation prevent a new publication; there is no automatic fallback to local checks alone. **A callable Model** and **a Rail actively using it** are different states.
+Default is a local protection baseline: it retains the reviewed local Rules and needs no detection-model configuration. Installation, baseline regression and default traffic handling make no model calls. Model Policies, including jailbreak and content safety, remain available in the Policy Library for explicit use in other Guardrails; local Rules do not replace their semantic detection.
+
+Platform health checks model bindings required by the pinned baseline and enabled published routes. Unused model assignments and historical versions do not make a local installation unhealthy. Administrators may activate failed or untested model bindings; their actual test results remain visible, and activation does not turn them into passing results. **A callable Model** and **a Rail actively using it** are different states.
 
 <a id="platform-model-steps" />
 

@@ -13,8 +13,8 @@ from scripts.evaluate_default_public import build_default_plan, diagnostic_cases
 
 
 @pytest.mark.asyncio
-async def test_public_evaluator_local_ablation_transports_history():
-    built = build_default_plan(local_components_only=True)
+async def test_public_evaluator_current_default_transports_history():
+    built = build_default_plan()
     plan = built["plan"]
     assert len(plan["policy_bindings"]) == 12
     assert not {"builtin-jailbreak", "builtin-content-safety"} & {

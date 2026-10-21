@@ -6,6 +6,7 @@ import { componentHealthEn } from "@/component-health-i18n";
 import { getControllerSystemHealth, type SystemHealthSnapshot } from "@/lib/controller-api";
 import { HealthPage } from "./status";
 
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: "admin" } }) }));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to, ...props }: { children: ReactNode; to: string }) => <a href={to} {...props}>{children}</a>,
   useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => string }) => select({ location: { pathname: "/settings/health" } }),
@@ -24,6 +25,7 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({
 const healthy: SystemHealthSnapshot = {
   status: "healthy", observedAt: "2026-10-08T02:00:00Z",
   components: {
+    models: { status: "healthy", reason: "configured", bindings: [] },
     controlPlane: { status: "healthy", reason: "responding" },
     dataPlane: { status: "healthy", reason: "connected", connectedRunners: 2, totalRunners: 2, unresponsiveRunners: 0, heartbeatTimeoutSeconds: 30 },
   },
@@ -40,15 +42,36 @@ beforeEach(() => { vi.mocked(getControllerSystemHealth).mockReset().mockResolved
 afterEach(() => { cleanup(); client?.clear(); vi.useRealTimers(); });
 
 describe("Health tab", () => {
-  it("leads with the system conclusion and limits details to the two components", async () => {
+  it("leads with the system conclusion and limits details to component and model health", async () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "Healthy", level: 2 })).toBeTruthy();
-    expect(screen.getByText("Control plane and data plane are healthy.")).toBeTruthy();
+    expect(screen.getByText("Control plane, data plane and required models are healthy.")).toBeTruthy();
     const table = screen.getByRole("table", { name: "Component details" });
-    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(within(table).getAllByRole("row")).toHaveLength(4);
     expect(screen.getByText("2 of 2 Runners are connected and have reported within the 30s heartbeat timeout.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "View Runners" }).getAttribute("href")).toBe("/settings/runner");
     expect(screen.queryByText(/Published protection|Default protection|Active model configuration/i)).toBeNull();
+  });
+  it("explains that model configuration is optional for local protection", async () => {
+    vi.mocked(getControllerSystemHealth).mockResolvedValue({ ...healthy, components: { ...healthy.components,
+      models: { status: "healthy", reason: "not_required", bindings: [] } } });
+    renderPage();
+    await screen.findByRole("heading", { name: "Healthy" });
+    expect(screen.getByText("Not required")).toBeTruthy();
+    expect(screen.getByText("The baseline and enabled routes use local protection. Model configuration is optional.")).toBeTruthy();
+    expect(screen.queryByText("Models required")).toBeNull();
+  });
+  it("explains missing models as a platform issue with a configuration link", async () => {
+    vi.mocked(getControllerSystemHealth).mockResolvedValue({ ...healthy, status: "unhealthy", components: {
+      ...healthy.components, models: { status: "unhealthy", reason: "configuration_required", bindings: [
+        { id: "jailbreak.input", status: "missing" }, { id: "content_safety.output", status: "failed" },
+      ] },
+    } });
+    renderPage();
+    await screen.findByRole("heading", { name: "Unhealthy" });
+    expect(screen.getByText("Models required")).toBeTruthy();
+    expect(screen.getByText("jailbreak.input · Missing active model")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Configure model bindings" }).getAttribute("href")).toBe("/settings/guardrail-catalog");
   });
   it("explains an unhealthy component instead of displaying an opaque degraded label", async () => {
     vi.mocked(getControllerSystemHealth).mockResolvedValue(unhealthy);
@@ -77,7 +100,7 @@ describe("Health tab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await screen.findByRole("heading", { name: "Unable to confirm" });
     expect(screen.queryByRole("heading", { name: "Healthy" })).toBeNull();
-    expect(screen.getAllByText("Not confirmed")).toHaveLength(2);
+    expect(screen.getAllByText("Not confirmed")).toHaveLength(3);
     expect(screen.queryByText(/2 of 2 Runners/)).toBeNull();
     expect(screen.getByText("Last attempt")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -92,7 +115,7 @@ describe("Health tab", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Unhealthy" });
     expect(screen.getByText("Storage unavailable")).toBeTruthy();
-    expect(screen.getByText("Not confirmed")).toBeTruthy();
+    expect(screen.getAllByText("Not confirmed").length).toBeGreaterThan(0);
     expect(screen.queryByText(/0 of 0/)).toBeNull();
   });
   it("treats a missing response as unknown", async () => {

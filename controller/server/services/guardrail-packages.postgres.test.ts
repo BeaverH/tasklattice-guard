@@ -6,10 +6,12 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../config.js";
 import { verifyArtifactDigest, type ArtifactContent } from "../domain/artifact-content.js";
+import { buildGuardrailPlan } from "../domain/guardrail-plan.js";
 import { DEFAULT_GUARDRAIL_ID, defaultGuardrailDraft } from "../domain/defaults.js";
 import { buildPackage, parsePackage, type ParsedPackage } from "../domain/guardrail-package.js";
 import type { ArtifactContent as Content } from "../domain/artifact-content.js";
-import { emptyValidationMetrics } from "../domain/validation.js";
+import { testCases as testCaseTable } from "../db/schema.js";
+import { emptyValidationMetrics, generatedTestCases } from "../domain/validation.js";
 import { readZip, writeZip } from "../domain/zip.js";
 import { createTestDatabase } from "../db/postgres-test-database.js";
 import { PolicyCatalog } from "../policy-catalog/catalog.js";
@@ -108,12 +110,66 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     rmSync(keys, { recursive: true, force: true });
   });
 
-  it("starts production with the same features as UAT: a local Default and no baseline until one is published", async () => {
+  it("starts production with the same features as UAT: a complete bundled Default baseline without model configuration", async () => {
+    // Upgrade a previously installed Default whose human-triggered test failed before any model existed.
+    const catalog = PolicyCatalog.load(catalogDir).list();
+    const draft = defaultGuardrailDraft(catalog);
+    draft.policyBindings.splice(2, 0, ...["builtin-jailbreak", "builtin-content-safety"].map(id => {
+      const policy = catalog.find(p => p.id === id)!;
+      return { policyId: id, policyVersion: policy.version, action: null, parameterValues: {},
+        enabledRuleIds: policy.rules.map(r => r.id), ruleOrder: policy.rules.map(r => r.id),
+        ruleActions: {}, enabledRails: [...policy.rails], reasoningPolicy: null, testCaseOverrides: {} };
+    }));
+    await prodDb.pool.query("INSERT INTO guardrail (id,name,draft_config,runtime_profile) VALUES ($1,'Default Guardrail',$2,'auto')", [DEFAULT_GUARDRAIL_ID, draft]);
+    await prodDb.db.insert(testCaseTable).values(generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, catalog));
+    await prodDb.pool.query("INSERT INTO guardrail_validation_run (id,guardrail_id,guardrail_version,source_draft_revision,status,failure_reason,created_by) VALUES ('missing-model-report',$1,'20261020-000000.000Z',1,'failed','No model bindings','admin')", [DEFAULT_GUARDRAIL_ID]);
+    await prodDb.pool.query("INSERT INTO audit_event (id,kind,actor_id,resource_type,resource_id,detail) VALUES ('manual-test','guardrail.validation_requested','admin','guardrail',$1,'{}')", [DEFAULT_GUARDRAIL_ID]);
     await prod.initialize();
-    // Same as any installation: its own Default draft, queued for testing, and an editable Library.
+    expect((await prodDb.pool.query("SELECT status,failure_reason FROM guardrail_validation_run WHERE id='missing-model-report'")).rows)
+      .toEqual([{ status: "failed", failure_reason: "No model bindings" }]);
+    // A platform release does not claim that installation tests have passed.
     expect((await prodDb.pool.query("SELECT origin FROM guardrail WHERE id = $1", [DEFAULT_GUARDRAIL_ID])).rows).toEqual([{ origin: "local" }]);
-    expect(await prod.systemBaseline()).toEqual({ guardrailId: DEFAULT_GUARDRAIL_ID, version: null });
-    expect((await prod.listPolicies()).length).toBeGreaterThan(0);
+    const baseline = await prod.systemBaseline();
+    expect(baseline.version).toBeTruthy();
+    expect((await prod.defaultGuardrailReadiness()).guardrailStatus).toBe("active");
+    expect((await prod.getGuardrail(DEFAULT_GUARDRAIL_ID)).readiness).toBe("ready");
+    expect((await prodDb.pool.query("SELECT validation_run_id, platform_release FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0])
+      .toMatchObject({ validation_run_id: null, platform_release: { source: "bundled" } });
+    await prod.initialize();
+    expect(await prod.systemBaseline()).toEqual(baseline);
+    expect((await prodDb.pool.query("SELECT count(*)::int AS count FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0].count).toBe(1);
+    expect((await prod.listPolicies()).map(p => p.id)).toEqual(expect.arrayContaining(["builtin-jailbreak", "builtin-content-safety"]));
+    expect((await prod.defaultGuardrailReadiness()).modelIndependent).toBe(true);
+    expect(await prod.requiredPlatformModelBindings()).toEqual([]);
+    const updated = await prod.getGuardrail(DEFAULT_GUARDRAIL_ID);
+    expect(updated.draftConfig.policyBindings).toHaveLength(12);
+    expect((await prodDb.pool.query("SELECT jsonb_array_length(test_suite) AS count FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0].count).toBe(608);
+  });
+
+  it("requires models only for enabled routed targets, not historical versions or disabled routes", async () => {
+    const catalog = PolicyCatalog.load(catalogDir).list();
+    const policy = catalog.find(p => p.id === "builtin-content-safety")!;
+    const draft = { ...defaultGuardrailDraft(catalog), policyBindings: [{ policyId: policy.id, policyVersion: policy.version,
+      action: null, parameterValues: {}, enabledRuleIds: policy.rules.map(r => r.id), ruleActions: {}, enabledRails: [...policy.rails], reasoningPolicy: null }] };
+    await prodDb.pool.query("INSERT INTO guardrail (id,name,draft_config,status) VALUES ('opt-in','Opt-in',$1,'active')", [draft]);
+    const plan = buildGuardrailPlan({ guardrailId: "opt-in", guardrailVersion: "v1", draft, policies: catalog });
+    await prodDb.pool.query("INSERT INTO guardrail_artifact (id,guardrail_id,guardrail_version,generation,compiler_version,nemo_version,runtime_profile,plan,config_yaml,checksum,signature) VALUES ('opt-in-artifact','opt-in','v1',1,'test','test','auto',$1,'','opt-in-checksum','test')", [plan]);
+    expect(await prod.requiredPlatformModelBindings()).toEqual([]);
+    const route = { id: "r", name: "Fallback", kind: "fallback", enabled: true, selector: { expression: { combinator: "and", conditions: [] } },
+      targets: [{ id: "t", guardrailId: "opt-in", guardrailVersion: "v1", weightBps: 10000 }] };
+    await prodDb.pool.query("INSERT INTO traffic_router (id,name,draft,active_snapshot,active_revision) VALUES ('health-router','Health',$1,$1,1)", [{ routes: [route] }]);
+    expect(await prod.requiredPlatformModelBindings()).toEqual(["content_safety.input", "content_safety.output"]);
+    for (const changed of [{ ...route, enabled: false }, { ...route, targets: [{ ...route.targets[0]!, weightBps: 0 }] },
+      { ...route, targets: [{ ...route.targets[0]!, guardrailVersion: "v2" }] }]) {
+      await prodDb.pool.query("UPDATE traffic_router SET active_snapshot=$1 WHERE id='health-router'", [{ routes: [changed] }]);
+      expect(await prod.requiredPlatformModelBindings()).toEqual([]);
+    }
+    await prodDb.pool.query("UPDATE traffic_router SET active_snapshot=$1 WHERE id='health-router'", [{ routes: [route] }]);
+    await prodDb.pool.query("UPDATE guardrail SET status='disabled' WHERE id='opt-in'");
+    expect(await prod.requiredPlatformModelBindings()).toEqual([]);
+    await prodDb.pool.query("DELETE FROM traffic_router WHERE id='health-router'");
+    await prodDb.pool.query("DELETE FROM guardrail_artifact WHERE id='opt-in-artifact'");
+    await prodDb.pool.query("DELETE FROM guardrail WHERE id='opt-in'");
   });
 
   it("exports the resource tree: byte-identical, deterministic, every Policy version as a leaf", async () => {
@@ -184,8 +240,8 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     expect(result.policies.existing.length).toBe(preview.policies.length - 1);
     expect(parsePackage((await prod.packages.exportPackage(guardrailId, published)).bytes).versions.map(item => item.version)).toEqual(published);
 
-    const uatArtifacts = (await uatDb.pool.query("SELECT guardrail_version, checksum, signature, generation FROM guardrail_artifact ORDER BY guardrail_version")).rows;
-    const prodArtifacts = (await prodDb.pool.query("SELECT guardrail_version, checksum, signature, generation, content_digest_version FROM guardrail_artifact ORDER BY guardrail_version")).rows;
+    const uatArtifacts = (await uatDb.pool.query("SELECT guardrail_version, checksum, signature, generation FROM guardrail_artifact WHERE guardrail_id <> 'guardrail-default' ORDER BY guardrail_version")).rows;
+    const prodArtifacts = (await prodDb.pool.query("SELECT guardrail_version, checksum, signature, generation, content_digest_version FROM guardrail_artifact WHERE guardrail_id <> 'guardrail-default' ORDER BY guardrail_version")).rows;
     expect(prodArtifacts.map(row => row.checksum)).toEqual(uatArtifacts.map(row => row.checksum));
     for (const [index, row] of prodArtifacts.entries()) {
       expect(row.signature).not.toBe(uatArtifacts[index].signature);
@@ -340,16 +396,16 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     // Passing the load check lets the default pool hold the version, so it can
     // be tried in Playground before any Router serves it.
     expect(await prod.desiredGeneration()).toBe(generation + 1);
-    expect((await prod.desiredStateForPool("default")).artifacts.map(item => item.guardrailVersion)).toEqual([version]);
+    expect((await prod.desiredStateForPool("default")).artifacts.filter(item => item.guardrailId === guardrailId).map(item => item.guardrailVersion)).toEqual([version]);
     await prod.packages.checkRoutedImports(change.snapshot);
     await prod.trafficRouting.approveChange(router.id, change.id, "approver", {});
     const desired = await prod.desiredStateForPool("default");
-    expect(desired.artifacts.map(item => [item.guardrailVersion, item.checksum])).toEqual([[version, expect.stringMatching(/^[0-9a-f]{64}$/)]]);
+    expect(desired.artifacts.filter(item => item.guardrailId === guardrailId).map(item => [item.guardrailVersion, item.checksum])).toEqual([[version, expect.stringMatching(/^[0-9a-f]{64}$/)]]);
     // What a published Router pins is delivered whatever its row says: Runners
     // reject a desired state with a missing target, which would stop all traffic.
     const { rows: [release] } = await prodDb.pool.query("SELECT released_at, validation_run_id FROM guardrail_version WHERE guardrail_id = $1 AND version = $2", [guardrailId, version]);
     await prodDb.pool.query("UPDATE guardrail_version SET status = 'pending', released_at = NULL WHERE guardrail_id = $1 AND version = $2", [guardrailId, version]);
-    expect((await prod.desiredStateForPool("default")).artifacts.map(item => item.guardrailVersion)).toEqual([version]);
+    expect((await prod.desiredStateForPool("default")).artifacts.filter(item => item.guardrailId === guardrailId).map(item => item.guardrailVersion)).toEqual([version]);
     await prodDb.pool.query("UPDATE guardrail_version SET status = 'ready', released_at = $3, validation_run_id = $4 WHERE guardrail_id = $1 AND version = $2", [guardrailId, version, release.released_at, release.validation_run_id]);
 
   });
@@ -365,7 +421,8 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     // An authorized source adds a version to the local Default; import alone never changes basic protection.
     expect((await prodDb.pool.query("SELECT origin FROM guardrail WHERE id = $1", [DEFAULT_GUARDRAIL_ID])).rows).toEqual([{ origin: "local" }]);
     expect((await prodDb.pool.query("SELECT origin FROM guardrail_version WHERE guardrail_id = $1 AND version = $2", [DEFAULT_GUARDRAIL_ID, published[0]])).rows).toEqual([{ origin: "imported" }]);
-    expect(await prod.systemBaseline()).toMatchObject({ version: null });
+    const previousBaseline = (await prod.systemBaseline()).version;
+    expect(previousBaseline).toBe("20261021-000000.001Z");
     const before = await prod.desiredStateForPool("default");
     // Like any imported version, it serves only once released here.
     await expect(prod.setSystemBaseline({ version: published[0]!, reason: "CR-7", actorId: "admin" })).rejects.toMatchObject({ code: "baseline_version_not_ready" });
@@ -378,7 +435,7 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     expect(after.artifacts.length).toBe(before.artifacts.length + 1);
     expect(after.artifacts.some(item => item.guardrailId === DEFAULT_GUARDRAIL_ID && item.guardrailVersion === published[0])).toBe(true);
     const { rows: [audit] } = await prodDb.pool.query("SELECT detail FROM audit_event WHERE kind = 'system.baseline_changed'");
-    expect(audit.detail).toMatchObject({ previousVersion: null, version: published[0], reason: "CR-7 adopt UAT baseline" });
+    expect(audit.detail).toMatchObject({ previousVersion: previousBaseline, version: published[0], reason: "CR-7 adopt UAT baseline" });
   });
 
   /** Another installation whose catalog differs in one Policy, with its own database. */

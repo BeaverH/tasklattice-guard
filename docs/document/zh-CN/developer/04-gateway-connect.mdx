@@ -1,10 +1,15 @@
 ---
 id: "gateway-connect"
-title: "LiteLLM Endpoint 协议"
-summary: "HTTP 请求与响应、Call ID 关联、WebSocket 流式输出，以及错误和重试约束。"
+title: "网关集成（LiteLLM 规范）"
+summary: "以 LiteLLM Generic Guardrail 规范作为网关接入标准，说明检测请求、响应处理和流式输出扩展。"
 order: 1
 ---
-本章只适用于 **LiteLLM Endpoint**（`litellm-generic-guardrail`）。LiteLLM Provider、自研网关和 Agent 都可以实现这份契约。Scan 使用不同的路径、认证和响应，见 [Scan 请求与响应](/document/developer/scan-protocol)。
+Guard 以 **LiteLLM Generic Guardrail 技术规范**作为 AI 网关接入标准。LiteLLM，以及遵循该规范的自研网关或 Agent，均可通过 LiteLLM Endpoint（`litellm-generic-guardrail`）提交模型输入和输出，并按检测结果执行放行、阻断或替换。
+
+- **使用 LiteLLM**：按 [连接 LiteLLM](/document/developer/endpoint-setup#endpoint-litellm) 配置 TaskLattice Guard Provider。Provider 负责调用下文的检测接口并执行返回结果，无需手动构造这些请求。
+- **开发自研网关或 Agent**：按下文的 LiteLLM 规范实现 HTTP 检测请求与响应处理；流式输出使用 Guard 的 WebSocket 扩展协议。接入方无需部署 LiteLLM。
+
+完整接入流程是：检测输入，按结果放行或替换后调用模型，再检测输出并决定交付内容。本文说明 LiteLLM 规范在 Guard 中的请求与响应约定，以及 Guard 提供的连接验证、调用关联和 WebSocket 流式输出扩展。Scan 接入见 [Scan 请求与响应](/document/developer/scan-protocol)。
 
 <a id="gateway-connection" />
 ## 地址、认证与连接验证
@@ -19,6 +24,21 @@ order: 1
 
 JSON 请求要带 `x-api-key: <Endpoint 凭据>` 和 `Content-Type: application/json`。凭据不能放在请求体中，也不能用 Controller 的个人 Access Token 或模型服务密钥代替。
 
+以下 HTTP 示例一起展示请求行或状态行、Header 和 JSON Body，空行分隔 Header 与 Body。域名、Endpoint ID、凭据和 Runner ID 均为示例值；`Content-Length`、`Date` 等由 HTTP 客户端或服务器生成的 Header 省略。
+
+验证请求：
+
+```http
+POST /runtime/v1/endpoints/your-endpoint-id/verify HTTP/1.1
+Host: guard-runtime.example.com
+x-api-key: <Endpoint 凭据>
+Content-Type: application/json
+
+{}
+```
+
+对应的 cURL 命令：
+
 ```bash
 export TALI_GUARD_ENDPOINT='https://guard-runtime.example.com/runtime/v1/endpoints/your-endpoint-id'
 export TALI_GUARD_TOKEN='<Endpoint 凭据>'
@@ -27,9 +47,12 @@ curl -sS --fail-with-body -X POST "${TALI_GUARD_ENDPOINT%/}/verify" \
   -H 'Content-Type: application/json' -d '{}'
 ```
 
-HTTP `200` 的完整验证响应：
+验证响应：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
 {
   "ready": true,
   "adapter_id": "litellm-generic-guardrail",
@@ -40,14 +63,22 @@ HTTP `200` 的完整验证响应：
 `ready` 只证明凭据和 Adapter 匹配。它不执行 Policy 检测，也不保证 Router、固定版本或模型依赖已经就绪。之后还必须发送真实的检测请求。
 
 <a id="gateway-checks" />
-## 输入与完整输出请求
+## HTTP 检测 API：输入与完整输出
 
-下面是一个可以直接发送的输入检测请求体。
+输入和完整输出都调用 `POST {endpoint}/beta/litellm_basic_guardrail_api`，用 `input_type` 区分阶段：`request` 检测模型输入，`response` 检测完整的模型输出。流式输出使用后文的 [WebSocket 接口](#gateway-stream-protocol)。
+
+输入检测请求如下。这里的 `input_type: "request"` 表示检测模型输入；后面的 `input_type: "response"` 仍然是发给 Guard 的 HTTP 请求，只是检测对象换成模型输出。
 
 - `texts` 是要检测的内容。
 - `structured_messages` 是上下文，不能代替 `texts`。
+- HTTP Header 中的 `x-api-key` 用于 Endpoint 认证；JSON Body 中的 `request_headers` 用于描述原业务请求，两者分别填写。
 
-```json
+```http
+POST /runtime/v1/endpoints/your-endpoint-id/beta/litellm_basic_guardrail_api HTTP/1.1
+Host: guard-runtime.example.com
+x-api-key: <Endpoint 凭据>
+Content-Type: application/json
+
 {
   "input_type": "request",
   "litellm_call_id": "call-123",
@@ -67,7 +98,7 @@ HTTP `200` 的完整验证响应：
 }
 ```
 
-把请求体保存为 `input.json` 后发送：
+仅将上面空行后的 JSON Body 保存为 `input.json`，再运行下面的命令；请求行和 Header 由 cURL 参数设置，不写入这个文件：
 
 ```bash
 curl -sS --fail-with-body -X POST "${TALI_GUARD_ENDPOINT%/}/beta/litellm_basic_guardrail_api" \
@@ -75,9 +106,14 @@ curl -sS --fail-with-body -X POST "${TALI_GUARD_ENDPOINT%/}/beta/litellm_basic_g
   --data-binary @input.json
 ```
 
-输入检测允许继续后，调用方自己请求模型。缓存完整的回答，再向同一路径发送输出检测请求体：
+输入检测允许继续后，调用方自己请求模型。缓存完整的回答，再向同一路径发送输出检测请求，使用相同的认证 Header：
 
-```json
+```http
+POST /runtime/v1/endpoints/your-endpoint-id/beta/litellm_basic_guardrail_api HTTP/1.1
+Host: guard-runtime.example.com
+x-api-key: <Endpoint 凭据>
+Content-Type: application/json
+
 {
   "input_type": "response",
   "litellm_call_id": "call-123",
@@ -100,28 +136,10 @@ curl -sS --fail-with-body -X POST "${TALI_GUARD_ENDPOINT%/}/beta/litellm_basic_g
 - API 模型允许省略 Call ID，但省略后，输入和输出不保证使用同一个版本。
 - 流式调用的 ID 还必须满足 [start 帧的限制](/document/developer/gateway-connect#gateway-stream-protocol)。
 
-<a id="gateway-grounding-context" />
-## Grounding 与形式证明上下文
-
-自研客户端进行完整输出检测时，可以在 `texts` 之外显式提供上下文：
-
-```json
-{
-  "input_type": "response",
-  "texts": ["The warranty lasts one year."],
-  "guardrail_context": {
-    "query": "How long is the warranty?",
-    "grounding_sources": ["The product warranty lasts one year."]
-  }
-}
-```
-
-Grounding 需要 query 和至少一个非空来源；形式验证需要 query，其版本化形式策略来自已发布的 Policy 定义。Runner 将这些字段视为非可信证据，不提升为系统指令，也不作为额外输出检测目标。来源不会混入转换后的 `texts`。使用 Call ID 时，先以同一 ID 检测输入；该次输入携带的上下文会保留给输出检测。query 最长 100,000 字符，来源最多 32 条、合计最多 500,000 字符。这一扩展适用于完整文本 HTTP 接口，客户端必须显式传入，不能假设 LiteLLM Provider 会自动转发检索上下文。
-
 <a id="gateway-request-fields" />
-## 请求字段约束
+## HTTP 检测 API：请求字段
 
-下表区分两件事：客户端接入时必须发送的字段，以及服务端兼容模型允许省略或传 `null` 的字段。
+以下字段属于 `POST {endpoint}/beta/litellm_basic_guardrail_api` 的 JSON 请求体，输入检测和完整输出检测共用这份定义。表中同时标明接入时必须发送的字段，以及服务端为兼容 LiteLLM 而允许省略或传 `null` 的字段。
 
 | 字段 | JSON 类型与默认值 | 行为 |
 | --- | --- | --- |
@@ -129,6 +147,7 @@ Grounding 需要 query 和至少一个非空来源；形式验证需要 query，
 | `texts` | 字符串数组或 `null`。默认 `null`。 | **接入必传。** 明确列出实际要检测的文本。空检测不能证明其他内容已通过。 |
 | `litellm_call_id` | 字符串或 `null`。默认 `null`。 | **关联接入必传。** 新的、非空的模型调用 ID。HTTP 模型没有声明长度上限。流式 ID 最长 256 字符。 |
 | `structured_messages` | 对象数组或 `null`。默认 `null`。 | Policy 上下文。调用上下文最多保留最近 20 条。 |
+| `guardrail_context` | 对象或 `null`。默认 `null`。 | 显式检测上下文。回答核验所需的问题和参考资料见下节。 |
 | `model` | 字符串或 `null`。默认 `null`。 | 模型路由上下文。未提供时从 `request_data.model` 读取。不会触发模型调用。 |
 | `request_data` | 对象。默认 `{}`。不接受 `null`。 | 选定的身份与路由元数据。`user_api_key_alias`、`user_api_key_team_id`、`user_api_key_user_id` 对应 LiteLLM Selector 字段。它不是任意的执行配置。 |
 | `request_headers` | 对象或 `null`。值为字符串或字符串数组。 | 原业务请求的 Header，与 Endpoint 的 HTTP 请求头分开。认证、Cookie 等敏感头不参与路由。 |
@@ -147,26 +166,78 @@ Grounding 需要 query 和至少一个非空来源；形式验证需要 query，
 
 无法完整提取路由上下文时，请求失败。Runner 不会用不完整的上下文继续匹配。
 
-<a id="gateway-actions" />
-## 完整成功响应与 action
+<a id="gateway-grounding-context" />
+### 可选：为回答核验提供问题与参考资料
 
-下面是三种完整的响应体示例。返回哪种结果，取决于已发布的 Policy。阻断理由和替换文本按实际执行生成。正常完成的检测返回 HTTP `200`。
+当已发布的 Policy 启用了以下检查时，自研客户端需要通过同一个 HTTP 检测 API 的 `guardrail_context` 字段补充核验依据。未使用这些检查时，可以跳过本节。
+
+- **回答依据核验（Grounding）**：检查回答是否有参考资料支持、是否与用户问题相关。需要 `query`（用户问题）和至少一条非空的 `grounding_sources`（参考资料，例如 RAG 检索结果）。
+- **形式规则验证**：检查回答是否符合已发布 Policy 中的形式规则。需要 `query`；形式规则来自 Policy，无需在请求中重复传入。
+
+例如，核验“保修期为一年”这条回答时，`texts` 放待检测的回答，`guardrail_context` 放用户问题和产品资料：
+
+```http
+POST /runtime/v1/endpoints/your-endpoint-id/beta/litellm_basic_guardrail_api HTTP/1.1
+Host: guard-runtime.example.com
+x-api-key: <Endpoint 凭据>
+Content-Type: application/json
+
+{
+  "input_type": "response",
+  "texts": ["The warranty lasts one year."],
+  "guardrail_context": {
+    "query": "How long is the warranty?",
+    "grounding_sources": ["The product warranty lasts one year."]
+  }
+}
+```
+
+使用 `litellm_call_id` 关联输入和输出时，先以同一 ID 检测输入；输入请求中提供的这些上下文会保留给输出检测。`query` 最长 100,000 字符，参考资料最多 32 条、合计最多 500,000 字符。
+
+这些字段是核验依据，不是系统指令，也不是额外的输出检测目标；参考资料不会混入替换后的 `texts`。此处说明的是完整文本 HTTP API 的扩展字段，需要客户端显式传入，不能假设 LiteLLM Provider 会自动转发检索资料。
+
+<a id="gateway-actions" />
+## HTTP 检测 API：响应与处理动作
+
+`POST {endpoint}/beta/litellm_basic_guardrail_api` 完成输入或完整输出检测后，返回 HTTP `200` 和 JSON 响应体。**HTTP `200` 表示已返回检测结果，不代表内容被放行。** 调用方必须读取 `action` 字段，按其值放行、阻断或替换内容。
+
+正常检测响应的 Header：
+
+| Header | 含义 |
+| --- | --- |
+| `Content-Type: application/json` | Body 是 JSON 检测结果。 |
+| `x-guard-runner-id` | 处理本次检测的 Runner ID，用于排查请求路径。 |
+| `x-guard-route-assignment` | 有路由分配信息时返回，值是单行 JSON 字符串，记录本次检测的路由分配。此 Header 为可选项，处理动作仍以 Body 中的 `action` 为准。 |
+
+下面是三种响应示例，均展示状态行、固定返回的上述 Header 和 Body。可选的 `x-guard-route-assignment` 未在示例中展开。具体结果由已发布的 Policy 决定，阻断理由和替换文本按实际执行生成。
 
 允许：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+x-guard-runner-id: runner-example
+
 {"action": "NONE"}
 ```
 
 阻断：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+x-guard-runner-id: runner-example
+
 {"action": "BLOCKED", "blocked_reason": "Policy matched."}
 ```
 
 替换：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+x-guard-runner-id: runner-example
+
 {"action": "GUARDRAIL_INTERVENED", "texts": ["Replacement text"]}
 ```
 
@@ -199,7 +270,10 @@ Grounding 需要 query 和至少一个非空来源；形式验证需要 query，
 
 常见的认证错误响应：
 
-```json
+```http
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
 {"detail": "Endpoint credential is invalid."}
 ```
 

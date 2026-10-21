@@ -92,18 +92,21 @@ function harness(reads: unknown[][], config: Partial<ControllerConfig> = {}, upd
 }
 
 describe("Default baseline validation gate", () => {
-  it.each(["mixed", "local-focused"].flatMap(previous => ["missing", "failed"].map(validationStatus => [previous, validationStatus])))
-  ("migrates the system-owned %s Default through model validation, retaining the old release (%s validation)", async (previous, validationStatus) => {
+  it.each(["mixed", "model-enabled"].flatMap(previous => ["missing", "failed"].map(validationStatus => [previous, validationStatus])))
+  ("migrates the system-owned %s Default through local validation, retaining the old release (%s validation)", async (previous, validationStatus) => {
     const stored = { ...(previous === "mixed" ? legacyBaseline() : baseline()), status: "active" };
-    if (previous === "local-focused") {
-      stored.draftConfig.policyBindings = stored.draftConfig.policyBindings.filter(binding =>
-        !["builtin-jailbreak", "builtin-content-safety"].includes(binding.policyId));
-      expect(stored.draftConfig.policyBindings).toHaveLength(12);
+    if (previous === "model-enabled") {
+      stored.draftConfig.policyBindings.splice(2, 0, ...["builtin-jailbreak", "builtin-content-safety"].map(id => {
+        const policy = policies.find(p => p.id === id)!;
+        return { policyId: id, policyVersion: policy.version, action: null, parameterValues: {},
+          enabledRuleIds: policy.rules.map(r => r.id), ruleOrder: policy.rules.map(r => r.id),
+          ruleActions: {}, enabledRails: [...policy.rails], reasoningPolicy: null, testCaseOverrides: {} };
+      }));
     }
     const upgraded = { ...stored, draftRevision: 3, draftConfig: baseline().draftConfig };
     const cases = generatedTestCases(stored.id, upgraded.draftConfig, policies);
     expect(cases.filter(item => ["builtin-jailbreak", "builtin-content-safety"].includes(item.policyId)))
-      .toHaveLength(3);
+      .toHaveLength(0);
     // Reads: Default, user edits, last published version, validation, ...
     const reads: unknown[][] = [[stored], [], [{ sourceDraftRevision: 2, artifactId: "legacy-artifact" }], validationStatus === "failed" ? [{ status: "failed" }] : []];
     if (validationStatus === "missing") reads.push(cases, [{ id: "new-validation" }]);
@@ -130,26 +133,27 @@ describe("Default baseline validation gate", () => {
     expect(test.inserts.some((item) => item.value.kind === "guardrail.compile_requested" || item.value.kind === "runner.desired_state_changed")).toBe(false);
   });
 
-  it("queues real inherited tests before compiling and does not invent a new draft revision on restart", async () => {
+  it("installs the complete signed platform baseline without executing tests or requiring models", async () => {
     const stored = baseline();
     const cases = generatedTestCases(stored.id, stored.draftConfig, policies);
-    const test = harness([[stored], [], [], [], cases, [{ id: "stored-validation" }]]);
+    const test = harness([[stored], [], [], cases], { artifactSigningKeyPath: keyPath });
     await test.service.initialize();
     expect(test.reads).toEqual([]);
-    expect(test.updates).toEqual([]);
-    expect(test.inserts).toContainEqual({ table: "guardrail_validation_run", value: expect.objectContaining({
-      id: expect.stringMatching(/^testing-report-[0-9a-f-]{36}$/),
-      guardrailId: stored.id, sourceDraftRevision: 2, status: "queued", createdBy: null,
-      excludedCaseIds: [], metrics: expect.objectContaining({ total: cases.length, passed: 0 }),
-    }) });
-    expect(test.inserts).toContainEqual({ table: "controller_outbox", value: expect.objectContaining({
-      kind: "guardrail.validation_requested", payload: expect.objectContaining({ testCases: expect.arrayContaining([expect.objectContaining({ sourcePolicyId: cases[0]!.sourcePolicyId })]) }),
-    }) });
-    expect(test.inserts.some((item) => item.table === "guardrail_version")).toBe(false);
+    const artifact = test.inserts.find(item => item.table === "guardrail_artifact")!.value;
+    expect(verify(null, Buffer.from(artifact.checksum as string), publicKey, Buffer.from(artifact.signature as string, "base64"))).toBe(true);
+    expect(JSON.stringify(artifact.plan)).not.toContain("tali.guard.jailbreak.v1");
+    expect(JSON.stringify(artifact.plan)).not.toContain("tali.guard.content-safety.v1");
+    const version = test.inserts.find(item => item.table === "guardrail_version")!.value;
+    expect(version).toMatchObject({ status: "ready", testSuite: expect.any(Array),
+      platformRelease: { source: "bundled", contentDigest: artifact.checksum } });
+    expect(version).not.toHaveProperty("validationRunId");
+    expect(test.inserts.some(item => item.table === "guardrail_validation_run")).toBe(false);
+    expect(test.updates).toContainEqual({ table: "guardrail", value: expect.objectContaining({ status: "active" }) });
+    expect(test.updates).toContainEqual({ table: "controller_state", value: { baselineVersion: artifact.guardrailVersion } });
   });
 
   it.each(["queued", "running", "failed"])("never compiles around a %s validation or retries it on restart", async (status) => {
-    const test = harness([[baseline()], [], [], [{ status }]]);
+    const test = harness([[baseline()], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status }]]);
     await test.service.initialize();
     expect(test.reads).toEqual([]);
     expect(test.updates).toEqual([]);
@@ -157,7 +161,7 @@ describe("Default baseline validation gate", () => {
   });
 
   it("keeps startup available when automatic baseline publication has no version slots", async () => {
-    const test = harness([[baseline()], [], [], [{ status: "passed", guardrailVersion: candidate().guardrailVersion, candidateArtifact: candidate() }], []], {}, {}, 10);
+    const test = harness([[baseline()], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status: "passed", guardrailVersion: candidate().guardrailVersion, candidateArtifact: candidate() }], []], {}, {}, 10);
     await expect(test.service.initialize()).resolves.toBeUndefined();
     expect(test.reads).toEqual([]);
     expect(test.inserts.some(item => item.table === "guardrail_version")).toBe(false);
@@ -188,7 +192,7 @@ describe("Default baseline validation gate", () => {
   });
 
   it("does not publish twice when the validated version already exists", async () => {
-    const test = harness([[baseline()], [], [], [{ status: "passed", guardrailVersion: "20260906-010000.001Z" }], [{ version: "20260906-010000.001Z" }]]);
+    const test = harness([[baseline()], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status: "passed", guardrailVersion: "20260906-010000.001Z" }], [{ version: "20260906-010000.001Z" }]]);
     await test.service.initialize();
     expect(test.reads).toEqual([]);
     expect(test.updates).toEqual([]);
@@ -198,7 +202,7 @@ describe("Default baseline validation gate", () => {
   it("tests again instead of publishing a run that passed before candidates were retained", async () => {
     const stored = baseline();
     const cases = generatedTestCases(stored.id, stored.draftConfig, policies);
-    const test = harness([[stored], [], [], [{ status: "passed", guardrailVersion: "20260906-010000.001Z", candidateArtifact: null }], [], cases, [{ id: "retest" }]]);
+    const test = harness([[stored], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status: "passed", guardrailVersion: "20260906-010000.001Z", candidateArtifact: null }], [], cases, [{ id: "retest" }]]);
     await test.service.initialize();
     expect(test.reads).toEqual([]);
     expect(test.inserts.some((item) => item.table === "guardrail_version")).toBe(false);

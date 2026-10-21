@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
-import subprocess
-from pathlib import Path
+from tests.model_policy_fixture import model_enabled_guardrail
 
 import pytest
 
@@ -29,21 +27,9 @@ class ForbiddenModel:
 
 
 @pytest.mark.asyncio
-async def test_default_full_suite_local_scope_preserves_publication_models():
-    """Real Controller Default selection, frozen cases and real NeMo execution."""
-    source = """
-      import { defaultGuardrailDraft, DEFAULT_GUARDRAIL_ID } from './server/domain/defaults.ts';
-      import { buildGuardrailPlan } from './server/domain/guardrail-plan.ts';
-      import { PolicyCatalog } from './server/policy-catalog/catalog.ts';
-      import { generatedTestCases, applyValidationOverrides } from './server/domain/validation.ts';
-      const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
-      const draft = defaultGuardrailDraft(policies);
-      const plan = buildGuardrailPlan({guardrailId: DEFAULT_GUARDRAIL_ID,
-        guardrailVersion: '20261020-090915.265Z', draft, policies});
-      console.log(JSON.stringify({plan, cases: applyValidationOverrides(generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, policies), draft)}));
-    """
-    data = json.loads(subprocess.run(["node", "--import", "tsx", "--input-type=module", "-e", source],
-        cwd=Path(__file__).resolve().parents[2] / "controller", check=True, capture_output=True, text=True, timeout=30).stdout)
+async def test_opt_in_models_local_test_scope_preserves_publication_models():
+    """Explicitly selected model Policies stay published when model tests are skipped."""
+    data = model_enabled_guardrail()
     model = ForbiddenModel()
     providers = action_providers(*local_action_providers(), EvaluationActionProvider((
         EvaluationRoute("jailbreak", "tali.guard.jailbreak.v1", model),

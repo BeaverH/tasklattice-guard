@@ -44,6 +44,13 @@ describe.skipIf(!url)("Current model configuration PostgreSQL semantics", () => 
       vi.fn(() => { throw new Error('No external calls allowed'); }));
     service.setRailValidator(async () => ({ passed: true, message: 'Synthetic Rail result', latencyMs: 1 }));
   });
+  it("does not require models until protection actually depends on them", async () => {
+    expect(await service.modelHealth([])).toEqual({ status: "healthy", reason: "not_required", bindings: [] });
+    expect(await service.modelHealth(["jailbreak.input"])).toMatchObject({ status: "unhealthy",
+      reason: "configuration_required", bindings: [{ id: "jailbreak.input", status: "missing" }] });
+    await seedPartial();
+    expect(await service.modelHealth([])).toEqual({ status: "healthy", reason: "not_required", bindings: [] });
+  });
   async function seed(assigned = false) {
     const assignments = emptyModelAssignments();
     if (assigned) assignments.bindings['content_safety.input'] = modelId;
@@ -106,10 +113,32 @@ describe.skipIf(!url)("Current model configuration PostgreSQL semantics", () => 
       ...selection,
       ...(kind === 'unready' ? { bindingIds: ['content_safety.output' as const] } : {}),
       ...(kind === 'stale-active' ? { expectedActiveId: null } : {}),
-    })).rejects.toMatchObject({ code: kind === 'unready' ? 'model_configuration_not_validated' : 'model_configuration_changed' });
+    })).rejects.toMatchObject({ code: kind === 'unready' ? 'validation_failed' : 'model_configuration_changed' });
     expect(Number((await pool.query('SELECT desired_generation FROM controller_state')).rows[0].desired_generation)).toBe(0);
     expect((await pool.query('SELECT id FROM controller_outbox')).rows).toHaveLength(0);
   });
+  it.each(["failed", "not_tested"])("activates %s model bindings without changing their test results", async status => {
+    const draftId = await seed(true);
+    if (status === "failed") {
+      service.setRailValidator(async () => ({ passed: false, message: "Model API returned 429", latencyMs: 1 }));
+      const receipt = await service.previewAssignment("content_safety.input", modelId, "synthetic-admin");
+      await service.updateAssignment("content_safety.input", modelId, "synthetic-admin", receipt.validationId);
+    }
+    const result = await service.applyConfiguration("synthetic-admin", await review());
+    expect(result.validationReport?.valid).toBe(false);
+    await service.finalizeActivation(result.id);
+    expect((await service.activeConfiguration())?.assignments.bindings["content_safety.input"]).toBe(modelId);
+    expect(await service.modelHealth([])).toEqual({ status: "healthy", reason: "not_required", bindings: [] });
+    expect(await service.modelHealth(["content_safety.input"])).toMatchObject({ status: "unhealthy", bindings: [{ status }] });
+    if (status === "failed") {
+      expect((await service.view()).active?.validationReport?.checks).toContainEqual(expect.objectContaining({ status: "failed", message: "Model API returned 429" }));
+      service.setRailValidator(async () => ({ passed: true, message: "Recovered", latencyMs: 1 }));
+      await service.validateAssignment("content_safety.input", "synthetic-admin");
+      expect((await service.modelHealth(["content_safety.input"])).status).toBe("healthy");
+    }
+    expect((await pool.query("SELECT detail FROM audit_event WHERE kind='model_configuration.activation_started'")).rows[0].detail.validationPassed).toBe(false);
+  });
+
   it('keeps unready bindings unassigned on first Apply', async () => {
     const { activeId, selection } = await seedPartial();
     await pool.query('DELETE FROM model_configuration_revision WHERE id=$1', [activeId]);

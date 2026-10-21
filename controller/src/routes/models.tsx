@@ -215,7 +215,7 @@ export function GuardrailCatalogPage() {
   });
   const changes = modelBindingChanges(query.data.draft.assignments, query.data.active?.assignments, report?.checks ?? []);
   const canActivate = administrator && !operationPending && !dirty && !query.data.activating && Boolean(query.data.draft.reviewToken)
-    && selectedBindings.length > 0 && selectedBindings.every(id => changes.some(change => change.id === id && change.ready));
+    && selectedBindings.length > 0 && selectedBindings.every(id => changes.some(change => change.id === id));
   const confirmationPending = activateMutation.isPending;
   const activationReviewChanged = Boolean(activationReview && (
     activationReview.draft?.id !== query.data.draft.id
@@ -263,7 +263,7 @@ export function GuardrailCatalogPage() {
               type="button"
               className="h-11"
               disabled={operationPending}
-              onClick={() => { setActivationReview(structuredClone(query.data)); setSelectedBindings(changes.filter(change => change.ready).map(change => change.id)); setPendingAction("activate"); }}
+              onClick={() => { setActivationReview(structuredClone(query.data)); setSelectedBindings(changes.map(change => change.id)); setPendingAction("activate"); }}
             >
               {activateMutation.isPending ? <LoaderCircle className="animate-spin" /> : <Play />}{t("modelSettings.reviewActivation")}
             </Button>
@@ -317,7 +317,7 @@ export function GuardrailCatalogPage() {
           </div> : null}
           <RunnerConfigurationComparison view={activationReview} selectedBindings={selectedBindings} onSelectionChange={setSelectedBindings} disabled={confirmationPending} />
           {changes.length > 0 ? <p className="text-sm text-muted-foreground">{t("modelSettings.partialActivationDescription")}</p> : null}
-          {dirty || changes.length > 0 && !changes.some(change => change.ready) ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t(dirty ? "modelSettings.reviewUnsavedBindings" : "modelSettings.reviewNeedsValidation")}</AlertDescription></Alert> : !changes.length ? <p className="text-sm text-muted-foreground">{t("modelSettings.reviewNeedsValidation")}</p> : null}
+          {dirty || changes.some(change => selectedBindings.includes(change.id) && !change.ready) ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t(dirty ? "modelSettings.reviewUnsavedBindings" : "modelSettings.reviewNeedsValidation")}</AlertDescription></Alert> : !changes.length ? <p className="text-sm text-muted-foreground">{t("modelSettings.reviewNeedsValidation")}</p> : null}
           {query.data.activating ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t("modelSettings.activationInProgress")}</AlertDescription></Alert> : null}
         </> : null}
         {pendingAction === "activate" && activationReviewChanged ? <Alert variant="warning"><CircleAlert /><AlertDescription>{t("modelSettings.activationReviewChanged")}</AlertDescription></Alert> : null}
@@ -359,7 +359,7 @@ function RunnerConfigurationComparison({ view, selectedBindings, onSelectionChan
         const selected = selectedBindings.includes(binding.id);
         return <TableRow key={binding.id}>
           <TableCell className="whitespace-normal align-top"><p className="font-medium">{capabilityTitle(t, binding)}</p>
-            {change ? <label className="flex min-h-11 items-center gap-2 text-xs"><CarbonCheckbox aria-label={`${t("modelSettings.applyBinding")} ${binding.id}`} checked={selected} disabled={disabled || !change.ready}
+            {change ? <label className="flex min-h-11 items-center gap-2 text-xs"><CarbonCheckbox aria-label={`${t("modelSettings.applyBinding")} ${binding.id}`} checked={selected} disabled={disabled}
               onChange={event => onSelectionChange(event.target.checked ? [...selectedBindings, binding.id] : selectedBindings.filter(id => id !== binding.id))} />
               {t(change.ready ? "modelSettings.bindingReady" : "modelSettings.bindingNotReady")}</label> : null}
           </TableCell>
@@ -410,7 +410,7 @@ function ControlPlaneSection({ models, selectedId, savedId, report, disabled, sa
         <AssignmentValidationStatus target="control_plane" model={selected} report={report} dirty={dirty} />
         <div className="flex items-center gap-2 lg:justify-self-end">
           <Button type="button" variant="testing" className="h-11" disabled={disabled || !selected || saving || validating} onClick={onValidate}>{validating ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{t("modelSettings.validateAssignment")}</Button>
-          <Button type="button" className="h-11" disabled={disabled || saving || validating || (selectedId ? !report?.checks.some((check) => check.id === `probe:control_plane:${selectedId}` && check.status === "passed") : !dirty)} onClick={() => onSave(selectedId)}>{saving ? <LoaderCircle className="animate-spin" /> : <Play />}{t("modelSettings.activateControlPlane")}</Button>
+          <Button type="button" className="h-11" disabled={disabled || saving || validating || (!selectedId && !dirty)} onClick={() => onSave(selectedId)}>{saving ? <LoaderCircle className="animate-spin" /> : <Play />}{t("modelSettings.activateControlPlane")}</Button>
         </div>
       </div>
     </section>
@@ -585,7 +585,7 @@ function AssignmentActions({ report, target, modelId, dirty, disabled, saving, v
   const { t } = useTranslation();
   return <div className="flex flex-col items-stretch justify-end gap-2 2xl:flex-row">
     <Button type="button" variant="testing" className="h-11" disabled={disabled || !modelId || saving || validating} onClick={() => onValidate(target)}>{validating ? <LoaderCircle className="animate-spin" /> : <TestTube2 />}{t("modelSettings.validateAssignment")}</Button>
-    <Button type="button" className="h-11" disabled={disabled || saving || validating || (modelId ? !report?.checks.some((check) => check.id === `probe:${target}:${modelId}` && check.status === "passed" && check.evidenceKind === "nemo-rail-v1") : !dirty)} onClick={() => onSave(target, modelId)}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}{t("modelSettings.saveAssignment")}</Button>
+    <Button type="button" className="h-11" disabled={disabled || saving || validating || (!modelId && !dirty)} onClick={() => onSave(target, modelId)}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}{t("modelSettings.saveAssignment")}</Button>
   </div>;
 }
 

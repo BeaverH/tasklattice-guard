@@ -528,7 +528,7 @@ export class ModelConfigurationService {
   async updateAssignment(target: ModelAssignmentTarget, modelId: string | null, actorId: string, validationId?: string) {
     const existing = await this.ensureDraft(actorId);
     const previous = normalizeModelAssignments(existing.assignments);
-    if ((target === "control_plane" ? previous.controlPlane : previous.bindings[target]) === modelId) return publicRevision(existing);
+    if ((target === "control_plane" ? previous.controlPlane : previous.bindings[target]) === modelId && !validationId) return publicRevision(existing);
     let evidence: ModelValidationCheck | undefined;
     if (modelId) {
       const [model] = await this.db.select().from(modelDefinitions).where(eq(modelDefinitions.id, modelId));
@@ -541,10 +541,10 @@ export class ModelConfigurationService {
         eq(modelAssignmentValidations.id, validationId), eq(modelAssignmentValidations.actorId, actorId),
         eq(modelAssignmentValidations.target, target), eq(modelAssignmentValidations.modelId, modelId),
       )) : [];
-      evidence = preview && preview.expiresAt.getTime() > Date.now() && preview.evidence.status === "passed"
+      evidence = preview && preview.expiresAt.getTime() > Date.now()
         && preview.fingerprint === JSON.stringify([model, provider]) ? preview.evidence : undefined;
-      if (!evidence) {
-        throw new ConflictError("Provide an unexpired successful validationId for this account, target and unchanged Model before saving.", "model_assignment_not_validated");
+      if (validationId && !evidence) {
+        throw new ConflictError("The validation receipt expired or belongs to a different account, target or Model configuration. Test again or save without a receipt.", "model_assignment_not_validated");
       }
     }
     const draft = await this.ensureEditableDraft(actorId);
@@ -570,7 +570,7 @@ export class ModelConfigurationService {
       updatedAt: new Date(),
     }).where(unchangedRevision(draft)).returning();
     if (!updated) throw new ConflictError("The draft changed during Rail validation. Validate the current assignment again.", "model_configuration_changed");
-    await this.audit(actorId, "model_configuration.assignment_updated", "model_configuration", updated.id, { target, modelId });
+    await this.audit(actorId, "model_configuration.assignment_updated", "model_configuration", updated.id, { target, modelId, validationStatus: evidence?.status ?? "not_tested" });
     return publicRevision(updated);
   }
 
@@ -661,8 +661,8 @@ export class ModelConfigurationService {
       const assignments = normalizeModelAssignments(active?.assignments);
       const changes = modelBindingChanges(proposed, assignments, draft.validationReport?.checks ?? []);
       const selected = new Set(selection.bindingIds);
-      if (selection.bindingIds.some(id => !changes.some(change => change.id === id && change.ready))) {
-        throw new ConflictError("Only changed bindings with successful Runner Rail validation can be applied.", "model_configuration_not_validated");
+      if (selection.bindingIds.some(id => !changes.some(change => change.id === id))) {
+        throw new ConflictError("Only saved binding changes can be applied.", "model_configuration_changed");
       }
       for (const id of selected) assignments.bindings[id] = proposed.bindings[id];
       const checks = [
@@ -670,7 +670,16 @@ export class ModelConfigurationService {
         ...(draft.validationReport?.checks ?? []).filter(check => selection.bindingIds.some(id => checkBelongsToTarget(check, id))),
       ];
       const report = await this.reportFromChecks(assignments, checks, tx);
-      if (!report.valid) throw new ConflictError("The merged Runner configuration is not valid. Validate the selected bindings again.", "model_configuration_not_validated");
+      // Tests are evidence, not an activation veto. Structural errors still reject the configuration.
+      for (const binding of capabilityBindingDefinitions) {
+        const modelId = assignments.bindings[binding.id];
+        if (!modelId) continue;
+        const [model] = await tx.select().from(modelDefinitions).where(eq(modelDefinitions.id, modelId));
+        const [provider] = model ? await tx.select().from(modelProviders).where(eq(modelProviders.id, model.providerId)) : [];
+        if (!model || !provider || !assignmentTargetAcceptsModel(binding.id, model.profile, provider.kind)) {
+          throw new ValidationError(`Unavailable or incompatible Model assigned to ${binding.id}.`);
+        }
+      }
       // Discard obsolete attempts/history, retaining only the current config and latest edits.
       const [maximum] = await tx.select({ value: max(modelConfigurationRevisions.revision) }).from(modelConfigurationRevisions);
       await tx.delete(modelConfigurationRevisions).where(and(
@@ -688,7 +697,7 @@ export class ModelConfigurationService {
         payload: { resourceType: "model_configuration", revisionId: id, generation } });
       await tx.insert(auditEvents).values({ id: randomUUID(), kind: "model_configuration.activation_started", actorId,
         resourceType: "model_configuration", resourceId: id,
-        detail: { generation, sourceDraftId: draft.id, previousActiveId: active?.id ?? null,
+        detail: { validationPassed: report.valid, validationChecks: report.checks, generation, sourceDraftId: draft.id, previousActiveId: active?.id ?? null,
           changes: changes.filter(change => selected.has(change.id)).map(change => ({ bindingId: change.id, previousModelId: change.current, modelId: change.next })) } });
       // Keep the original draft and all unselected edits; the next diff is against the new Active snapshot.
       return snapshot!;
@@ -788,8 +797,7 @@ export class ModelConfigurationService {
       .orderBy(desc(modelConfigurationRevisions.revision)).limit(1);
     if (!revision) return null;
     const modelId = normalizeModelAssignments(revision.assignments).controlPlane;
-    if (!modelId || !revision.validationReport?.checks.some((check) =>
-      check.id === `probe:control_plane:${modelId}` && check.status === "passed")) return null;
+    if (!modelId) return null;
     const model = await this.model(modelId);
     const provider = await this.provider(model.providerId);
     if (!assignmentTargetAcceptsModel("control_plane", model.profile, provider.kind)) return null;
@@ -824,6 +832,31 @@ export class ModelConfigurationService {
       provider.id,
       decryptModelCredential(provider.credentialCiphertext, this.rootSecret),
     ]));
+  }
+
+  async modelHealth(requiredBindings: readonly string[]) {
+    // Optional assignments and historical versions do not make a local platform unhealthy.
+    if (!requiredBindings.length) return { status: "healthy" as const, reason: "not_required" as const, bindings: [] };
+    const active = await this.activeConfiguration();
+    const [revision] = active ? await this.db.select().from(modelConfigurationRevisions)
+      .where(eq(modelConfigurationRevisions.id, active.revisionId)) : [];
+    const [draft] = await this.db.select().from(modelConfigurationRevisions)
+      .where(inArray(modelConfigurationRevisions.state, ["draft", "validated"]))
+      .orderBy(desc(modelConfigurationRevisions.revision)).limit(1);
+    const bindings = [...new Set(requiredBindings)].map(id => {
+      const modelId = active?.assignments.bindings[id as CapabilityBindingId];
+      const model = active?.models.find(item => item.id === modelId);
+      const draftChecks = normalizeModelAssignments(draft?.assignments).bindings[id as CapabilityBindingId] === modelId
+        ? draft?.validationReport?.checks ?? [] : [];
+      const checks = [...draftChecks, ...(revision?.validationReport?.checks ?? [])];
+      const check = modelId ? checks.find(item => item.id === `probe:${id}:${modelId}` && item.evidenceKind === "nemo-rail-v1") : undefined;
+      return { id, status: !model ? "missing" as const : check?.status === "passed" ? "passed" as const
+        : check?.status === "failed" ? "failed" as const : "not_tested" as const };
+    });
+    return { status: bindings.every(item => item.status === "passed") ? "healthy" as const : "unhealthy" as const,
+      reason: bindings.some(item => item.status === "missing") ? "configuration_required" as const
+        : bindings.some(item => item.status !== "passed") ? "validation_required" as const : "configured" as const,
+      bindings };
   }
 
   async statusSummary() {

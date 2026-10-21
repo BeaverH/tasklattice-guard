@@ -173,7 +173,7 @@ def _topic_plan() -> dict[str, object]:
 
 def _default_plan() -> dict[str, object]:
     # Historical default-local-v1 fixture: deliberately keep only local components.
-    # This artifact is not the current deployable, model-dependent Default.
+    # The production Default is also local; this fixture retains its historical identity.
     # Control-plane generation only. Runner-only tests never import the builder.
     source = """
       import {defaultGuardrailDraft} from './server/domain/defaults.ts';

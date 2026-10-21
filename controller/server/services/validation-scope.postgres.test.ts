@@ -15,7 +15,7 @@ import { ControlPlaneService } from "./control-plane.js";
 import type { ValidationCaseResult } from "../domain/models.js";
 
 const url = process.env.GUARD_TEST_POSTGRES_URL;
-describe.skipIf(!url)("Local-only Default publication uses the standard gate", () => {
+describe.skipIf(!url)("Historical model-enabled Default publication uses the standard gate", () => {
   it("freezes scope, rejects a local failure, publishes full model protection and restricts tenants", async () => {
     const database = await createTestDatabase(url!, "scope");
     const directory = mkdtempSync(join(tmpdir(), "guard-scope-"));
@@ -30,6 +30,11 @@ describe.skipIf(!url)("Local-only Default publication uses the standard gate", (
       await database.db.insert(controllerState).values({ id: "singleton", desiredGeneration: 0 });
       const catalog = PolicyCatalog.load(config.policyCatalogDir).list();
       const draft = defaultGuardrailDraft(catalog);
+      // Explicit opt-in, also used to verify retained historical model-enabled releases.
+      const jailbreak = catalog.find(p => p.id === "builtin-jailbreak")!;
+      draft.policyBindings.splice(2, 0, { policyId: jailbreak.id, policyVersion: jailbreak.version,
+        action: null, parameterValues: {}, enabledRuleIds: ["model/jailbreak"], ruleOrder: ["model/jailbreak"],
+        ruleActions: {}, enabledRails: ["input"], reasoningPolicy: null, testCaseOverrides: {} });
       draft.policyBindings = draft.policyBindings.map(binding => ({ ...binding, testCaseOverrides: {} }));
       await database.db.insert(guardrails).values({ id: DEFAULT_GUARDRAIL_ID, name: "Default", draftConfig: draft, status: "draft", draftRevision: 1 });
       const cases = generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, catalog);

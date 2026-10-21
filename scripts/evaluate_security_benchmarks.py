@@ -266,9 +266,9 @@ def replay(output: Path, selected: list[Sample], version: dict, args: argparse.N
                                frozen_plan=args.frozen_plan, snapshot_sha256=args.snapshot_sha256)
     providers, model_evidence = model_providers(args.model_config, args.credential_env) if args.model_config else (None, None)
     target = {**target_identity({"default": built["plan"]},
-              scope="frozen_snapshot" if args.frozen_plan else ("model_dependent_default" if args.model_config else "local_components_only"),
-              snapshot_sha256=args.snapshot_sha256, models=model_evidence, local_only=args.local_components_only),
-              "kind": "frozen_snapshot" if args.frozen_plan else ("current_default" if args.model_config else "local_components_ablation"),
+              scope="frozen_snapshot" if args.frozen_plan else ("local_components_only" if args.local_components_only else "local_default"),
+              snapshot_sha256=args.snapshot_sha256, models=model_evidence, local_only=not bool(args.model_config)),
+              "kind": "frozen_snapshot" if args.frozen_plan else ("local_components_ablation" if args.local_components_only else "current_default"),
               "adapter": "DraftPreviewRuntime/input", "plan_sha256": canonical_hash(built["plan"]),
               "detection_models": model_evidence, "generation_model": None,
               "product_configuration_mutated": False}
@@ -336,8 +336,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Replay supports explicit advbench/tdc2023/harmbench goal tracks only; use prepare for scenario inventories")
         if not args.protocol or not args.splits or not args.max_cases or args.max_cases < 1:
             parser.error("Replay requires --protocol harmful_goal, --splits and positive --max-cases")
-        if not (args.local_components_only or args.model_config):
-            parser.error("Choose --model-config for current Default or --local-components-only for ablation")
+        if args.local_components_only and args.model_config:
+            parser.error("Local-only evaluation cannot use --model-config")
         if args.credential_env and not args.model_config:
             parser.error("--credential-env requires --model-config")
     elif args.model_config or args.local_components_only or args.credential_env or args.frozen_plan:

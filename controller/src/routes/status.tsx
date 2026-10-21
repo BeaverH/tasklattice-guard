@@ -1,3 +1,5 @@
+import { useAuth } from "@/lib/auth";
+import { hasPermission } from "../../shared/rbac";
 import { SettingsNavigation } from "@/components/settings-navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -15,6 +17,7 @@ type HealthState = SystemHealthSnapshot["status"] | "checking";
 
 export function HealthPage() {
   const { t, i18n } = useTranslation();
+  const auth = useAuth();
   const query = useQuery({
     queryKey: queryKeys.systemHealth,
     queryFn: async ({ signal }) => {
@@ -34,6 +37,7 @@ export function HealthPage() {
   const state: HealthState = loading ? "checking" : snapshot?.status ?? "unknown";
   const controlPlane = snapshot?.components.controlPlane;
   const dataPlane = snapshot?.components.dataPlane;
+  const models = snapshot?.components.models;
   const controlReason = controlPlane?.reason ?? "unknown";
   const dataReason = dataPlane?.reason ?? "unknown";
   const counts = {
@@ -45,7 +49,8 @@ export function HealthPage() {
   const descriptionKey = loading ? "loadingDescription" : state === "unknown" ? "unknownDescription"
     : controlPlane?.status === "unhealthy" ? "controlPlaneFailure"
       : dataPlane?.reason === "no_runners" ? "noRunners"
-        : state === "unhealthy" ? "runnersUnresponsive" : "healthyDescription";
+        : dataPlane?.status === "unhealthy" ? "runnersUnresponsive"
+          : models?.status !== "healthy" && models ? "modelsNeedAttention" : "healthyDescription";
   const checkedAt = snapshot?.observedAt ? Date.parse(snapshot.observedAt) : query.data?.attemptedAt;
   const checkedTime = checkedAt ? new Intl.DateTimeFormat(i18n.language, {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -106,6 +111,17 @@ export function HealthPage() {
               <TableCell>
                 <p>{loading ? "—" : t(`componentHealth.dataDetail.${dataReason}`, counts)}</p>
                 <Link className="health-runner-link" to="/settings/runner">{t("componentHealth.viewRunners")}<ArrowRight aria-hidden="true" className="size-4" /></Link>
+              </TableCell>
+            </TableRow>
+            <TableRow data-health={models?.status ?? "unknown"}>
+              <TableCell><p className="font-semibold">{t("componentHealth.models")}</p></TableCell>
+              <TableCell><ComponentStatus state={loading ? "checking" : models?.status ?? "unknown"} label={t(`componentHealth.modelStatus.${models?.reason ?? "unknown"}`)} /></TableCell>
+              <TableCell>
+                <p>{t(`componentHealth.modelDetail.${models?.reason ?? "unknown"}`)}</p>
+                {models?.bindings.filter(binding => binding.status !== "passed").map(binding => <p key={binding.id} className="mt-1 text-sm">{binding.id} · {t(`componentHealth.modelBinding.${binding.status}`)}</p>)}
+                {hasPermission(auth.user?.role, "models", "write")
+                  ? <Link className="health-runner-link" to="/settings/guardrail-catalog">{t("componentHealth.configureModels")}<ArrowRight aria-hidden="true" className="size-4" /></Link>
+                  : models?.status !== "healthy" ? <p className="mt-2 text-muted-foreground">{t("componentHealth.contactAdmin")}</p> : null}
               </TableCell>
             </TableRow>
           </TableBody>

@@ -1,4 +1,4 @@
-"""Actual Default compilation/runtime with synthetic HTTP contract responses.
+"""Opt-in model Policy compilation/runtime with synthetic HTTP contract responses.
 
 These tests prove model wiring, original-text ordering and failure behavior;
 they do not measure real classifier quality or count as model validation.
@@ -17,12 +17,12 @@ from runner.providers import dynamic_runtime_action_providers
 from runner.toolkit.compiler.domain import PlanCompilationError
 from runner.toolkit.nemo.action_registry import action_providers
 from runner.toolkit.runtime.contracts import ProtectionRequest, RequestContext
-from scripts.evaluate_default_public import build_default_plan
+from tests.model_policy_fixture import model_enabled_guardrail
 
 
 @pytest.fixture(scope="module")
 def model_default_plan():
-    return build_default_plan()["plan"]
+    return model_enabled_guardrail()["plan"]
 
 
 def configuration(omit=None):
@@ -122,7 +122,7 @@ async def test_model_blocks_are_attributed_to_default_policy(model_default_plan,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("missing", ["jailbreak.input", "content_safety.input", "content_safety.output"])
-async def test_default_cannot_prepare_without_each_required_binding(model_default_plan, missing):
+async def test_opt_in_models_cannot_prepare_without_each_required_binding(model_default_plan, missing):
     runtime, identity = runtime_and_identity(model_default_plan,
         lambda _: pytest.fail("No inference before all model bindings are ready"), omit=missing)
     try:
@@ -135,7 +135,7 @@ async def test_default_cannot_prepare_without_each_required_binding(model_defaul
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase,failed_model", [("input", "jailbreak"), ("input", "safety"), ("output", "safety")])
 @pytest.mark.parametrize("failure", ["unavailable", "malformed"])
-async def test_default_fails_closed_when_required_model_fails(model_default_plan, phase, failed_model, failure):
+async def test_opt_in_models_fail_closed_when_required_model_fails(model_default_plan, phase, failed_model, failure):
     calls = []
 
     def respond(request):

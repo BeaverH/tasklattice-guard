@@ -20,9 +20,9 @@ export function defaultGuardrailDraft(policies: readonly PolicyDto[]): Guardrail
     const policy = byId.get(policyId);
     if (!policy) throw new Error(`Default Guardrail Policy ${policyId} is missing from the Runner catalog.`);
     if (!policy.rules.length) throw new Error(`Default Guardrail Policy ${policyId} has no Rules.`);
-    if (!["local", "model", "local_then_model"].includes(policy.protection.execution)
+    if (policy.protection.execution !== "local"
       || policy.rules.some((rule) => !["local", "platform"].includes(rule.implementation.execution))) {
-      throw new Error(`Default Guardrail Policy ${policyId} must use verified local or platform Model implementations.`);
+      throw new Error(`Default Guardrail Policy ${policyId} must use verified local implementations.`);
     }
     const knownRules = new Set(policy.rules.map(rule => rule.id));
     if (ruleIds.some(id => !knownRules.has(id))) throw new Error(`Default Guardrail Policy ${policyId} is missing a reviewed Rule.`);

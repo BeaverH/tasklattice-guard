@@ -37,7 +37,7 @@ import { recommendationCatalog } from "../control-plane-ai/recommendation-catalo
 import { ConflictError, ControllerError, NotFoundError, ValidationError } from "../domain/errors.js";
 import { enforcementActions } from "../domain/guardrail-plan.js";
 import { deriveRunnerFleetStatus } from "../domain/platform-status.js";
-import { deriveComponentHealth } from "../domain/component-health.js";
+import { deriveComponentHealth, withModelHealth } from "../domain/component-health.js";
 import type { RunnerControlServer } from "../control-channel/control-server.js";
 import { endpointSetup, type ControlPlaneService } from "../services/control-plane.js";
 import { endpointRequestOrigin } from "./endpoint-origin.js";
@@ -284,6 +284,7 @@ export function createHttpApp(input: {
     };
     const assignedBindings = new Set(configuredModels.dataPlane.models.map((model) => model.id));
     const missingBindings = configuredProtection.coverage?.requiredModelBindings.filter((id) => !assignedBindings.has(id)) ?? [];
+    const modelHealth = input.models ? await input.models.modelHealth(await input.service.requiredPlatformModelBindings()) : null;
     const basicProtection = {
       ...configuredProtection,
       status: configuredProtection.status !== "ready" ? configuredProtection.status
@@ -297,7 +298,8 @@ export function createHttpApp(input: {
         : configuredProtection.status === "unconfigured"
           ? "baseline_not_configured" as const
           : null;
-    const status = basicProtection.status === "unavailable"
+    const status = modelHealth && modelHealth.status !== "healthy" ? "unavailable" as const
+      : basicProtection.status === "unavailable"
       ? "unavailable" as const
       : runnerFleet.status === "unavailable"
         ? "unavailable" as const
@@ -311,6 +313,8 @@ export function createHttpApp(input: {
     const reasons: PlatformStatusSnapshot["reasons"] = [
       ...(basicProtectionReason ? [basicProtectionReason] : []),
       ...(missingBindings.length ? ["default_model_bindings_missing" as const] : []),
+      ...(modelHealth?.reason === "configuration_required" && !missingBindings.length ? ["required_model_bindings_missing" as const] : []),
+      ...(modelHealth?.reason === "validation_required" ? ["model_validation_required" as const] : []),
       ...(configuredProtection.coverage?.hasUnknownDependencies ? ["default_dependencies_unknown" as const] : []),
       ...runnerReasons.filter((reason) => reason !== "all_required_components_ready"),
     ];
@@ -936,9 +940,14 @@ export function createHttpApp(input: {
   app.get("/api/v1/system/health", authenticated, async (context) => {
     context.header("Cache-Control", "no-store");
     const runners = await input.service.listRunnerHeartbeats().catch(() => null);
-    return context.json(deriveComponentHealth(runners, {
+    const health = deriveComponentHealth(runners, {
       observedAt: new Date(), offlineAfterSeconds: input.config.offlineAfterSeconds,
-    }));
+    });
+    const models = input.models ? await input.service.requiredPlatformModelBindings()
+      .then(bindings => input.models!.modelHealth(bindings))
+      .catch(() => ({ status: "unknown" as const, reason: "unknown" as const, bindings: [] }))
+      : { status: "unknown" as const, reason: "unknown" as const, bindings: [] };
+    return context.json(withModelHealth(health, models));
   });
   app.get("/api/v1/system/version", authenticated, async (context) => {
     const pools = await input.service.listRunnerPoolsWithCapacity();

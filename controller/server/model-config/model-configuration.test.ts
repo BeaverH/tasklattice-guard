@@ -79,10 +79,9 @@ describe("Capability configuration after registration", () => {
     expect(JSON.stringify(railValidator.mock.calls)).toContain("tali.typesafe-jev-topic.v1");
     expect(JSON.stringify(railValidator.mock.calls)).not.toContain("company-policy");
   });
-  it("requires a successful preview before saving and preserves the evidence", async () => {
+  it("allows untested assignments and preserves later preview evidence", async () => {
     const { service, rows } = setup();
-    await expect(service.updateAssignment("content_safety.input", id, "admin"))
-      .rejects.toMatchObject({ code: "model_assignment_not_validated" });
+    expect((await service.updateAssignment("content_safety.input", id, "admin")).validationReport?.valid).toBe(false);
     const before = structuredClone(rows.get(modelConfigurationRevisions));
     const receipt1 = await service.previewAssignment("content_safety.input", id, "admin");
     expect(rows.get(modelConfigurationRevisions)).toEqual(before);
@@ -92,12 +91,13 @@ describe("Capability configuration after registration", () => {
     }));
   });
 
-  it("rejects failed previews and changes to the validated model", async () => {
+  it("retains failed previews but rejects stale receipts after model changes", async () => {
     const { service, rows, railValidator } = setup();
     railValidator.mockResolvedValueOnce({ passed: false, message: "Failed", latencyMs: 1 });
     const receipt2 = await service.previewAssignment("content_safety.input", id, "admin");
-    await expect(service.updateAssignment("content_safety.input", id, "admin", receipt2.validationId))
-      .rejects.toMatchObject({ code: "model_assignment_not_validated" });
+    const saved = await service.updateAssignment("content_safety.input", id, "admin", receipt2.validationId);
+    expect(saved.validationReport?.valid).toBe(false);
+    expect(saved.validationReport?.checks).toContainEqual(expect.objectContaining({ status: "failed", message: "Failed" }));
     const receipt3 = await service.previewAssignment("content_safety.input", id, "admin");
     rows.get(modelDefinitions)![0]!.model = "changed-model";
     await expect(service.updateAssignment("content_safety.input", id, "admin", receipt3.validationId))

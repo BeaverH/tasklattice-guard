@@ -122,7 +122,8 @@ def test_local_target_accepts_other_registered_local_actions_without_rewriting_p
 
 
 @pytest.mark.parametrize("entry,arguments", [
-    (content.main, []), (jailbreak.main, ["--diagnostics-only"]),
+    (content.main, ["--local-components-only", "--model-config", "missing"]),
+    (jailbreak.main, ["--diagnostics-only"]),
     (content.main, ["--local-components-only", "--snapshot-sha256", "0" * 64]),
     (jailbreak.main, ["--frozen-plans", "missing"]),
 ])

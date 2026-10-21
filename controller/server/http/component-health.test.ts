@@ -5,6 +5,7 @@ import { loadConfig } from "../config.js";
 import type { RunnerControlServer } from "../control-channel/control-server.js";
 import type { ControllerMetrics } from "../metrics.js";
 import type { ControlPlaneService } from "../services/control-plane.js";
+import type { ModelConfigurationService } from "../model-config/service.js";
 import { createHttpApp } from "./app.js";
 
 const config = loadConfig({ NODE_ENV: "test", CONTROLLER_DATABASE_URL: "postgresql://test:test@localhost/test",
@@ -13,15 +14,18 @@ const config = loadConfig({ NODE_ENV: "test", CONTROLLER_DATABASE_URL: "postgres
 
 function setup(signedIn = true) {
   const service = {
+    requiredPlatformModelBindings: vi.fn().mockResolvedValue(["jailbreak.input", "content_safety.input", "content_safety.output"]),
     listRunnerHeartbeats: vi.fn().mockResolvedValue([{ status: "syncing", lastHeartbeatAt: new Date() }]),
     defaultGuardrailReadiness: vi.fn().mockRejectedValue(new Error("No published Guardrail")),
   };
-  const app = createHttpApp({ config,
+  const models = { modelHealth: vi.fn().mockResolvedValue({ status: "unhealthy", reason: "configuration_required",
+    bindings: [{ id: "jailbreak.input", status: "missing" }] }) };
+  const app = createHttpApp({ config, models: models as unknown as ModelConfigurationService,
     auth: { api: { getSession: vi.fn().mockResolvedValue(signedIn ? { user: { id: "reader", role: "admin" } } : null) } } as unknown as ControllerAuth,
     service: service as unknown as ControlPlaneService,
     runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics,
   });
-  return { app, service };
+  return { app, service, models };
 }
 
 describe("GET /api/v1/system/health", () => {
@@ -30,15 +34,33 @@ describe("GET /api/v1/system/health", () => {
     expect((await app.request("/api/v1/system/health")).status).toBe(401);
     expect(service.listRunnerHeartbeats).not.toHaveBeenCalled();
   });
-  it("returns fresh component evidence without checking Guardrail publication or model configuration", async () => {
+  it("marks the platform unhealthy when required models are missing", async () => {
     const { app, service } = setup();
     const response = await app.request("/api/v1/system/health");
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toMatchObject({ status: "healthy", components: {
-      controlPlane: { status: "healthy" }, dataPlane: { connectedRunners: 1, totalRunners: 1 },
+    expect(await response.json()).toMatchObject({ status: "unhealthy", components: {
+      controlPlane: { status: "healthy" }, dataPlane: { connectedRunners: 1, totalRunners: 1 }, models: { status: "unhealthy", reason: "configuration_required" },
     } });
     expect(service.defaultGuardrailReadiness).not.toHaveBeenCalled();
+  });
+  it("keeps failed active model tests visible without changing Guardrail state", async () => {
+    const { app, service, models } = setup();
+    models.modelHealth.mockResolvedValue({ status: "unhealthy", reason: "validation_required", bindings: [{ id: "jailbreak.input", status: "failed" }] });
+    expect(await (await app.request("/api/v1/system/health")).json()).toMatchObject({ status: "unhealthy", components: {
+      controlPlane: { status: "healthy" }, dataPlane: { status: "healthy" }, models: { reason: "validation_required" },
+    } });
+    expect(service.defaultGuardrailReadiness).not.toHaveBeenCalled();
+    models.modelHealth.mockResolvedValue({ status: "healthy", reason: "configured", bindings: [] });
+    expect(await (await app.request("/api/v1/system/health")).json()).toMatchObject({ status: "healthy" });
+  });
+  it("keeps a local platform healthy with no required or configured models", async () => {
+    const { app, service, models } = setup();
+    service.requiredPlatformModelBindings.mockResolvedValue([]);
+    models.modelHealth.mockResolvedValue({ status: "healthy", reason: "not_required", bindings: [] });
+    expect(await (await app.request("/api/v1/system/health")).json()).toMatchObject({ status: "healthy",
+      components: { models: { reason: "not_required", bindings: [] } } });
+    expect(models.modelHealth).toHaveBeenCalledWith([]);
   });
   it("distinguishes a failed Controller store check from unknown Runner health", async () => {
     const { app, service } = setup();

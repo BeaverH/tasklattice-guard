@@ -12,7 +12,7 @@ describe.skipIf(!url)("Endpoint Scan defaults in PostgreSQL", () => {
     database = await createTestDatabase(url!, "scan_defaults");
     await database.pool.query("INSERT INTO auth_user(id,name,email,role) VALUES ('admin','Admin','scan@test.local','admin')");
     await database.pool.query("INSERT INTO controller_state(id,desired_generation) VALUES ('singleton',0)");
-    service = new ControlPlaneService(database.db, { runtimeServiceUrl: "http://runtime.test" } as ControllerConfig);
+    service = new ControlPlaneService(database.db, { runtimePublicUrl: "http://runtime.test" } as ControllerConfig);
   });
   afterAll(async () => { await database?.drop(); });
 

@@ -334,8 +334,9 @@ export const guardrailVersions = pgTable("guardrail_version", {
   artifactId: text("artifact_id"),
   // The passed test run this version was released with in this environment:
   // the draft candidate run when published here, a run of this exact content
-  // and suite when imported. Null while pending.
+  // and suite when imported. Null for pending or bundled platform releases.
   validationRunId: text("validation_run_id"),
+  platformRelease: jsonb("platform_release").$type<import("../../shared/platform-release.js").PlatformRelease>(),
   testingEvidence: jsonb("testing_evidence").$type<VersionTestingEvidence>(),
   // Retain the real source report separately from passed release evidence.
   sourceValidationRunId: text("source_validation_run_id"),

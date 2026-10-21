@@ -1,8 +1,4 @@
-"""Local component and historical migration regressions.
-
-Model-dependent Default behavior is tested in test_default_model_runtime.py.
-This explicit projection cannot establish a full Default validation pass.
-"""
+"""Complete local Default and historical migration regressions, without models."""
 from __future__ import annotations
 
 from tests.policy_snapshots import library_definitions
@@ -44,10 +40,7 @@ def default_local_baseline() -> dict:
         import { loadSync } from '@grpc/proto-loader';
         import { loadPackageDefinition } from '@grpc/grpc-js';
         const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
-        const fullDraft = defaultGuardrailDraft(policies);
-        // Deliberate component regression, never a deployable Default fallback.
-        const draft = { ...fullDraft, policyBindings: fullDraft.policyBindings.filter(binding =>
-            policies.find(policy => policy.id === binding.policyId).protection.execution === 'local') };
+        const draft = defaultGuardrailDraft(policies);
         const buildPlan = (bindings) => buildGuardrailPlan({
             guardrailId: DEFAULT_GUARDRAIL_ID,
             guardrailVersion: "20260904-010000.001Z",
@@ -289,7 +282,8 @@ async def test_default_local_components_pass_reviewed_composition_cases(default_
     ).validate(envelope.validation_request)
     conflicts = [item for item in results if not item["passed"]]
     assert status == "passed", conflicts
-    assert metrics["total"] == len(cases)
+    assert metrics["total"] == len(cases) == 608
+    assert metrics.get("skipped", 0) == 0
     assert metrics["passed"] == metrics["total"]
     assert not conflicts
     assert all(case["required"] for case in cases)

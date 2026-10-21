@@ -1,4 +1,4 @@
-import type { SystemHealthSnapshot } from "../../shared/component-health.js";
+import type { PlatformModelHealth, SystemHealthSnapshot } from "../../shared/component-health.js";
 import type { RunnerStatus } from "../../shared/lifecycle.js";
 
 type RunnerHeartbeat = { status: RunnerStatus; lastHeartbeatAt: Date | null };
@@ -37,4 +37,10 @@ export function deriveComponentHealth(runners: readonly RunnerHeartbeat[] | null
       },
     },
   };
+}
+
+/** Missing/failed models affect the platform, never the release or an activation permission. */
+export function withModelHealth(snapshot: SystemHealthSnapshot, models: PlatformModelHealth): SystemHealthSnapshot {
+  return { ...snapshot, status: models.status === "healthy" ? snapshot.status : "unhealthy",
+    components: { ...snapshot.components, models } };
 }

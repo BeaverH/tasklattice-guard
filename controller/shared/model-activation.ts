@@ -10,7 +10,7 @@ export type PartialModelActivation = z.infer<typeof partialModelActivationSchema
 
 type Assignments = { bindings: Partial<Record<CapabilityBindingId, string | null>> };
 type Check = { id: string; status: string; evidenceKind?: string | undefined };
-/** Only saved changes with successful per-Rail evidence are eligible. Removal is explicit. */
+/** Saved changes and their test evidence. `ready` describes passing tests, not permission to activate. */
 export function modelBindingChanges(draft: Assignments, active: Assignments | null | undefined, checks: readonly Check[]) {
   return capabilityBindingIds.flatMap(id => {
     const current = active?.bindings[id] ?? null;

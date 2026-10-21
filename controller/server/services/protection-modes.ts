@@ -1,3 +1,4 @@
+import { matchesPlatformRelease } from "../../shared/platform-release.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, gt, isNull, lte, ne } from "drizzle-orm";
 import type { ControllerDatabase } from "../db/client.js";
@@ -13,13 +14,14 @@ type Runner = typeof runnerInstances.$inferSelect;
 
 export async function hasReleasedGuardrail(db: Pick<ControllerDatabase, "select">, id: string): Promise<boolean> {
   const versions = await db.select({ checksum: artifacts.checksum, suite: guardrailVersions.testSuite,
-    version: guardrailVersions.version, runId: guardrailVersions.validationRunId, evidence: guardrailVersions.testingEvidence })
+    platformRelease: guardrailVersions.platformRelease, version: guardrailVersions.version, runId: guardrailVersions.validationRunId, evidence: guardrailVersions.testingEvidence })
     .from(guardrailVersions).innerJoin(artifacts, eq(artifacts.id, guardrailVersions.artifactId))
     .where(and(eq(guardrailVersions.guardrailId, id), eq(guardrailVersions.status, "ready")));
   const reports = versions.length ? await db.select({ version: validationRuns.guardrailVersion,
     checksum: validationRuns.candidateDigest, suite: validationRuns.testSuiteDigest }).from(validationRuns)
     .where(and(eq(validationRuns.guardrailId, id), eq(validationRuns.status, "passed"))) : [];
   return versions.some(v => v.suite && (
+    matchesPlatformRelease(id, v.platformRelease, v.checksum, testSuiteDigest(v.suite)) ||
     (v.evidence?.release?.id === v.runId && matchesTestEvidence(v.evidence?.release, v.checksum, testSuiteDigest(v.suite)))
     || reports.some(r => r.version === v.version && r.checksum === v.checksum && r.suite === testSuiteDigest(v.suite!))
   ));

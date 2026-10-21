@@ -13,18 +13,6 @@ export const defaultPolicySelection = [
     ]
   },
   {
-    "policyId": "builtin-jailbreak",
-    "ruleIds": [
-      "model/jailbreak"
-    ]
-  },
-  {
-    "policyId": "builtin-content-safety",
-    "ruleIds": [
-      "model/content-safety"
-    ]
-  },
-  {
     "policyId": "local-content-safety",
     "ruleIds": [
       "category/denied_insults",

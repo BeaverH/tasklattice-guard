@@ -12,6 +12,8 @@ export const platformStatusReasons = [
   "default_guardrail_initializing",
   "default_guardrail_unavailable",
   "default_model_bindings_missing",
+  "model_validation_required",
+  "required_model_bindings_missing",
   "default_dependencies_unknown",
   "baseline_not_configured",
   "runner_heartbeat_stale",
