@@ -13,14 +13,14 @@ vi.mock('@/lib/api', () => ({ getGuardrailDeletionImpact: vi.fn().mockResolvedVa
 
 describe('Guardrail row actions', () => {
   afterEach(cleanup);
-  it("keeps Default export and duplicate actions without a delete entry", async () => {
+  it("offers Default the same export, duplicate and delete actions", async () => {
     render(<QueryClientProvider client={new QueryClient()}>
-      <GuardrailRowActions guardrail={{ id: 'guardrail-default', name: 'Default', is_default: true } as Guardrail} />
+      <GuardrailRowActions guardrail={{ id: 'guardrail-default', name: 'Default' } as Guardrail} />
     </QueryClientProvider>);
     fireEvent.click(screen.getByRole('button', { name: 'Actions: Default' }));
     expect(await screen.findByRole('menuitem', { name: 'Duplicate' })).toBeTruthy();
-    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
-    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+    expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it.each(['Duplicate', 'Delete'])('opens the %s confirmation without navigating the row', async action => {

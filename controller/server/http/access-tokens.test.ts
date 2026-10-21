@@ -46,7 +46,6 @@ describe("Access token HTTP authority", () => {
     expect(readOnly.updateRunnerPool).not.toHaveBeenCalled();
   });
   it.each([
-    ["PUT", "/system/baseline"],
     ["POST", "/guardrails/guardrail-default/test-runs"],
     ["POST", "/guardrails/guardrail-default/publish"],
     ["POST", "/guardrails/guardrail-default/versions/v1/test-runs"],

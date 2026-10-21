@@ -30,13 +30,10 @@ function desiredStateService(results: unknown[][]) {
   return service;
 }
 
-// Select order: controller state, the pinned baseline, baseline artifact,
-// ready artifacts, disabled Guardrails, logging levels, disabled Endpoints,
+// Select order: controller state, ready artifacts, disabled Guardrails, logging levels, disabled Endpoints,
 // active Endpoints.
 const desiredStateResults = () => [
   [{ desiredGeneration: 9 }],
-  [{ baselineVersion: "v-default" }],
-  [{ artifactId: "art-default" }],
   [artifact("art-1"), artifact("art-2"), artifact("art-default")],
   [], [], [],
   [{ id: "endpoint-1", trafficRouterId: "router-1", adapter: "litellm-generic-guardrail", verification: { credentials: [] } }],
@@ -45,14 +42,14 @@ const desiredStateResults = () => [
 describe("desired state per pool", () => {
   it("distributes an explicit false Scan default", async () => {
     const results = desiredStateResults();
-    results[7] = [{ id: "scan", adapter: "f5-scan", scanFlagOnlyDefault: false, verification: { credentials: [] } }];
+    results[5] = [{ id: "scan", adapter: "f5-scan", scanFlagOnlyDefault: false, verification: { credentials: [] } }];
     const desired = await desiredStateService(results).desiredStateForPool("default");
     expect(desired.endpoints[0]).toMatchObject({ endpointId: "scan", scanFlagOnlyDefault: false });
   });
-  it("ships only Router-referenced artifacts plus the Default Guardrail to non-default pools", async () => {
+  it("ships only Router-referenced artifacts to non-default pools", async () => {
     const desired = await desiredStateService(desiredStateResults()).desiredStateForPool("edge");
     expect(desired.generation).toBe(9);
-    expect(desired.artifacts.map((item) => item.id).sort()).toEqual(["art-1", "art-default"]);
+    expect(desired.artifacts.map((item) => item.id).sort()).toEqual(["art-1"]);
     expect(desired).not.toHaveProperty("routers");
     expect(desired.routerRevisions).toEqual([expect.objectContaining({ routerId: "router-1", assignmentAlgorithm: "hmac-sha256-v1", assignmentKeyId: "v1" })]);
     expect(desired.routerRevisions[0]!.assignmentKey).toHaveLength(32);

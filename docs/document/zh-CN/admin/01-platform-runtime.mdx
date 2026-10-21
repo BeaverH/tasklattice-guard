@@ -15,7 +15,7 @@ order: 0
 | Runner | 认证 Endpoint 调用、执行检测，并回报应用状态。 |
 | 应用或网关 | 调用业务模型、提交待检内容，并执行每次 Decision。 |
 
-Default 是平台维护的本地基线。常规安装配置随包发布的版本，不宣称本环境执行了一次通过的测试。业务用户基于已审查 Policy 创建自己的 Guardrail。
+Default 仅在首次安装时预配置本地防护和随包版本，不宣称本环境执行过测试。用户可以像普通 Guardrail 一样编辑、测试、发布和删除它；重启保留修改与删除结果。流量防护由 Router 规则和 Fallback 指定。
 
 <a id="platform-health" />
 ## 查看健康与下发状态

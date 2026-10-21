@@ -58,7 +58,7 @@ describe("Health tab", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Healthy" });
     expect(screen.getByText("Not required")).toBeTruthy();
-    expect(screen.getByText("The baseline and enabled routes use local protection. Model configuration is optional.")).toBeTruthy();
+    expect(screen.getByText("Enabled routes use local protection. Model configuration is optional.")).toBeTruthy();
     expect(screen.queryByText("Models required")).toBeNull();
   });
   it("explains missing models as a platform issue with a configuration link", async () => {

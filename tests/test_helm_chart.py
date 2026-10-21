@@ -322,8 +322,8 @@ def test_chart_renders_without_model_configuration_sections():
     ("controlPlaneAgent.provider.model=unused", "controlPlaneAgent"),
     ("models.credentials.existingSecret=unused", "models"),
     ("evaluators.automatedReasoning.endpointUrl=http://unused.invalid", "evaluators"),
-    ("controller.promotion.export.existingSecret=unused", "export"),
-    ("controller.promotion.trust.existingConfigMap=unused", "trust"),
+    ("controller.promotion.export.existingSecret=unused", "promotion"),
+    ("controller.promotion.trust.existingConfigMap=unused", "promotion"),
     ("database.url=", "url"),
     ("security.artifactSigning.privateKey=", "privateKey"),
     ("security.artifactSigning.publicKey=", "publicKey"),
@@ -1364,20 +1364,10 @@ def test_promotion_defaults_mount_no_promotion_material_and_switch_no_feature():
     assert not {"package-signing", "package-trust", "baseline-package"} & {volume["name"] for volume in spec["volumes"]}
 
 
-def test_optional_baseline_is_mounted_read_only():
-    spec = _controller(render(
+def test_removed_startup_baseline_configuration_is_rejected():
+    assert "promotion" in render_error(
         "--set", "controller.promotion.baselinePackage.existingConfigMap=guard-baseline",
-    ))
-    container = spec["containers"][0]
-    environment = {entry["name"]: entry.get("value") for entry in container["env"]}
-    assert "CONTROLLER_PACKAGE_TRUST_PATH" not in environment
-    assert environment["CONTROLLER_BASELINE_PACKAGE_PATH"] == "/etc/tasklattice/baseline-package/baseline.guardrail.zip"
-    mounts = {mount["name"]: mount for mount in container["volumeMounts"]}
-    assert "package-trust" not in mounts
-    assert mounts["baseline-package"]["readOnly"]
-    volumes = {volume["name"]: volume for volume in spec["volumes"]}
-    assert "package-trust" not in volumes
-    assert volumes["baseline-package"]["configMap"]["name"] == "guard-baseline"
+    )
 
 
 def test_development_uat_keeps_local_service_names_and_needs_no_package_configuration():

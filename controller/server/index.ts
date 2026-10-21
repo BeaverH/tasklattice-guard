@@ -1,7 +1,6 @@
 import { pruneTestingReportHistory } from "./services/testing-report-retention.js";
 import { AccessTokenService } from "./services/access-tokens.js";
 import { serve, type ServerType } from "@hono/node-server";
-import { readFileSync } from "node:fs";
 
 import { createAuth } from "./auth.js";
 import { loadConfig } from "./config.js";
@@ -24,10 +23,6 @@ const resealed = await service.resealArtifacts();
 if (resealed) process.stdout.write(`Re-sealed ${resealed} Artifact(s) under the current content digest contract.\n`);
 await service.initialize();
 await service.pricing.start();
-if (config.baselinePackagePath) {
-  const baseline = await service.importBaselinePackage(readFileSync(config.baselinePackagePath));
-  process.stdout.write(`Baseline package: Default Guardrail ${baseline.version}${baseline.adopted ? " adopted as the runtime baseline" : " present; the existing baseline is unchanged"}.\n`);
-}
 const prunedReports = await pruneTestingReportHistory(db);
 if (prunedReports) process.stdout.write(`Pruned ${prunedReports} expired Testing Reports (2 Passed + 1 Failed per immutable version; separate unversioned history).\n`);
 const models = new ModelConfigurationService(db, config.betterAuthSecret, config.policyCatalogDir);

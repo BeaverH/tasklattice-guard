@@ -242,23 +242,18 @@ describe.skipIf(!url)("Traffic composition transactions in PostgreSQL", () => {
     await pool.query("INSERT INTO guardrail_version (guardrail_id,version,generation,status,runtime_profile,plan,artifact_id,released_at) VALUES ('guard-b','0',90,'ready','auto','{}','artifact-b0',now())");
   }
   const toOld = () => { const value = draft(); value.routes[0]!.targets[0]!.guardrailId = "guard-b"; value.routes[0]!.targets[0]!.guardrailVersion = "0"; return value; };
-  it("lets an administrator delete unused Default history but preserves its baseline and tenant read-only access", async () => {
+  it("lets a user delete every unused preconfigured version", async () => {
     await pool.query(`INSERT INTO auth_user (id,name,email,role) VALUES ('tenant','Tenant','tenant@example.test','user');
       INSERT INTO guardrail (id,name,draft_config,status) VALUES ('guardrail-default','Default','{}','active');
       INSERT INTO guardrail_version (guardrail_id,version,generation,status,runtime_profile,plan,released_at) VALUES
-        ('guardrail-default','baseline',3,'ready','auto','{}',now()),
-        ('guardrail-default','unused',4,'ready','auto','{}',now());
-      UPDATE controller_state SET baseline_version='baseline' WHERE id='singleton'`);
-    expect(await impact("unused", "guardrail-default")).toMatchObject({ deletable: true, references: [], blockers: [] });
-    await expect(service.deleteGuardrailVersion({ guardrailId: "guardrail-default", version: "unused", actorId: "tenant" })).rejects.toMatchObject({ code: "forbidden" });
-    await expect(service.deleteGuardrailVersion({ guardrailId: "guardrail-default", version: "baseline", actorId: actor })).rejects.toMatchObject({
-      code: "version_in_use", detail: { impact: { deletable: false, references: [{ kind: "baseline" }] } },
-    });
-    await service.deleteGuardrailVersion({ guardrailId: "guardrail-default", version: "unused", actorId: actor });
-    expect(await count("guardrail_version", "guardrail_id='guardrail-default' AND version='unused'")).toBe(0);
-    expect(await count("guardrail_version", "guardrail_id='guardrail-default' AND version='baseline'")).toBe(1);
-    expect((await service.systemBaseline()).version).toBe("baseline");
-    expect(await count("audit_event", "kind='guardrail.version_deleted' AND resource_id='guardrail-default'")).toBe(1);
+        ('guardrail-default','initial',3,'ready','auto','{}',now()),
+        ('guardrail-default','unused',4,'ready','auto','{}',now())`);
+    for (const version of ["initial", "unused"]) {
+      expect(await impact(version, "guardrail-default")).toMatchObject({ deletable: true, references: [], blockers: [] });
+      await service.deleteGuardrailVersion({ guardrailId: "guardrail-default", version, actorId: "tenant" });
+    }
+    expect(await count("guardrail_version", "guardrail_id='guardrail-default'")).toBe(0);
+    expect(await count("audit_event", "kind='guardrail.version_deleted' AND resource_id='guardrail-default'")).toBe(2);
   });
   it("lists every routing reference before deleting a version", async () => {
     await oldVersion();
@@ -569,13 +564,14 @@ describe.skipIf(!url)("Traffic composition transactions in PostgreSQL", () => {
     expect(preview).toMatchObject({ hasUnpublishedChanges: true, canDiscard: true, draftRevision: 2, baselineVersion: "1" });
     expect(preview.changes.map(c => c.kind)).toEqual(expect.arrayContaining(["setting", "caseUpdated", "testScope"]));
     const originalVersion = (await db.select().from(schema.guardrailVersions).where(eq(schema.guardrailVersions.guardrailId, "guard-a")))[0];
+    const outboxBefore = await count("controller_outbox");
     const restored = await service.discardGuardrailDraft({ id: "guard-a", actorId: actor, expectedDraftRevision: 2, expectedBaselineVersion: "1" });
     expect(restored).toMatchObject({ draftRevision: 3, hasUnpublishedChanges: false, loggingLevel: "trace", excludedTestCaseIds: ["custom-case"] });
     expect((await service.guardrailDraftChanges("guard-a")).changes).toEqual([]);
     expect((await db.select().from(schema.testCases).where(eq(schema.testCases.guardrailId, "guard-a")))[0]?.content).toBe("frozen");
     expect((await db.select().from(schema.guardrailVersions).where(eq(schema.guardrailVersions.guardrailId, "guard-a")))[0]).toEqual(originalVersion);
     expect(await count("audit_event", "kind='guardrail.draft_discarded'")).toBe(1);
-    expect(await count("controller_outbox")).toBe(0);
+    expect(await count("controller_outbox")).toBe(outboxBefore);
   });
 
   it("rejects stale and incomplete discard targets before changing data", async () => {

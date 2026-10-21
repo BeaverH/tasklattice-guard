@@ -67,8 +67,6 @@ export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, Toke
   ["GET", "/api/v1/guardrail-packages/:packageId", "guardrails", "read"],
   ["POST", "/api/v1/guardrail-packages/:packageId/imports", "guardrails", "write"],
   ["POST", "/api/v1/guardrails/:id/versions/:version/environment-check", "guardrails", "write"],
-  ["GET", "/api/v1/system/baseline", "guardrails", "read"],
-  ["PUT", "/api/v1/system/baseline", "runners", "write"],
   ["POST", "/api/v1/guardrails/:id/duplicate", "guardrails", "write"],
   ["PATCH", "/api/v1/guardrails/:id", "guardrails", "write"],
   ["POST", "/api/v1/guardrails/:id/publish", "guardrails", "write"],
@@ -137,22 +135,13 @@ export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, Toke
   ["GET", "/api/v1/audit-events", "audit", "read"],
 ];
 export function requiredTokenPermission(method: string, path: string) {
-  // Default history is platform-managed, with usage checked again at deletion.
-  if (method === "DELETE" && /^\/api\/v1\/guardrails\/guardrail-default\/versions\/[^/]+$/.test(path)) {
-    return [method, path, "runners", "write"] as const;
-  }
-  if (method === "POST" && /^\/api\/v1\/guardrails\/guardrail-default\/(?:test-runs|publish|versions\/[^/]+\/(?:test-runs|release|environment-check))$/.test(path)) {
-    return [method, path, "runners", "write"] as const;
-  }
   return tokenRoutePermissions.find(([verb, template]) => verb === method &&
     new RegExp(`^${template.replace(/:[^/]+/g, "[^/]+")}$`).test(path));
 }
 
-/** Platform baseline maintenance retains its token scope, but needs admin account authority. */
+/** Resource permissions apply equally to preconfigured and user-created Guardrails. */
 export function requiredAccountPermission(method: string, path: string): { resource: PermissionResource; action: AccessAction } | undefined {
   const permission = requiredTokenPermission(method, path);
   if (!permission) return undefined;
-  const platformMaintenance = permission[2] === "runners" && permission[3] === "write"
-    && (path === "/api/v1/system/baseline" || path.startsWith("/api/v1/guardrails/guardrail-default/"));
-  return { resource: platformMaintenance ? "settings" : permission[2], action: permission[3] };
+  return { resource: permission[2], action: permission[3] };
 }

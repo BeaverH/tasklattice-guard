@@ -8,8 +8,8 @@ const exec = promisify(execFile);
 const env = process.env;
 const controller = new URL(env.GUARD_DEV_CONTROLLER_URL ?? "http://localhost:38081");
 const runtime = new URL(env.GUARD_DEV_RUNTIME_URL ?? "http://localhost:38082");
-const email = env.GUARD_DEV_ADMIN_EMAIL ?? "admin@tasklattice.local";
-const password = env.GUARD_DEV_ADMIN_PASSWORD ?? "password";
+const email = env.GUARD_DEV_USER_EMAIL ?? "user@tasklattice.local";
+const password = env.GUARD_DEV_USER_PASSWORD ?? "password";
 const namespace = env.HELM_NAMESPACE ?? "tali";
 const context = env.HELM_CONTEXT ?? "orbstack";
 const guardRelease = env.GUARD_DEV_RELEASE_NAME ?? "tali-guard";
@@ -73,7 +73,7 @@ async function ensureRouter(endpointId, version) {
   }
   router = (await api(`/api/v1/routers/${router.id}`)).result;
   if (!router.activeRevision || router.activeDraftRevision !== router.draftRevision) {
-    // The dev stack has a single administrator, so it applies its own change
+    // The dev stack has a single authoring user, so it applies its own change
     // through the audited emergency path instead of waiting for a second approver.
     let change = router.pendingChangeRequest;
     if (!change) {
@@ -111,13 +111,12 @@ async function writeSecret(apiBase, apiKey) {
 
 try {
   await signIn();
-  // Routes pin an exact version: LITELLM_GUARD_GUARDRAIL_VERSION, or for the
-  // Default Guardrail the version serving as the runtime baseline.
-  const version = env.LITELLM_GUARD_GUARDRAIL_VERSION
-    ?? (guardrailId === "guardrail-default" ? (await api("/api/v1/system/baseline")).result.version : null);
   const guardrail = (await api(`/api/v1/guardrails/${guardrailId}`)).result;
+  // Pin the requested version, or the newest released version, in this Router.
+  const version = env.LITELLM_GUARD_GUARDRAIL_VERSION
+    ?? guardrail.versions.filter(item => item.status === "ready").sort((a, b) => b.version.localeCompare(a.version))[0]?.version;
   if (!version || !guardrail.versions.some((item) => item.version === version && item.status === "ready")) {
-    throw new Error(`Guardrail ${guardrailId} has no ready baseline version yet. Deploy tali-guard and wait for the Default Guardrail to become active.`);
+    throw new Error(`Guardrail ${guardrailId} has no released version. Publish it before configuring the Router.`);
   }
   const endpoint = await ensureEndpoint();
   if (!endpoint.credential) throw new Error("Endpoint did not return a one-time credential.");

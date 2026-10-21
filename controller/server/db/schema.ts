@@ -159,9 +159,6 @@ export const runnerPools = pgTable("runner_pool", {
 export const controllerState = pgTable("controller_state", {
   id: text("id").primaryKey(),
   desiredGeneration: bigint("desired_generation", { mode: "number" }).notNull().default(0),
-  // Explicit Default Guardrail version served as basic protection. The first
-  // published Default sets it; every later switch is explicit.
-  baselineVersion: text("baseline_version"),
   updatedAt,
 });
 
@@ -452,7 +449,7 @@ export const validationRuns = pgTable("guardrail_validation_run", {
   testSuite: jsonb("test_suite").$type<FrozenTestCase[]>(),
   testSuiteDigest: text("test_suite_digest"),
   runtimeFingerprint: jsonb("runtime_fingerprint").$type<ValidationRuntimeFingerprint>(),
-  // Null identifies the audited system-baseline validation, not a human user.
+  // Null preserves historical automated validation runs without a human actor.
   createdBy: text("created_by").references(() => user.id),
   createdAt,
   completedAt: timestamp("completed_at", { withTimezone: true }),

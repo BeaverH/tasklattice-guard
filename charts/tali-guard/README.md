@@ -412,15 +412,17 @@ File import and export work in every installation without package signing keys,
 source IDs, trusted-source ConfigMaps or environment checks. Export immutable
 versions, then choose the `.guardrail.zip` file in **Import Guardrail package**.
 Identical versions are skipped; conflicting immutable content is rejected.
-Old `controller.promotion.export` and `controller.promotion.trust` values are
-rejected; remove them from custom values. They are not mounted into the Controller.
+The retired `controller.promotion` configuration is rejected; remove it from
+custom values. No promotion material is mounted into the Controller.
 
 Development uses only `values-dev-uat.yaml`; there is no separate migration
 target profile or pair-deployment command. Import/export works between any
 ordinary installations.
-For automated initial provisioning only, `controller.promotion.baselinePackage`
-can still mount a Default package at startup; ordinary file import/export does
-not use this setting.
+Default is preconfigured once during initial installation, with local protections
+and a bundled immutable version. It follows the same edit, test, publish and
+delete workflow as any Guardrail. Startup preserves changes and deletions.
+Router rules and Fallback targets explicitly select the versions serving traffic;
+there is no global runtime baseline or startup package setting.
 
 ## Scaling contract
 

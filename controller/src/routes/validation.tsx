@@ -45,7 +45,7 @@ export function ValidationPage() {
   const canManage = hasPermission(auth.user?.role, "guardrails", "write");
   const requestedGuardrail = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("guardrail") ?? "";
   const guardrailsQuery = useQuery({ queryKey: queryKeys.guardrails, queryFn: getGuardrails });
-  const guardrails = (guardrailsQuery.data?.items ?? []).filter((item) => item.is_default || !item.system_managed);
+  const guardrails = guardrailsQuery.data?.items ?? [];
   const [createOpen, setCreateOpen] = useState(false);
   useEffect(() => { if (requestedGuardrail && canManage) setCreateOpen(true); }, [canManage, requestedGuardrail]);
   const [selected, setSelected] = useState<ValidationRun | null>(null);
@@ -75,8 +75,8 @@ export function ValidationPage() {
           <EventPagination page={pagination.page} busy={runsQuery.isFetching} nextCursor={runsQuery.data?.nextCursor} onNext={pagination.next} onPrevious={pagination.previous} onLatest={pagination.latest} />
         </section>
       ) : null}
-      <CreateValidationSheet open={createOpen} onOpenChange={setCreateOpen} guardrails={guardrails.filter(g => !g.system_managed && !g.is_default)} initialGuardrailId={requestedGuardrail} onCreated={async (run) => { setCreateOpen(false); await refresh(); setSelected(run); }} />
-      <ValidationDetailSheet run={selected} guardrail={selected ? guardrails.find((item) => item.id === selected.guardrail_id) : undefined} canManage={canManage && selected?.guardrail_id !== "guardrail-default"} running={rerun.isPending} onRunAgain={(guardrailId, testModelRules) => rerun.mutate({ guardrailId, testModelRules })} onClose={() => setSelected(null)} />
+      <CreateValidationSheet open={createOpen} onOpenChange={setCreateOpen} guardrails={guardrails} initialGuardrailId={requestedGuardrail} onCreated={async (run) => { setCreateOpen(false); await refresh(); setSelected(run); }} />
+      <ValidationDetailSheet run={selected} guardrail={selected ? guardrails.find((item) => item.id === selected.guardrail_id) : undefined} canManage={canManage} running={rerun.isPending} onRunAgain={(guardrailId, testModelRules) => rerun.mutate({ guardrailId, testModelRules })} onClose={() => setSelected(null)} />
     </section>
   );
 }

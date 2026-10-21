@@ -445,7 +445,7 @@ export type Guardrail = {
   status: import("../../shared/protection-mode").GuardrailProtectionStatus;
   protection?: import("../../shared/protection-mode").ProtectionModeSettings;
   version_summary?: { total: number; released: number; pending: number; missingEvidence: number };
-  traffic_versions?: Array<{ version: string; baseline: boolean; routers: Array<{ id: string; name: string; status: string }> }>;
+  traffic_versions?: Array<{ version: string; routers: Array<{ id: string; name: string; status: string }> }>;
   latest_validation_run: ValidationRun | null;
   latest_testing_report?: ValidationRun | null;
   router_count: number;
@@ -457,9 +457,6 @@ export type Guardrail = {
   published_current: boolean;
   has_unpublished_changes?: boolean;
   published_version_count?: number;
-  is_default: boolean;
-  system_managed: boolean;
-  local_only: boolean;
   coverage: PolicyCoverage[];
   /** Creation provenance only; every Guardrail has an editable working draft. */
   origin?: "local" | "imported";

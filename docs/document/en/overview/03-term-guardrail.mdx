@@ -37,7 +37,7 @@ A Binding Parameter is a reviewed configuration value. Set required values in th
 
 A version freezes Policy Bindings, Rules, parameters, tests, compiled Artifact, dependencies and checksum. Editing a draft does not change an existing version.
 
-Routers, baseline selection and exports reference exact versions. Publishing v2 does not move a Router pinned to v1. Use a reviewed Router change to switch traffic.
+Routers and exports reference exact versions. Publishing v2 does not move a Router pinned to v1. Use a reviewed Router change to switch traffic.
 
 <a id="term-checksum" />
 ### Checksum
@@ -69,7 +69,7 @@ A Guardrail retains at most **10 immutable versions**, counting Pending and Rele
 
 The UI shows **Not ready, Enforce, Monitor, or Bypass**. Readiness requires a retained Released version with matching release evidence.
 
-For business Guardrails, that evidence can be a matching local Passed report or retained compact release evidence. The platform-maintained Default also accepts matching bundled platform-release provenance.
+For business Guardrails, that evidence can be a matching local Passed report or retained compact release evidence. The initially preconfigured Default version has matching bundled release provenance.
 
 A tested but unpublished draft does not establish readiness. Neither does a newly imported Pending version.
 
@@ -159,11 +159,11 @@ Normal installation provisions the bundled Default release without running a loc
 
 A replacement must match the same Artifact and frozen suite. Matching archived release evidence or platform-release provenance can also preserve release. Without another qualifying basis, deleting the final proof returns the version to Pending. References or recent traffic can block that deletion.
 
-**Immutable Version.** Deletion frees one version slot. Baseline, published Router, edited Router draft, pending change and approved rollback references can block it. Recent calls, retirement windows and incomplete Runner application also block deletion.
+**Immutable Version.** Deletion frees one version slot. Published Router, edited Router draft, pending change and approved rollback references can block it. Recent calls, retirement windows and incomplete Runner application also block deletion.
 
 After version deletion, Artifacts, reports and audit history remain. Orphan reports cannot make the Guardrail ready. Historical Routers referencing deleted versions cannot be restored directly.
 
-**Guardrail.** Default cannot be deleted. Remove published routing and pending-change references first. Pass the five-minute call-retention and retirement checks. Deletion does not remove Router Targets automatically.
+**Guardrail.** Default uses the same deletion checks. Remove published routing and pending-change references first. Pass the five-minute call-retention and retirement checks. Deletion does not remove Router Targets automatically.
 
 Soft deletion preserves identity, static versions, Artifacts, draft, cases, provenance and audit. It clears local reports, queued tests, stored runtime events and routing-call records. Retained versions return to Pending. The system ignores late results from before the reset.
 
@@ -178,7 +178,6 @@ These differences remain in the implementation:
 
 - **Draft publication:** the UI requires the latest report for the current revision to pass. The API selects the most recent Passed report for that revision. A later failure or running test does not necessarily prevent API publication. The API still verifies tested content.
 - **Version Release:** the UI waits for running tests. The API checks the latest completed version test, including retained compact evidence. The API checks Artifact and suite digests. Repeating Release on an already Released version currently returns it without another evidence check.
-- **Startup baseline packages:** a configured Default package can fill an empty baseline before local tests or Release. The imported version can remain Pending. This differs from explicit baseline switching, which requires Released. It is an implementation gap, not a supported substitute for the release workflow.
 
 <a id="user-decisions" />
 ## Apply inspection results

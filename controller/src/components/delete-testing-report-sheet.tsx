@@ -44,7 +44,7 @@ export function DeleteTestingReportSheet({ run, onClose, onDeleted }: { run: Val
     {result?.pendingVersion ? <section className="text-sm"><h3 className="font-medium">{t("validation.deleteReportPendingTitle", { version: result.pendingVersion })}</h3><p className="mt-1 leading-5 text-muted-foreground">{t("validation.deleteReportPending")}</p></section> : result?.replacementRunId ? <p className="text-sm text-muted-foreground">{t("validation.deleteReportRetainsRelease")}</p> : null}
     {result && (result.references.length > 0 || result.blockers.length > 0) ? <Alert variant="warning"><AlertTitle>{t("validation.deleteReportBlocked")}</AlertTitle><AlertDescription>
       <p>{t("validation.deleteReportUnbind")}</p>
-      {result.references.length ? <ul className="mt-2 list-disc pl-5">{result.references.map((reference, index) => <li key={index}>{"routerName" in reference ? reference.routerName : t("guardrailPackage.baselineCurrent")}</li>)}</ul> : null}
+      {result.references.length ? <ul className="mt-2 list-disc pl-5">{result.references.map((reference, index) => <li key={index}>{reference.routerName}</li>)}</ul> : null}
       {result.blockers.length ? <p className="mt-2">{t("validation.deleteReportTraffic")}</p> : null}
     </AlertDescription></Alert> : null}
     {result && !result.deletable ? <Button variant="outline" disabled={impact.isFetching} onClick={() => { void impact.refetch(); }}>{t("common.retry")}</Button> : null}

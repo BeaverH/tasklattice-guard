@@ -89,25 +89,6 @@
         "service": {
           "$ref": "#/definitions/service"
         },
-        "promotion": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "baselinePackage": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "existingConfigMap": {
-                  "type": "string"
-                },
-                "key": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              }
-            }
-          }
-        },
         "resources": {
           "type": "object"
         }

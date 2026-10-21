@@ -27,13 +27,13 @@ const post = (app: ReturnType<typeof setup>["app"], path: string, body: unknown)
   app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 describe("Unified Default tests", () => {
-  it.each([null, "user", "invalid"])("denies %s without platform authority", async role => {
+  it.each([null, "admin", "invalid"])("denies %s without Guardrail authoring authority", async role => {
     const { app, requestValidation, requestVersionTestRun } = setup(role);
     for (const path of [draft, version]) expect((await post(app, path, { testModelRules: false })).status).toBe(role ? 403 : 401);
     expect(requestValidation).not.toHaveBeenCalled(); expect(requestVersionTestRun).not.toHaveBeenCalled();
   });
   it("forwards the frozen scope through ordinary test endpoints", async () => {
-    const { app, requestValidation, requestVersionTestRun } = setup("admin");
+    const { app, requestValidation, requestVersionTestRun } = setup("user");
     expect((await post(app, draft, { testModelRules: false })).status).toBe(202);
     expect(requestValidation).toHaveBeenCalledWith({ guardrailId: "guardrail-default", actorId: "actor", compilerAvailable: true, testModelRules: false });
     expect((await post(app, version, {})).status).toBe(202);
@@ -42,13 +42,13 @@ describe("Unified Default tests", () => {
     expect((await post(app, draft, { testModelRules: false, actorId: "other" })).status).toBe(400);
   });
   it("removes both waiver entry points and retains ordinary tenant testing", async () => {
-    const { app } = setup("admin");
+    const { app } = setup("user");
     for (const path of ["/api/v1/system/default-guardrail/candidates", "/api/v1/system/default-guardrail/versions/20261020-090915.265Z/test-waivers"]) {
       expect(requiredTokenPermission("POST", path)).toBeUndefined();
       expect((await post(app, path, {})).status).toBe(404);
     }
     const tenant = setup("user");
     expect((await post(tenant.app, "/api/v1/guardrails/tenant/test-runs", { testModelRules: false })).status).toBe(202);
-    expect(requiredTokenPermission("POST", draft)?.slice(2)).toEqual(["runners", "write"]);
+    expect(requiredTokenPermission("POST", draft)?.slice(2)).toEqual(["guardrails", "write"]);
   });
 });

@@ -19,22 +19,12 @@ const operations: Array<[string, (service: ControlPlaneService) => Promise<unkno
   ["restore test", service => service.setTestCaseExcluded({ guardrailId: id, actorId, caseId: "inherited", excluded: false })],
 ];
 
-describe("platform-maintained Default Guardrail", () => {
-  it.each(["publish", "test"])("requires platform authority to %s Default before any writes", async action => {
-    const transaction = vi.fn();
-    const db = { transaction, select: () => ({ from: () => ({ where: async () => [{ role: "user" }] }) }) } as unknown as ControllerDatabase;
-    const service = new ControlPlaneService(db, {} as ControllerConfig);
-    const operation = action === "publish"
-      ? service.requestGuardrailPublish({ guardrailId: id, actorId })
-      : service.requestValidation({ guardrailId: id, actorId, compilerAvailable: true });
-    await expect(operation).rejects.toMatchObject({ code: "forbidden", status: 403 });
-    expect(transaction).not.toHaveBeenCalled();
-  });
-  it.each(operations)("rejects user attempts to %s before any database changes", async (_name, operation) => {
-    const transaction = vi.fn();
-    const db = { transaction } as unknown as ControllerDatabase;
-    const service = new ControlPlaneService(db, {} as ControllerConfig);
-    await expect(operation(service)).rejects.toMatchObject({ code: "default_guardrail_read_only" });
-    expect(transaction).not.toHaveBeenCalled();
+describe("Preconfigured Guardrail uses ordinary mutation paths", () => {
+  it.each(operations)("reaches the same transaction for %s", async (_name, operation) => {
+    const reached = new Error("ordinary transaction");
+    const transaction = vi.fn().mockRejectedValue(reached);
+    const service = new ControlPlaneService({ transaction } as unknown as ControllerDatabase, {} as ControllerConfig);
+    await expect(operation(service)).rejects.toBe(reached);
+    expect(transaction).toHaveBeenCalledOnce();
   });
 });

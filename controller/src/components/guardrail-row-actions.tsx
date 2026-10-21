@@ -25,18 +25,18 @@ export function GuardrailRowActions({ guardrail }: { guardrail: Guardrail }) {
       <DropdownMenuContent align="end" onCloseAutoFocus={event => { if (action) event.preventDefault(); }}>
         <DropdownMenuItem onSelect={() => setAction('export')}><Download />{t('guardrails.exportEllipsis')}</DropdownMenuItem>
         {canEdit && <DropdownMenuItem onSelect={() => setAction('duplicate')}><Copy />{t("routing.duplicate")}</DropdownMenuItem>}
-        {canEdit && !guardrail.is_default && <DropdownMenuItem variant="destructive" onSelect={() => setAction('delete')}><Trash2 />{t("routing.delete")}</DropdownMenuItem>}
+        {canEdit && <DropdownMenuItem variant="destructive" onSelect={() => setAction('delete')}><Trash2 />{t("routing.delete")}</DropdownMenuItem>}
       </DropdownMenuContent>
     </DropdownMenu>
     {action === 'duplicate' && <DuplicateGuardrailSheet id={guardrail.id} name={guardrail.name} close={() => setAction(null)} />}
-    {action === 'delete' && !guardrail.is_default && <DeleteAction guardrail={guardrail} close={() => setAction(null)} />}
+    {action === 'delete' && <DeleteAction guardrail={guardrail} close={() => setAction(null)} />}
     {action === 'export' && <ExportGuardrailSheet guardrailId={guardrail.id} guardrailName={guardrail.name} onClose={() => setAction(null)} />}
   </>;
 }
 
 function DeleteAction({ guardrail, close }: { guardrail: Guardrail; close: () => void }) {
   const client = useQueryClient();
-  const impact = useQuery({ queryKey: queryKeys.guardrailDeletionImpact(guardrail.id), queryFn: () => getGuardrailDeletionImpact(guardrail.id), enabled: !guardrail.is_default, staleTime: 0 });
+  const impact = useQuery({ queryKey: queryKeys.guardrailDeletionImpact(guardrail.id), queryFn: () => getGuardrailDeletionImpact(guardrail.id), staleTime: 0 });
   const mutation = useMutation({
     mutationFn: (confirmation: GuardrailDeletionConfirmation) => deleteGuardrail(guardrail.id, confirmation),
     onSuccess: async () => {

@@ -232,7 +232,7 @@ export function GuardrailDetailPage() {
   const deletionImpactQuery = useQuery({
     queryKey: queryKeys.guardrailDeletionImpact(guardrailId),
     queryFn: () => getGuardrailDeletionImpact(guardrailId),
-    enabled: deleteOpen && !guardrailQuery.data?.is_default,
+    enabled: deleteOpen,
     staleTime: 0,
   });
   const deleteMutation = useMutation({
@@ -310,10 +310,10 @@ export function GuardrailDetailPage() {
   const guardrail = guardrailQuery.data;
   const policies = policiesQuery.data?.items ?? EMPTY_POLICIES;
   const routers = routersQuery.data?.items.filter((item) => item.activeSnapshot?.routes.some(route => route.enabled && route.targets.some(target => target.guardrailId === guardrail.id && target.weightBps > 0))) ?? [];
-  const canTest = guardrail.is_default ? isPlatformAdministrator(auth.user?.role) : hasPermission(auth.user?.role, "guardrails", "write");
-  const canTestDraft = canTest && (guardrail.is_default || isGuardrailDraftManageable(guardrail));
-  const canManageDraft = hasPermission(auth.user?.role, "guardrails", "write") && isGuardrailDraftManageable(guardrail);
-  const hasDraft = !guardrail.is_default && hasUnpublishedDraft(guardrail);
+  const canTest = hasPermission(auth.user?.role, "guardrails", "write");
+  const canTestDraft = canTest;
+  const canManageDraft = hasPermission(auth.user?.role, "guardrails", "write");
+  const hasDraft = hasUnpublishedDraft(guardrail);
   const currentTest = guardrail.latest_validation_run?.source_draft_version === guardrail.draft_revision ? guardrail.latest_validation_run : null;
   const testingDraft = isValidationRunning(currentTest);
   const openDraftReview = () => { setDraftTestModelRules(true); setDraftJustSaved(false); setDraftAction("review"); };
@@ -326,9 +326,7 @@ export function GuardrailDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-sans text-[2rem] font-normal tracking-normal">{guardrail.name}</h1>
             <GuardrailProtectionMode guardrail={guardrail} />
-            {guardrail.is_default ? <Badge variant="outline">{t("guardrails.defaultBadge")}</Badge> : guardrail.system_managed ? <Badge variant="outline">{t("guardrails.systemManaged")}</Badge> : null}
           </div>
-          {guardrail.is_default ? <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{t("guardrails.defaultNoticeDescription")}</p> : null}
           {guardrail.origin === "imported" ? <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Download className="size-3.5" aria-hidden="true" />{t("guardrailPackage.importedFrom", { source: guardrail.source_id ?? "" })}</p> : null}
           {guardrail.copy_origin && <p className="mt-2 text-sm text-muted-foreground">{uiText("uiCopy.copiedFrom")}{" "}{guardrail.copy_origin.sourceName} · {guardrail.copy_origin.sourceVersion ?? `draft r${guardrail.copy_origin.sourceDraftRevision}`} · {guardrail.copy_origin.sourceGuardrailId}</p>}
           {hasDraft ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -348,17 +346,17 @@ export function GuardrailDetailPage() {
             {hasDraft ? <MenuItem label={t("guardrails.draftChanges.view")} renderIcon={FileText} onClick={() => setDraftAction("changes")} /> : null}
             {canManageDraft && hasDraft && publishedVersions.length ? <MenuItem label={t("guardrails.draftChanges.discard")} renderIcon={RotateCcw} onClick={() => setDraftAction("discard")} /> : null}
             {canManageDraft ? <MenuItem label={t("guardrails.openPlayground")} renderIcon={FlaskConical} onClick={() => { void navigate({ to: "/playground", search: { guardrail: guardrail.id, target: "draft", version: undefined } }); }} /> : null}
-            {!guardrail.is_default ? <MenuItemDivider /> : null}
-            {!guardrail.is_default ? <MenuItem label={t("guardrails.deleteAction")} renderIcon={Trash2} kind="danger" onClick={() => {
+            <MenuItemDivider />
+            <MenuItem label={t("guardrails.deleteAction")} renderIcon={Trash2} kind="danger" onClick={() => {
               deleteMutation.reset();
               queryClient.removeQueries({ queryKey: queryKeys.guardrailDeletionImpact(guardrailId), exact: true });
               setDeleteOpen(true);
-            }} /> : null}
+            }} />
           </MenuButton> : null}
         </div>
       </div>
 
-      {!guardrail.is_default && !guardrail.traffic_versions?.length && publishedVersions.length > 0 ? <div className="mt-2"><Link className="inline-flex min-h-11 items-center gap-1.5 text-sm text-primary hover:underline" to="/integration/routers">{t("resourceList.startRouting")}<ArrowUpRight className="size-3.5" /></Link></div> : null}
+      {!guardrail.traffic_versions?.length && publishedVersions.length > 0 ? <div className="mt-2"><Link className="inline-flex min-h-11 items-center gap-1.5 text-sm text-primary hover:underline" to="/integration/routers">{t("resourceList.startRouting")}<ArrowUpRight className="size-3.5" /></Link></div> : null}
 
       {protectionActions.feedback}
 
@@ -403,7 +401,6 @@ export function GuardrailDetailPage() {
             compareOptions={compareOptions}
             guardrailId={guardrail.id}
             guardrailName={guardrail.name}
-            isDefault={guardrail.is_default}
             validation={selectedValidation}
             onChanged={refresh}
             onOpenDraft={canManageDraft ? () => setEditOpen(true) : () => setSection("testing")}
@@ -806,4 +803,3 @@ function hasTopicControlBinding(bindings: GuardrailPolicyBinding[], policies: Po
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="grid gap-2"><Label>{label}</Label>{children}</label>; }
 function lines(value: string) { return value.split("\n").map((item) => item.trim()).filter(Boolean); }
 function notifyError(error: unknown, fallback: string) { toast.error(error instanceof Error ? error.message : fallback); }
-function isGuardrailDraftManageable(guardrail: Pick<Guardrail, "is_default" | "system_managed">) { return !guardrail.is_default && !guardrail.system_managed; }

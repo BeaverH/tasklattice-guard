@@ -20,22 +20,22 @@ const router = (id: string, routes: TrafficRoute[], overrides: Partial<TrafficRo
 describe("Guardrail resource summaries", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("lists every pinned traffic version and its routers, separately from baseline and draft", () => {
-    const refs = guardrailTrafficVersions("g1", "20261009-090835.526Z", [
+  it("lists every pinned traffic version and its routers, without an implicit global version", () => {
+    const refs = guardrailTrafficVersions("g1", [
       router("A", [route([target("20261009-090835.526Z", 5000), target("20261009-090837.640Z", 5000)]), route([target("20261009-090835.526Z")])]),
       router("B", [route([target("20261009-090837.640Z")])], { rolloutStatus: "distributing" }),
       router("C", [route([target("20261009-090837.640Z")])], { rolloutStatus: "failed" }),
     ]);
     expect(refs).toEqual([
-      { version: "20261009-090837.640Z", baseline: false, routers: [
+      { version: "20261009-090837.640Z", routers: [
         { id: "A", name: "A", status: "active" }, { id: "B", name: "B", status: "distributing" }, { id: "C", name: "C", status: "failed" },
       ] },
-      { version: "20261009-090835.526Z", baseline: true, routers: [{ id: "A", name: "A", status: "active" }] },
+      { version: "20261009-090835.526Z", routers: [{ id: "A", name: "A", status: "active" }] },
     ]);
   });
 
   it("excludes unpublished or unbound routers, disabled routes, zero weights and other Guardrails", () => {
-    const refs = guardrailTrafficVersions("g1", null, [
+    const refs = guardrailTrafficVersions("g1", [
       router("unpublished", [route([target("v1")])], { activeRevision: null }),
       router("unbound", [route([target("v1")])], { endpointIds: [] }),
       router("no snapshot", [], { activeSnapshot: null }),

@@ -16,7 +16,7 @@ import type { ValidationCaseResult } from "../domain/models.js";
 
 const url = process.env.GUARD_TEST_POSTGRES_URL;
 describe.skipIf(!url)("Historical model-enabled Default publication uses the standard gate", () => {
-  it("freezes scope, rejects a local failure, publishes full model protection and restricts tenants", async () => {
+  it("freezes scope, rejects a local failure, publishes full model protection for ordinary users", async () => {
     const database = await createTestDatabase(url!, "scope");
     const directory = mkdtempSync(join(tmpdir(), "guard-scope-"));
     const key = join(directory, "signing.pem");
@@ -41,9 +41,8 @@ describe.skipIf(!url)("Historical model-enabled Default publication uses the sta
       const local = cases.find(c => c.policyId === "local-credentials")!;
       const model = cases.find(c => c.policyId === "builtin-jailbreak")!;
       await database.db.insert(testCases).values([local, model]);
-      await expect(service.requestValidation({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "user", compilerAvailable: true, testModelRules: false })).rejects.toMatchObject({ code: "forbidden" });
       for (const passes of [false, true]) {
-        const run = await service.requestValidation({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "admin", compilerAvailable: true, testModelRules: false });
+        const run = await service.requestValidation({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "user", compilerAvailable: true, testModelRules: false });
         expect(run.testModelRules).toBe(false);
         const [event] = await database.db.select().from(outboxEvents).where(eq(outboxEvents.id, run.id));
         expect(event!.payload.testModelRules).toBe(false);
@@ -60,9 +59,9 @@ describe.skipIf(!url)("Historical model-enabled Default publication uses the sta
           testScope: { testModelRules: false, skippedRules: model.coveredRuleIds.map(ruleId => ({ policyId: model.policyId, ruleId, reason: "model" })), modelInvocations: 0, executionDigest: "a".repeat(64), fullArtifactLoaded: true },
           candidateArtifact: { guardrailId: DEFAULT_GUARDRAIL_ID, guardrailVersion: run.guardrailVersion, compilerVersion: "test", nemoVersion: "0.24.0", runtimeProfile: "llmrails_colang1_standard",
             plan, configYaml: "", colangContent: "", prompts: [], actionBindings: [], dependencyManifest: [] } });
-        if (!passes) await expect(service.requestGuardrailPublish({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "admin" })).rejects.toMatchObject({ code: "guardrail_validation_required" });
+        if (!passes) await expect(service.requestGuardrailPublish({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "user" })).rejects.toMatchObject({ code: "guardrail_validation_required" });
         else {
-          const published = await service.requestGuardrailPublish({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "admin" });
+          const published = await service.requestGuardrailPublish({ guardrailId: DEFAULT_GUARDRAIL_ID, actorId: "user" });
           expect(published.status).toBe("ready");
           const detail = await service.getGuardrail(DEFAULT_GUARDRAIL_ID);
           expect(JSON.stringify(detail.versions[0]!.plan)).toContain("tali.guard.jailbreak.v1");

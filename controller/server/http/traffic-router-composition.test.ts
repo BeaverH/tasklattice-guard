@@ -187,20 +187,20 @@ it("protects Guardrail version deletion and validates version IDs", async () => 
  expect((await admin.send('DELETE', '/guardrails/guard/versions/invalid')).status).toBe(400);
 });
 
-it("allows only platform administrators to delete Default versions and preserves usage conflicts", async () => {
+it("applies ordinary authoring permissions and usage conflicts to Default versions", async () => {
   const path = "/guardrails/guardrail-default/versions/20260908-024342.826Z";
-  for (const role of [null, "user", "viewer"]) {
+  for (const role of [null, "admin", "viewer"]) {
     const denied = setupRoutingHttp(role);
     expect((await denied.send("DELETE", path)).status).toBe(role === null ? 401 : 403);
     expect(denied.deleteGuardrailVersion).not.toHaveBeenCalled();
   }
-  const admin = setupRoutingHttp("admin");
+  const admin = setupRoutingHttp("user");
   expect((await admin.send("DELETE", path)).status).toBe(204);
   expect(admin.deleteGuardrailVersion).toHaveBeenCalledWith({ guardrailId: "guardrail-default", version: "20260908-024342.826Z", actorId: "actor" });
-  const impact = { deletable: false, references: [{ kind: "baseline" }], blockers: [] };
+  const impact = { deletable: false, references: [{ kind: "router_active", routerId: "router", routerName: "Router", routeId: "fallback", routeName: "Fallback" }], blockers: [] };
   admin.deleteGuardrailVersion.mockRejectedValue(new ConflictError("This version is still referenced.", "version_in_use", { impact }));
   const blocked = await admin.send("DELETE", path);
   expect(blocked.status).toBe(409);
   expect(await blocked.json()).toMatchObject({ error: { code: "version_in_use", detail: { impact } } });
-  expect((await admin.send("DELETE", "/guardrails/guard/versions/20260908-024342.826Z")).status).toBe(403);
+
 });

@@ -38,7 +38,6 @@ import type {
   ValidationRun,
 } from "@/lib/api-types";
 
-const DEFAULT_GUARDRAIL_ID = "guardrail-default";
 
 type CurrentPolicyBinding = controllerApi.GuardrailDraftConfig["policyBindings"][number];
 type CurrentTestCase = {
@@ -111,11 +110,10 @@ function mapGuardrail(
   routers: TrafficRouter[],
   publishedVersionCount?: number,
 ): Guardrail {
-  const isDefault = value.id === DEFAULT_GUARDRAIL_ID;
   const latestValidation = value.latestValidationRun ? mapValidationRun(value.latestValidationRun) : null;
   const testedCurrent = Boolean(latestValidation && latestValidation.source_draft_version === value.draftRevision && latestValidation.status === "passed");
   const published = value.readiness === "ready";
-  const trafficVersions = guardrailTrafficVersions(value.id, value.baselineVersion ?? null, routers);
+  const trafficVersions = guardrailTrafficVersions(value.id, routers);
   const hasUnpublishedChanges = value.hasUnpublishedChanges ?? !(published && value.publishedSourceDraftRevision === value.draftRevision);
   const publishedCurrent = published && !hasUnpublishedChanges;
   return {
@@ -145,23 +143,19 @@ function mapGuardrail(
     published_current: publishedCurrent,
     has_unpublished_changes: hasUnpublishedChanges,
     published_version_count: value.versionSummary?.total ?? publishedVersionCount,
-    is_default: isDefault,
-    system_managed: isDefault,
-    local_only: isDefault,
     coverage: [],
     origin: value.origin ?? "local",
     source_id: value.sourceId ?? null,
   };
 }
 
-export function guardrailTrafficVersions(id: string, baseline: string | null, routers: TrafficRouter[]): NonNullable<Guardrail["traffic_versions"]> {
+export function guardrailTrafficVersions(id: string, routers: TrafficRouter[]): NonNullable<Guardrail["traffic_versions"]> {
   const versions = new Map<string, NonNullable<Guardrail["traffic_versions"]>[number]>();
-  if (baseline) versions.set(baseline, { version: baseline, baseline: true, routers: [] });
   for (const router of routers) {
     if (router.activeRevision === null || !router.endpointIds.length || !router.activeSnapshot) continue;
     for (const version of new Set(router.activeSnapshot.routes.filter(route => route.enabled)
       .flatMap(route => route.targets.filter(target => target.guardrailId === id && target.weightBps > 0).map(target => target.guardrailVersion)))) {
-      const entry = versions.get(version) ?? { version, baseline: false, routers: [] };
+      const entry = versions.get(version) ?? { version, routers: [] };
       entry.routers.push({ id: router.id, name: router.name, status: router.rolloutStatus });
       versions.set(version, entry);
     }

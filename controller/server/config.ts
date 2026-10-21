@@ -129,8 +129,6 @@ const environmentSchema = z.object({
   CONTROLLER_RUNNER_TOKEN: z.string().min(32),
   CONTROLLER_METRICS_TOKEN: z.string().min(32).optional(),
   CONTROLLER_ARTIFACT_SIGNING_KEY_PATH: z.string().min(1),
-  // Optional Guardrail package imported at startup to supply the runtime baseline.
-  CONTROLLER_BASELINE_PACKAGE_PATH: z.string().min(1).optional(),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_TRUSTED_ORIGINS: z.string().default("http://localhost:8080,http://localhost:8092"),
   BETTER_AUTH_MIN_PASSWORD_LENGTH: z.coerce.number().int().min(5).max(128).default(12),
@@ -277,7 +275,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     runnerToken: parsed.CONTROLLER_RUNNER_TOKEN,
     metricsToken: parsed.CONTROLLER_METRICS_TOKEN ?? null,
     artifactSigningKeyPath: parsed.CONTROLLER_ARTIFACT_SIGNING_KEY_PATH,
-    baselinePackagePath: parsed.CONTROLLER_BASELINE_PACKAGE_PATH ?? null,
     betterAuthSecret: parsed.BETTER_AUTH_SECRET,
     trustedOrigins: parsed.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean),
     minPasswordLength: parsed.BETTER_AUTH_MIN_PASSWORD_LENGTH,

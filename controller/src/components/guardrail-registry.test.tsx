@@ -67,9 +67,6 @@ const guardrail = {
   excluded_test_case_ids: [],
   tested_current: false,
   published_current: true,
-  is_default: true,
-  system_managed: true,
-  local_only: true,
   coverage: [],
 } satisfies Guardrail;
 

@@ -21,7 +21,7 @@ export async function hasReleasedGuardrail(db: Pick<ControllerDatabase, "select"
     checksum: validationRuns.candidateDigest, suite: validationRuns.testSuiteDigest }).from(validationRuns)
     .where(and(eq(validationRuns.guardrailId, id), eq(validationRuns.status, "passed"))) : [];
   return versions.some(v => v.suite && (
-    matchesPlatformRelease(id, v.platformRelease, v.checksum, testSuiteDigest(v.suite)) ||
+    matchesPlatformRelease(v.platformRelease, v.checksum, testSuiteDigest(v.suite)) ||
     (v.evidence?.release?.id === v.runId && matchesTestEvidence(v.evidence?.release, v.checksum, testSuiteDigest(v.suite)))
     || reports.some(r => r.version === v.version && r.checksum === v.checksum && r.suite === testSuiteDigest(v.suite!))
   ));

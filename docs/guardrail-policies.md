@@ -192,10 +192,11 @@ and suite digests must match. Publication signs the original complete Artifact;
 model Rules stay enabled. Deleting/pruning a report preserves its scope in compact
 release evidence. Imported versions require their own tests in the destination.
 
-Default remains platform-maintained: tenant users have no edit, delete, test or
-publication action. Administrators test and publish it through the same endpoints
-and console workflow, with `runners:write` permission. Switching the baseline remains
-explicit using `PUT /api/v1/system/baseline` with a ready version and reason.
+Default is preconfigured once with local protections and a bundled immutable
+version. It uses the ordinary Guardrail permissions and edit, test, publish and
+delete workflow. Startup never overwrites edits or restores a deleted Default.
+Router rules and Fallback targets explicitly select traffic protection; there is
+no global runtime baseline. Bundled provenance remains truthful release evidence.
 
 The former Default candidate/waiver creation endpoints have been removed. Existing
 waiver reasons, actors, timestamps, source reports and audit records are retained

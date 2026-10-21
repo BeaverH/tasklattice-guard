@@ -67,11 +67,6 @@ controller:
       memory: 256Mi
     limits:
       memory: 1Gi
-  # Optional startup baseline; ordinary file import/export needs no configuration.
-  promotion:
-    baselinePackage:
-      existingConfigMap: ""
-      key: baseline.guardrail.zip
 
 runner:
   # Optional different data-plane URL; normally inherits top-level publicUrl.

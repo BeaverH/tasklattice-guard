@@ -270,7 +270,6 @@ export function createHttpApp(input: {
     const { reasons: runnerReasons, ...runnerFleet } = deriveRunnerFleetStatus(defaultPool, {
       observedAt, offlineAfterSeconds: input.config.offlineAfterSeconds, desiredGeneration,
     });
-    const configuredProtection = await input.service.defaultGuardrailReadiness();
     const configuredModels = input.models ? await input.models.statusSummary() : {
       controlPlane: {
         status: input.config.modelConnections.controlPlane.model === "not-configured" ? "unconfigured" as const : "configured" as const,
@@ -282,41 +281,12 @@ export function createHttpApp(input: {
         ...input.config.modelConnections.dataPlane,
       },
     };
-    const assignedBindings = new Set(configuredModels.dataPlane.models.map((model) => model.id));
-    const missingBindings = configuredProtection.coverage?.requiredModelBindings.filter((id) => !assignedBindings.has(id)) ?? [];
     const modelHealth = input.models ? await input.models.modelHealth(await input.service.requiredPlatformModelBindings()) : null;
-    const basicProtection = {
-      ...configuredProtection,
-      status: configuredProtection.status !== "ready" ? configuredProtection.status
-        : missingBindings.length || runnerFleet.status === "unavailable" ? "unavailable" as const
-          : runnerFleet.servingRunners === 0 ? "initializing" as const : "ready" as const,
-    };
-    const basicProtectionReason = configuredProtection.status === "initializing"
-      ? "default_guardrail_initializing" as const
-      : configuredProtection.status === "unavailable"
-        ? "default_guardrail_unavailable" as const
-        : configuredProtection.status === "unconfigured"
-          ? "baseline_not_configured" as const
-          : null;
-    const status = modelHealth && modelHealth.status !== "healthy" ? "unavailable" as const
-      : basicProtection.status === "unavailable"
-      ? "unavailable" as const
-      : runnerFleet.status === "unavailable"
-        ? "unavailable" as const
-        : basicProtection.status === "initializing"
-          ? "initializing" as const
-          // Released Guardrails can serve traffic before a baseline is chosen.
-          : basicProtection.status === "unconfigured"
-            ? "degraded" as const
-          : configuredProtection.coverage?.hasUnknownDependencies && runnerFleet.status === "healthy"
-            ? "degraded" as const : runnerFleet.status;
+    const status = modelHealth && modelHealth.status !== "healthy" ? "unavailable" as const : runnerFleet.status;
     const reasons: PlatformStatusSnapshot["reasons"] = [
-      ...(basicProtectionReason ? [basicProtectionReason] : []),
-      ...(missingBindings.length ? ["default_model_bindings_missing" as const] : []),
-      ...(modelHealth?.reason === "configuration_required" && !missingBindings.length ? ["required_model_bindings_missing" as const] : []),
+      ...(modelHealth?.reason === "configuration_required" ? ["required_model_bindings_missing" as const] : []),
       ...(modelHealth?.reason === "validation_required" ? ["model_validation_required" as const] : []),
-      ...(configuredProtection.coverage?.hasUnknownDependencies ? ["default_dependencies_unknown" as const] : []),
-      ...runnerReasons.filter((reason) => reason !== "all_required_components_ready"),
+      ...runnerReasons.filter(reason => reason !== "all_required_components_ready"),
     ];
     if (reasons.length === 0) reasons.push("all_required_components_ready");
     const snapshot = {
@@ -326,7 +296,6 @@ export function createHttpApp(input: {
       desiredGeneration,
       components: {
         controller: { status: "operational" as const },
-        basicProtection,
         runnerFleet,
         controlPlaneModel: configuredModels.controlPlane,
         runtimeModels: {
@@ -880,13 +849,6 @@ export function createHttpApp(input: {
     }), 202);
   });
 
-  app.get("/api/v1/system/baseline", authenticated, async context => context.json(await input.service.systemBaseline()));
-  app.put("/api/v1/system/baseline", authenticated, async context => {
-    const body = z.object({ version: guardrailVersionInput, reason: z.string().trim().min(1).max(500) }).parse(await context.req.json());
-    const baseline = await input.service.setSystemBaseline({ ...body, actorId: context.get("actor").id });
-    await input.runnerControl.distributeDesiredState();
-    return context.json(baseline);
-  });
   app.get("/api/v1/endpoints", authenticated, async (context) => {
     const [items, distribution] = await Promise.all([
       input.service.listEndpoints(),

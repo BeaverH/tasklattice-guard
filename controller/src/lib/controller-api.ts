@@ -146,7 +146,6 @@ export type Guardrail = {
   status: GuardrailLifecycleState;
   readiness?: "not_ready" | "ready";
   versionSummary?: { total: number; released: number; pending: number; missingEvidence: number };
-  baselineVersion?: string | null;
   desiredGeneration: number;
   draftRevision: number;
   excludedTestCaseIds: string[];
@@ -248,7 +247,6 @@ export type DeploymentCapabilities = {
   packageImport: { available: boolean };
 };
 
-export type SystemBaseline = { guardrailId: string; version: string | null };
 
 /** One Test Case frozen into a Guardrail version: its input and expected behaviour. */
 export type FrozenTestCase = {
@@ -559,9 +557,7 @@ export const importGuardrailPackage = (packageId: string, options: { versions?: 
   `/api/v1/guardrail-packages/${encodeURIComponent(packageId)}/imports`, { method: "POST", body: JSON.stringify(options) });
 export const checkGuardrailVersionEnvironment = (id: string, version: string) => requestController<EnvironmentCheck>(
   `/api/v1/guardrails/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/environment-check`, { method: "POST" });
-export const getSystemBaseline = () => requestController<SystemBaseline>("/api/v1/system/baseline");
 export const getGuardrailVersionTestSuite = (guardrailId: string, version: string) => requestController<VersionTestSuite>(`/api/v1/guardrails/${encodeURIComponent(guardrailId)}/versions/${encodeURIComponent(version)}/test-suite`);
-export const setSystemBaseline = (version: string, reason: string) => requestController<SystemBaseline>("/api/v1/system/baseline", { method: "PUT", body: JSON.stringify({ version, reason }) });
 
 /** Download a signed release package; JSON errors become ControllerRequestError. */
 export async function downloadGuardrailPackage(id: string, versions: string[]): Promise<string> {

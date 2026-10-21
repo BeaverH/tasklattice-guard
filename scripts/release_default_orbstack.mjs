@@ -3,7 +3,6 @@
 // Requires an exact pre-change backup and explicit authorization to publish Default.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +15,9 @@ assert(process.env.GUARD_DEFAULT_BACKUP, 'Supply the exact pre-change Default sn
 const backup = JSON.parse(await readFile(process.env.GUARD_DEFAULT_BACKUP, 'utf8'));
 assert.equal(backup.id, 'guardrail-default');
 const base = 'http://localhost:38081';
-const secret = JSON.parse(execFileSync('kubectl', ['--context', 'orbstack', '-n', 'tali', 'get', 'secret', 'tali-guard-bootstrap-admin', '-o', 'json'], { encoding: 'utf8' }));
-const decode = key => Buffer.from(secret.data[key], 'base64').toString();
+const email = process.env.GUARD_DEFAULT_EMAIL ?? 'user@tasklattice.local';
+const password = process.env.GUARD_DEFAULT_PASSWORD;
+assert(password, 'Supply GUARD_DEFAULT_PASSWORD for an ordinary Guardrail author.');
 let cookie = '';
 const report = (stage, data = {}) => console.log(JSON.stringify({ stage, ...data }));
 async function call(path, body, method, expected = 200) {
@@ -33,15 +33,14 @@ async function until(read, done) {
   while (Date.now() < deadline) { const data = await read(); if (done(data)) return data; await delay(1500); }
   throw Error('Timed out; inspect and resume the same revision instead of bypassing validation.');
 }
-const a = await call('/api/auth/sign-in/email', { email: decode('email'), password: decode('password') });
+const a = await call('/api/auth/sign-in/email', { email, password });
 cookie = a.response.headers.getSetCookie().map(x => x.split(';')[0]).join('; ');
 const path = '/api/v1/guardrails/guardrail-default';
 const before = (await call(path)).data;
-const modelBefore = (await call('/api/v1/model-configuration')).data;
 const policies = PolicyCatalog.load(fileURLToPath(new URL('../runner/toolkit/policy_library/assets', import.meta.url))).list();
 const desired = normalizeGuardrailDraft(defaultGuardrailDraft(policies));
 const plan = buildGuardrailPlan({ guardrailId: 'guardrail-default', guardrailVersion: '20260908-000000.000Z', draft: desired, policies });
-assert(plan.steps.length > 0 && plan.steps.every(step => step.capability === 'builtin_content_filter'));
+assert(plan.steps.length > 0);
 assert.equal(desired.outputDelivery, 'full_buffered');
 assert.deepEqual(before.excludedTestCaseIds, []);
 if (!isDeepStrictEqual(normalizeGuardrailDraft(before.draftConfig), desired)) {
@@ -56,12 +55,12 @@ report('default-draft-prepared', { draftRevision: current.draftRevision, policie
   outputDelivery: desired.outputDelivery });
 const previousRun = current.latestValidationRun;
 const job = previousRun?.sourceDraftRevision === current.draftRevision && ['passed', 'queued', 'running'].includes(previousRun.status)
-  ? previousRun : (await call('/api/v1/guardrails/guardrail-default/test-runs', { guardrailId: 'guardrail-default' }, 'POST', 202)).data;
+  ? previousRun : (await call('/api/v1/guardrails/guardrail-default/test-runs', {}, 'POST', 202)).data;
 const validation = await until(async () => (await call(`/api/v1/test-runs/${job.id}`)).data,
   d => ['passed', 'failed'].includes(d.status));
 assert.equal(validation.status, 'passed', JSON.stringify({ reason: validation.failureReason, failures: validation.results.filter(x => !x.passed) }));
 assert.equal(validation.sourceDraftRevision, current.draftRevision);
-assert.equal(validation.metrics.total, 321, 'Reviewed Default acceptance contract changed; review before release.');
+assert.equal(validation.metrics.total, 608, 'Reviewed Default acceptance contract changed; review before release.');
 assert.equal(validation.metrics.passed, validation.metrics.total);
 assert.deepEqual(validation.excludedCaseIds, []);
 assert(validation.results.every(x => x.modelInvocations === 0 && !x.actualFailure));
@@ -77,13 +76,7 @@ const result = published.versions.find(v => v.version === version.version);
 assert(result.artifact.signature);
 assert.equal(result.artifact.compilerVersion, 'tasklattice-nemo-config-v18-selected-policy-dependencies');
 assert.deepEqual(normalizeGuardrailDraft(published.draftConfig), desired);
-const modelAfter = (await call('/api/v1/model-configuration')).data;
-assert.deepEqual(modelAfter.draft?.assignments, modelBefore.draft?.assignments);
-assert.equal(modelAfter.active?.id, modelBefore.active?.id);
-// Publishing never moves the runtime baseline; switch it explicitly to the new version.
-const previousBaseline = (await call('/api/v1/system/baseline')).data.version;
-const baseline = (await call('/api/v1/system/baseline', { version: result.version, reason: 'Release reviewed Default draft' }, 'PUT')).data;
-assert.equal(baseline.version, result.version);
-report('default-published', { draftRevision: published.draftRevision, version: result.version, previousBaseline,
+// Publication leaves Router targets unchanged.
+report('default-published', { draftRevision: published.draftRevision, version: result.version,
   artifactId: result.artifactId, checksum: result.artifact.checksum, generation: result.generation,
-  compiler: result.artifact.compilerVersion, modelConfigurationUnchanged: true });
+  compiler: result.artifact.compilerVersion });

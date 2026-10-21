@@ -12,7 +12,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { defaultPolicyBinding } from "@/components/policy-binding-editor";
 import { PolicyCatalog } from "../../server/policy-catalog/catalog";
 
-const routing = vi.hoisted(() => ({ navigate: vi.fn(), tab: "testing", role: "user", pageSize: undefined as 25 | 50 | undefined, window: "24h", severity: undefined as string | undefined }));
+const routing = vi.hoisted(() => ({ navigate: vi.fn(), tab: "testing", guardrailId: "guardrail-workflow", role: "user", pageSize: undefined as 25 | 50 | undefined, window: "24h", severity: undefined as string | undefined }));
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", exists: () => false } }),
@@ -20,7 +20,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to?: string }) => <a href={to}>{children}</a>,
   useNavigate: () => routing.navigate,
-  useParams: () => ({ guardrailId: "guardrail-workflow" }),
+  useParams: () => ({ guardrailId: routing.guardrailId }),
   useSearch: () => ({ tab: routing.tab, pageSize: routing.pageSize, window: routing.window, severity: routing.severity }),
 }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { role: routing.role } }) }));
@@ -35,7 +35,7 @@ const draft: api.Guardrail = {
   policy_bindings: [defaultPolicyBinding(policy)], safety_level: "balanced", output_delivery: "full_buffered",
   updated_at: "2026-10-08T00:00:00Z", status: "not_ready", latest_validation_run: null,
   router_count: 0, test_case_count: 1, excluded_test_case_count: 0, excluded_test_case_ids: [],
-  tested_current: false, published_current: false, is_default: false, system_managed: false, local_only: true, coverage: [],
+  tested_current: false, published_current: false, coverage: [],
 };
 const report: api.ValidationRun = {
   id: "report-workflow", guardrail_id: draft.id, guardrail_version: "20261008-000000.000Z", source_draft_version: 3,
@@ -65,39 +65,20 @@ function setupPage(overrides: Partial<api.Guardrail> = {}) {
 }
 
 describe("Guardrail edit, test and publish workflow", () => {
-  beforeEach(() => { routing.tab = "testing"; routing.role = "user"; routing.pageSize = undefined; routing.window = "24h"; routing.severity = undefined; routing.navigate.mockReset(); });
+  beforeEach(() => { routing.guardrailId = draft.id; routing.tab = "testing"; routing.role = "user"; routing.pageSize = undefined; routing.window = "24h"; routing.severity = undefined; routing.navigate.mockReset(); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-  it("keeps Default reports read-only without user draft or testing actions", async () => {
-    routing.role = "user";
-    const failedDraft = { ...report, id: "failed-draft", status: "failed" as const, source_draft_version: 5, guardrail_version: "unpublished-candidate" };
-    const passedVersion = { ...report, subject: "version" as const };
-    const { update } = setupPage({ is_default: true, system_managed: true, draft_revision: 5,
-      has_unpublished_changes: true, latest_validation_run: failedDraft, status: "enforce" });
-    vi.mocked(api.getGuardrailVersions).mockResolvedValue({ items: [{
-      guardrail_id: draft.id, version: report.guardrail_version, created_at: report.created_at,
-      status: "ready", test_suite_count: 1,
-    } as api.GuardrailVersion], count: 1 });
-    vi.mocked(api.getValidationRuns).mockResolvedValue({ items: [passedVersion, failedDraft], count: 2 });
+  it("offers ordinary draft, testing and delete actions for the preconfigured Default", async () => {
+    routing.guardrailId = "guardrail-default";
+    setupPage({ id: routing.guardrailId, has_unpublished_changes: true, status: "enforce" });
     render(wrap(<GuardrailDetailPage />));
     await screen.findByRole("heading", { name: draft.name });
-    expect(screen.getByText("guardrails.defaultNoticeDescription")).toBeTruthy();
-    expect(screen.queryByText("guardrails.unpublishedChanges")).toBeNull();
-    expect(screen.queryByRole("button", { name: "guardrails.testDraft" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "guardrails.publishVersion" })).toBeNull();
+    expect(screen.queryByText("guardrails.defaultNoticeDescription")).toBeNull();
+    expect(screen.getByRole("button", { name: "guardrails.testDraft" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "routing.actions" }));
-    await screen.findByRole("menuitem", { name: "guardrails.editLogLevel" });
-    for (const name of ["guardrails.editAction", "guardrails.editTestCases", "guardrails.draftChanges.discard", "guardrails.openPlayground", "guardrails.deleteAction"]) {
-      expect(screen.queryByRole("menuitem", { name })).toBeNull();
+    for (const name of ["guardrails.editAction", "guardrails.editTestCases", "guardrails.deleteAction"]) {
+      expect(await screen.findByRole("menuitem", { name })).toBeTruthy();
     }
-    fireEvent.keyDown(screen.getByRole("menuitem", { name: "guardrails.editLogLevel" }), { key: "Escape" });
-    expect(screen.getAllByRole("button", { name: "validation.openValidationRun" })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole("button", { name: "validation.openValidationRun" })[0]);
-    await screen.findByRole("dialog");
-    expect(screen.queryByRole("button", { name: "guardrails.editAction" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "guardrails.publishVersion" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "validation.runAgain" })).toBeNull();
-    expect(update).not.toHaveBeenCalled();
   });
 
   it("pages findings independently of failed statistics and resets pagination when page size changes", async () => {
@@ -208,25 +189,20 @@ describe("Guardrail edit, test and publish workflow", () => {
     expect(api.getGuardrailLoggingSettings).toHaveBeenCalledWith(draft.id);
   });
 
-  it.each([false, true])("only offers the Delete flow for a user-maintained Guardrail (default=%s)", async isDefault => {
-    setupPage({ is_default: isDefault, has_unpublished_changes: false });
+  it.each(["guardrail-workflow", "guardrail-default"])("offers the same Delete confirmation for %s", async id => {
+    routing.guardrailId = id;
+    setupPage({ id, has_unpublished_changes: false });
     const impact = vi.spyOn(api, "getGuardrailDeletionImpact").mockResolvedValue({ telemetry_fresh: true, requires_second_confirmation: false, incoming_request_count: 0, active_router_count: 0, window_minutes: 30 } as api.GuardrailDeletionImpact);
     const remove = vi.spyOn(api, "deleteGuardrail");
     render(wrap(<GuardrailDetailPage />));
     await screen.findByRole("heading", { name: draft.name });
     fireEvent.click(screen.getByRole("button", { name: "routing.actions" }));
-    if (isDefault) {
-      expect(screen.queryByRole("menuitem", { name: "guardrails.deleteAction" })).toBeNull();
-      expect(screen.queryByRole("dialog", { name: "guardrails.deleteDialogTitle" })).toBeNull();
-      expect(impact).not.toHaveBeenCalled();
-    } else {
-      fireEvent.click(screen.getByRole("menuitem", { name: "guardrails.deleteAction" }));
-      await screen.findByRole("dialog", { name: "guardrails.deleteDialogTitle" });
-      await screen.findByText("guardrails.noRecentTraffic");
-      expect(impact).toHaveBeenCalledWith(draft.id);
-      expect(screen.getByLabelText("guardrails.deleteReason")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "guardrails.deleteConfirm" }).hasAttribute("disabled")).toBe(true);
-    }
+    fireEvent.click(screen.getByRole("menuitem", { name: "guardrails.deleteAction" }));
+    await screen.findByRole("dialog", { name: "guardrails.deleteDialogTitle" });
+    await screen.findByText("guardrails.noRecentTraffic");
+    expect(impact).toHaveBeenCalledWith(id);
+    expect(screen.getByLabelText("guardrails.deleteReason")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "guardrails.deleteConfirm" }).hasAttribute("disabled")).toBe(true);
     expect(remove).not.toHaveBeenCalled();
   });
 

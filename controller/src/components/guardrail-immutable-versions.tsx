@@ -1,10 +1,10 @@
 import { TestModelRulesSwitch, ValidationScopeNotice } from "./validation-model-scope";
-import { hasPermission, isPlatformAdministrator } from "../../shared/rbac";
+import { hasPermission } from "../../shared/rbac";
 import { isValidationRunning } from "./validation-run-progress";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, Download, FlaskConical, GitCompareArrows, LoaderCircle, LockKeyhole, MoreHorizontal, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Check, ChevronLeft, ChevronRight, Download, FlaskConical, GitCompareArrows, LoaderCircle, LockKeyhole, MoreHorizontal, RefreshCw, Rocket, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { GeneratedVersionFiles, RuntimeDependencySummary, RuntimeExecutionSummary } from "./compiled-runtime";
@@ -25,14 +25,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { releaseGuardrailVersion, testGuardrailVersion, type GuardrailVersion, type GuardrailVersionDetail, type ValidationRun } from "@/lib/api";
 import { latestVersionTestEvidence, latestVersionTestStatus, versionReleaseState, type VersionReleaseState } from "@/lib/version-release";
 import { useAuth } from "@/lib/auth";
-import { checkGuardrailVersionEnvironment, getSystemBaseline, setSystemBaseline } from "@/lib/controller-api";
-import { queryKeys } from "@/features/query-keys";
+import { checkGuardrailVersionEnvironment } from "@/lib/controller-api";
 import { CopyableChecksum as Digest } from "./copyable-checksum";
 import { EnvironmentStatus } from "./guardrail-import-sheet";
 import { VersionTestSuite } from "./version-test-suite";
-import { Input } from "./ui/input";
 
-type VersionAction = { kind: "export" | "delete" | "baseline" | "release" | "test"; version: string };
+type VersionAction = { kind: "export" | "delete" | "release" | "test"; version: string };
 type Props = {
   openRequested?: boolean;
   onOpenRequestHandled?: () => void;
@@ -50,8 +48,6 @@ type Props = {
   compareOptions: GuardrailVersion[];
   guardrailId: string;
   guardrailName: string;
-  /** The Default Guardrail supplies the runtime baseline. */
-  isDefault?: boolean;
   validation: ValidationRun | null;
   validationRuns?: ValidationRun[];
   validationLoading?: boolean;
@@ -69,7 +65,7 @@ type Props = {
 
 const PAGE_SIZE = 10;
 
-export function ImmutableVersionView({ openRequested, onOpenRequestHandled, detail, selectedVersion, versions, loading, error, detailLoading, detailError, comparisonDetail, comparisonActive, comparisonLoading, comparisonError, compareOptions, guardrailId, guardrailName, isDefault = false, validation, validationRuns = [], validationLoading, validationError, onRetry, onRetryComparison, onChanged, onOpenDraft, onOpenValidation, onSelectVersion, onStartCompare, onCompareBaseChange, onCloseCompare }: Props) {
+export function ImmutableVersionView({ openRequested, onOpenRequestHandled, detail, selectedVersion, versions, loading, error, detailLoading, detailError, comparisonDetail, comparisonActive, comparisonLoading, comparisonError, compareOptions, guardrailId, guardrailName, validation, validationRuns = [], validationLoading, validationError, onRetry, onRetryComparison, onChanged, onOpenDraft, onOpenValidation, onSelectVersion, onStartCompare, onCompareBaseChange, onCloseCompare }: Props) {
   const { t, i18n } = useTranslation();
   const auth = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -93,18 +89,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
   const latestTest = selectedVersion ? latestVersionTestEvidence(selectedVersion, validationRuns) : null;
   const expiredTest = latestTest && !isValidationRunning(validation) && !validationRuns.some(run => run.id === latestTest.id) ? latestTest : null;
   const currentDetail = detail?.version === selectedVersion?.version ? detail : undefined;
-  const baseline = useQuery({ queryKey: queryKeys.systemBaseline, queryFn: getSystemBaseline, enabled: isDefault });
-  const [baselineReason, setBaselineReason] = useState("");
-  const switchBaseline = useMutation({
-    mutationFn: ({ version, reason }: { version: string; reason: string }) => setSystemBaseline(version, reason),
-    onSuccess: async (_result, { version }) => {
-      await Promise.all([onChanged(), baseline.refetch()]);
-      setAction(null);
-      setBaselineReason("");
-      toast.success(t("guardrailPackage.baselineSet", { version }));
-    },
-  });
-  const canManage = isDefault ? isPlatformAdministrator(auth.user?.role) : hasPermission(auth.user?.role, "guardrails", "write");
+  const canManage = hasPermission(auth.user?.role, "guardrails", "write");
   const releaseOf = (version: GuardrailVersion) => versionReleaseState(version, validationRuns);
   const testVersion = useMutation({
     mutationFn: (version: string) => testGuardrailVersion(guardrailId, version, testModelRules),
@@ -135,7 +120,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
     setPage(Math.floor(index / PAGE_SIZE));
     setPolicyPage(0);
   };
-  const closeAction = () => { setAction(null); switchBaseline.reset(); release.reset(); };
+  const closeAction = () => { setAction(null); release.reset(); };
   const menu = (version: GuardrailVersion, inDrawer = false) => (
     <div onFocusCapture={event => { if (!inDrawer && event.target instanceof HTMLButtonElement && event.currentTarget.contains(event.target)) opener.current = event.target; }}><DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -146,9 +131,6 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
         {canManage ? <DropdownMenuItem disabled={!version.test_suite_count || releaseOf(version).state === "testing" || testVersion.isPending} onSelect={() => { setTestModelRules(true); setAction({ kind: "test", version: version.version }); }}><FlaskConical />{t("immutableVersions.runTests")}</DropdownMenuItem> : null}
         {canManage && version.status === "pending" ? <DropdownMenuItem variant="edit" disabled={releaseOf(version).state !== "releasable"} onSelect={() => setAction({ kind: "release", version: version.version })}><Rocket />{t("immutableVersions.release")}</DropdownMenuItem> : null}
         <DropdownMenuItem onSelect={() => setAction({ kind: "export", version: version.version })}><Download />{t("guardrails.exportEllipsis")}</DropdownMenuItem>
-        {/* The runtime baseline is pinned; switching it is always explicit. */}
-        {isPlatformAdministrator(auth.user?.role) && isDefault ?
-          <DropdownMenuItem variant="edit" disabled={baseline.data?.version === version.version || version.status !== "ready"} onSelect={() => setAction({ kind: "baseline", version: version.version })}><ShieldCheck />{t("guardrailPackage.setBaseline")}</DropdownMenuItem> : null}
         {canManage ? <DropdownMenuItem variant="destructive" onSelect={() => setAction({ kind: "delete", version: version.version })}><Trash2 />{t("uiCopy.delete")}</DropdownMenuItem>
         : null}
       </DropdownMenuContent>
@@ -166,14 +148,13 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       </header>
       {error ? <div className="space-y-3 p-5"><ErrorNotice error={error} /><Button variant="outline" onClick={onRetry}>{t("immutableVersions.retry")}</Button></div> : null}
       {loading ? <div className="space-y-3 p-5" aria-label={t("immutableVersions.loading")}><Skeleton className="h-12" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
-        : !versions.length ? !error && <EmptyState title={t("guardrails.noPublishedVersion")} description={t("guardrails.noPublishedVersionDescription")} action={!isDefault && hasPermission(auth.user?.role, "guardrails", "write") ? <Button onClick={onOpenDraft}>{t("guardrails.openDraftRelease")}</Button> : undefined} />
+        : !versions.length ? !error && <EmptyState title={t("guardrails.noPublishedVersion")} description={t("guardrails.noPublishedVersionDescription")} action={hasPermission(auth.user?.role, "guardrails", "write") ? <Button onClick={onOpenDraft}>{t("guardrails.openDraftRelease")}</Button> : undefined} />
           : <>
             <Table>
               <TableHeader><TableRow><TableHead>{t("immutableVersions.version")}</TableHead><TableHead>{t("immutableVersions.status")}</TableHead><TableHead>{t("immutableVersions.published")}</TableHead><TableHead>{t("immutableVersions.policies")}</TableHead><TableHead>{t("immutableVersions.tests")}</TableHead><TableHead className="w-16"><span className="sr-only">{t("immutableVersions.actions")}</span></TableHead></TableRow></TableHeader>
               <TableBody>{ordered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(version => <TableRow key={version.version} data-state={drawerOpen && selectedVersion?.version === version.version ? "selected" : undefined}>
                 <TableCell><div className="flex items-center gap-3">
                   <Button variant="ghost" className="min-h-11 px-0 font-mono text-sm text-primary hover:underline" aria-label={t("immutableVersions.view", { version: version.version })} ref={node => { if (node) versionButtons.current.set(version.version, node); else versionButtons.current.delete(version.version); }} aria-haspopup="dialog" onClick={event => openVersion(version.version, event.currentTarget)}>{version.version}</Button>
-                  {isDefault && baseline.data?.version === version.version ? <StateBadge state="protected" label={t("guardrailPackage.baselineCurrent")} /> : null}
                 </div></TableCell>
                 <TableCell className="min-w-44"><span className="whitespace-nowrap"><ReleaseStateBadge state={releaseOf(version).state} /></span></TableCell>
                 <TableCell><time dateTime={version.created_at} className="text-muted-foreground">{new Date(version.created_at).toLocaleString(i18n.language)}</time></TableCell>
@@ -190,7 +171,7 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
     {drawerOpen && !action && selectedVersion ? <EntitySheet open onOpenChange={open => { if (!open) { opener.current = versionButtons.current.get(selectedVersion.version) ?? opener.current; setDrawerOpen(false); onCloseCompare(); } }}
       returnFocusRef={opener} width="xl" density="compact" bodyClassName="flex flex-col !overflow-hidden !py-0" footer={null}
       eyebrow={t("guardrails.versions")}
-      title={<span className="flex items-center gap-3"><span className="font-mono text-xl">{selectedVersion.version}</span>{isDefault && baseline.data?.version === selectedVersion.version ? <StateBadge state="protected" label={t("guardrailPackage.baselineCurrent")} /> : null}</span>}
+      title={<span className="flex items-center gap-3"><span className="font-mono text-xl">{selectedVersion.version}</span></span>}
       description={<span className="flex items-center gap-2"><LockKeyhole className="size-3.5" />{t("immutableVersions.readOnly")}<span aria-hidden="true">·</span>{t(selectedVersion.origin === "imported" ? "immutableVersions.importedDescription" : "immutableVersions.detailDescription", { date: new Date(selectedVersion.created_at).toLocaleString(i18n.language) })}</span>}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-background py-2">
@@ -261,14 +242,6 @@ export function ImmutableVersionView({ openRequested, onOpenRequestHandled, deta
       <TestModelRulesSwitch checked={testModelRules} onChange={setTestModelRules} disabled={testVersion.isPending} />
       {testVersion.error ? <ErrorNotice error={testVersion.error} /> : null}
     </EntitySheet> : null}
-    {action?.kind === "baseline" ? <ConfirmationSheet open returnFocusRef={drawerOpen ? undefined : opener} onOpenChange={open => { if (!open && !switchBaseline.isPending) { setAction(null); switchBaseline.reset(); } }}
-      eyebrow={t("guardrails.confirmActionEyebrow")} title={t("guardrailPackage.baselineTitle", { version: action.version })} description={t("guardrailPackage.baselineDescription")}
-      cancelLabel={t("common.cancel")} confirmLabel={t("guardrailPackage.setBaseline")} pendingLabel={t("common.saving")} pending={switchBaseline.isPending}
-      confirmDisabled={!baselineReason.trim()} confirmIcon={<ShieldCheck />} onConfirm={() => switchBaseline.mutate({ version: action.version, reason: baselineReason.trim() })}>
-      <label className="block space-y-2 text-sm"><span className="font-medium">{t("guardrailPackage.baselineReason")}</span>
-        <Input value={baselineReason} maxLength={500} placeholder={t("guardrailPackage.baselineReasonPlaceholder")} onChange={event => setBaselineReason(event.target.value)} /></label>
-      {switchBaseline.error ? <ErrorNotice error={switchBaseline.error} /> : null}
-    </ConfirmationSheet> : null}
     {action?.kind === "release" ? (() => {
       const target = versions.find(item => item.version === action.version);
       const evidence = target ? releaseOf(target) : null;

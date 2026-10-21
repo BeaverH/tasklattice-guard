@@ -79,9 +79,6 @@ const deletableGuardrail = {
   excluded_test_case_ids: [],
   tested_current: true,
   published_current: true,
-  is_default: false,
-  system_managed: false,
-  local_only: false,
   coverage: [],
 } satisfies Guardrail;
 

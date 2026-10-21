@@ -14,17 +14,35 @@ vi.mock("@/routes/layout", async () => {
 const startPath = "/document/overview/quickstart-protection";
 const policyPath = "/document/overview/glossary-definition";
 const scrollIntoView = vi.fn();
+let documentScrollTop = 0;
 
 async function mount(path: string) {
   const history = createMemoryHistory({ initialEntries: [path] });
   const router = createRouter({ routeTree, history, defaultPendingMinMs: 0 });
   await router.load();
   const view = render(<RouterProvider router={router} />);
+  await act(async () => { await new Promise(requestAnimationFrame); });
   return { ...view, router, history };
 }
 
 beforeEach(async () => {
   await i18n.changeLanguage("en");
+  documentScrollTop = 0;
+  // jsdom gives every section top=0. The scroll observer would then select
+  // the last chapter as soon as its animation frame runs, racing navigation.
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const article = this.closest("article");
+    if (article && this.id) {
+      const anchors = [article, ...article.querySelectorAll("[id]")];
+      return new DOMRect(0, 200 + anchors.indexOf(this) * 200 - documentScrollTop, 800, 32);
+    }
+    return originalRect.call(this);
+  });
+  scrollIntoView.mockImplementation(function (this: HTMLElement) {
+    documentScrollTop += this.getBoundingClientRect().top - 120;
+    window.dispatchEvent(new Event("scroll"));
+  });
   vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(scrollIntoView);
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 });
@@ -127,6 +145,18 @@ describe("document page navigation", () => {
     expect(document.activeElement?.id).toBe("gateway-grounding-context");
     fireEvent.click(outline.getByRole("button", { name: `Expand section: ${chapterName}` }));
     expect(target?.hidden).toBe(false);
+  });
+
+  it("tracks the visible chapter when scrolling without changing the URL", async () => {
+    const gatewayPath = "/document/developer/gateway-connect";
+    const { container, router } = await mount(`${gatewayPath}#gateway-request-fields`);
+    const outline = within(container.querySelectorAll("aside")[1]);
+    const target = document.getElementById("gateway-stream-request")!;
+    documentScrollTop += target.getBoundingClientRect().top - 120;
+    fireEvent.scroll(window);
+    await waitFor(() => expect(outline.getByRole("link", { name: "Messages sent to Guard: start, delta and end" }).getAttribute("aria-current")).toBe("location"));
+    expect(outline.queryByRole("link", { name: "Request fields" })).toBeNull();
+    expect(router.state.location.href).toBe(`${gatewayPath}#gateway-request-fields`);
   });
 
   it("does not let another article's fragment select the current article", async () => {

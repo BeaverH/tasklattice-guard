@@ -347,7 +347,7 @@ Library 表不作为导入依赖存储。多个版本可共享相同内容 blob�
 | 环境检查 | 每个 Runner 池选一个已连接 Runner，按真实加载路径校验签名、NeMo 版本、Action、模型与 Evaluator 绑定并构建运行时后丢弃（dry-run 加载） | 没有在 Controller 端静态比对能力清单；`requirements.json` 只作为申报证据，导入时重新推导并要求完全一致 |
 | Router 门禁 | 提交与批准变更单前对导入版本重新做加载检查，要求 10 分钟内的 compatible 结果 | 本地发布的版本不受此门禁约束 |
 | 分发 | 默认池额外预加载本地发布的版本，以及加载检查为 compatible 的导入版本；其余导入版本只在被 Router 引用时分发。检查结论跨过 compatible 时推进 generation | 与设计一致 |
-| 基线 | `controller_state.baseline_version` 固定一个确切版本；通过 `PUT /system/baseline` 或启动时基线包（必须只含一个版本）设置；全新安装时第一个发布的 Default 版本成为基线，之后的切换一律显式 | 产品随附基线包的构建流水线不在本期 |
+| 预配置 Guardrail | Default 仅首次安装预置，支持普通编辑、测试、发布和删除，重启不恢复；全局运行基线已移除，流量由 Router 的规则和 Fallback 固定确切版本 | 无特殊基线接口或启动导入配置 |
 | 版本测试集 | 测试运行冻结实际执行的用例（只含定义：输入、预期结果、预期覆盖、来源 Policy，不含编辑时间等动态字段），并按冻结内容计算测试集摘要；发布时测试集随 Artifact 写入版本，成为版本的静态内容。`GET /guardrails/{id}/versions/{version}/test-suite` 只读，版本详情新增“测试集”页签；之后修改 Guardrail 的用例不影响已发布版本 | 发布包携带测试集（`test-suite`），导入版本在本环境运行测试后发布 |
 | 版本状态 | 只有 pending / ready：导入为 pending，`POST /guardrails/{id}/versions/{v}/test-runs` 对已签名 Artifact 原样运行版本自带的测试集，`POST .../release` 绑定最近一次通过且内容和测试集一致的报告后变为 ready（记录发布时间和发布人）。Router、基线、导出只接受 ready。compiling / failed 已删除 | 测试结果不作为状态；发布后复测失败不撤销发布 |
 | 版本引用 | 删除 Latest 指针与“标记为 Latest”：Router Target 只能固定版本（草稿与快照相同），导出必须显式选择版本，发布包不再有推荐版本；草稿“未发布更改”只与上一次发布的版本比较；基线版本受删除保护 | 原设计保留 Latest 作为元数据，现彻底移除 |

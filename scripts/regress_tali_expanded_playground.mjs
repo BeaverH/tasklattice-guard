@@ -15,8 +15,8 @@ async function api(path,body){
 const auth=JSON.parse(execFileSync('kubectl',['--context','orbstack','-n','tali','get','secret','tali-guard-bootstrap-admin','-o','json'],{encoding:'utf8'}));
 await api('/api/auth/sign-in/email',Object.fromEntries(Object.entries(auth.data).map(([k,v])=>[k,Buffer.from(v,'base64').toString()])));
 const guard=await api('/api/v1/guardrails/guardrail-default');
-// The Default version that serves is the pinned runtime baseline.
-const baseline=(await api('/api/v1/system/baseline')).version;assert(baseline,'Set a runtime baseline first.');
+// Playground explicitly selects a released version.
+const baseline=process.env.GUARD_VERSION ?? guard.versions.filter(v=>v.status==='ready').sort((a,b)=>b.version.localeCompare(a.version))[0]?.version;assert(baseline,'Publish a Guardrail version first.');
 const model=(await api('/api/v1/playground/models')).items[0];assert.equal(model.id,'deepseek-v4-flash');
 assert(guard.versions.find(v=>v.version===baseline).plan.steps.every(s=>s.capability==='builtin_content_filter'));
 const preview=await api('/api/v1/playground/draft-previews/guardrail-default',{});

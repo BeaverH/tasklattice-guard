@@ -306,9 +306,9 @@ const takeover = reissue(exported, { source: { id: "bank-uat-b", name: "Second U
 const takeoverPreview = await prod.upload(takeover, "takeover.guardrail.zip");
 assert.deepEqual(takeoverPreview.blockers, []);
 assert.deepEqual((await prod.call(`/api/v1/guardrail-packages/${takeoverPreview.packageId}/imports`, { body: {}, expected: 201 })).imported, []);
-// Export names its version: the Default version serving as UAT's runtime baseline.
-const uatBaseline = (await uat.call("/api/v1/system/baseline")).version;
-assert(uatBaseline, "UAT adopts its first Default version as the baseline.");
+// Export explicitly selects a released version, just like any Guardrail.
+const uatBaseline = (await uat.call("/api/v1/guardrails/guardrail-default")).versions.filter(v => v.status === "ready").sort((a,b) => b.version.localeCompare(a.version))[0]?.version;
+assert(uatBaseline, "UAT has a released Default version.");
 const uatDefault = await uat.call(`/api/v1/guardrails/guardrail-default/package?versions=${uatBaseline}`, { binary: true });
 const unauthorized = await prod.upload(uatDefault, "default.guardrail.zip");
 assert.deepEqual(unauthorized.blockers, []);
@@ -339,14 +339,14 @@ assert.match(refused.error.message, /has not been released in this environment/)
 assert.equal((await runtime("input", marker)).body.action, "BLOCKED", "Existing traffic is unaffected.");
 report("prod-missing-dependency", { status: futureCheck.status, reason: futureCheck.pools[0].reason, test: futureRun.status, release: unreleased.error.code });
 
-// ---------------------------------------------------------------- runtime baseline
+// ---------------------------------------------------------------- preconfigured Guardrail import
 const systemSource = { id: "bank-uat-system", name: "UAT system baseline" };
 const baselinePackage = reissue(parsePackage(uatDefault), { source: systemSource, });
 const baselinePreview = await prod.upload(baselinePackage, "baseline.guardrail.zip");
 assert.deepEqual(baselinePreview.blockers, []);
-const previousBaseline = await prod.call("/api/v1/system/baseline");
+const previousRouters = await prod.call("/api/v1/routers");
 const baselineImport = await prod.call(`/api/v1/guardrail-packages/${baselinePreview.packageId}/imports`, { body: {}, expected: 201 });
-assert.deepEqual(await prod.call("/api/v1/system/baseline"), previousBaseline, "Importing never switches the baseline.");
+assert.deepEqual(await prod.call("/api/v1/routers"), previousRouters, "Importing never changes Router targets.");
 assert.equal(baselinePreview.versions.length, 1, "The baseline candidate package carries exactly one version.");
 const baselineVersion = baselinePreview.versions[0].version;
 // Like any imported version, the Default version serves only once released here.
@@ -354,12 +354,9 @@ if ((await prod.call("/api/v1/guardrails/guardrail-default")).versions.find(item
   assert.equal((await testInProd("guardrail-default", baselineVersion)).status, "passed");
   await prod.call(`/api/v1/guardrails/guardrail-default/versions/${baselineVersion}/release`, { body: {} });
 }
-const baseline = await prod.call("/api/v1/system/baseline", { method: "PUT", body: { version: baselineVersion, reason: "CR-1002 adopt UAT baseline" } });
-assert.deepEqual(baseline, { guardrailId: "guardrail-default", version: baselineVersion });
-const protectedStatus = await until("basic protection", () => systemStatus(prod),
-  value => value.components.basicProtection.status === "ready");
-report("prod-baseline", { version: baseline.version, previous: previousBaseline.version, importedNow: baselineImport.imported.length, basicProtection: protectedStatus.components.basicProtection.status, status: protectedStatus.status });
+assert.deepEqual(await prod.call("/api/v1/routers"), previousRouters, "Releasing never changes Router targets.");
+report("prod-preconfigured-guardrail", { version: baselineVersion, importedNow: baselineImport.imported.length });
 
 await uatDb.end();
 await prodDb.end();
-report("passed", { guardrailId: guardrail.id, versions: [v1, v2], scope: "two isolated deployments: export, verify, import as pending, test in PROD, release, Runner load check, approved routing, runtime evaluation, rejections and baseline" });
+report("passed", { guardrailId: guardrail.id, versions: [v1, v2], scope: "two isolated deployments: export, verify, import as pending, test in PROD, release, Runner load check, approved routing, runtime evaluation, rejections and preconfigured Guardrail import" });

@@ -111,35 +111,15 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
   });
 
   it("starts production with the same features as UAT: a complete bundled Default baseline without model configuration", async () => {
-    // Upgrade a previously installed Default whose human-triggered test failed before any model existed.
-    const catalog = PolicyCatalog.load(catalogDir).list();
-    const draft = defaultGuardrailDraft(catalog);
-    draft.policyBindings.splice(2, 0, ...["builtin-jailbreak", "builtin-content-safety"].map(id => {
-      const policy = catalog.find(p => p.id === id)!;
-      return { policyId: id, policyVersion: policy.version, action: null, parameterValues: {},
-        enabledRuleIds: policy.rules.map(r => r.id), ruleOrder: policy.rules.map(r => r.id),
-        ruleActions: {}, enabledRails: [...policy.rails], reasoningPolicy: null, testCaseOverrides: {} };
-    }));
-    await prodDb.pool.query("INSERT INTO guardrail (id,name,draft_config,runtime_profile) VALUES ($1,'Default Guardrail',$2,'auto')", [DEFAULT_GUARDRAIL_ID, draft]);
-    await prodDb.db.insert(testCaseTable).values(generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, catalog));
-    await prodDb.pool.query("INSERT INTO guardrail_validation_run (id,guardrail_id,guardrail_version,source_draft_revision,status,failure_reason,created_by) VALUES ('missing-model-report',$1,'20261020-000000.000Z',1,'failed','No model bindings','admin')", [DEFAULT_GUARDRAIL_ID]);
-    await prodDb.pool.query("INSERT INTO audit_event (id,kind,actor_id,resource_type,resource_id,detail) VALUES ('manual-test','guardrail.validation_requested','admin','guardrail',$1,'{}')", [DEFAULT_GUARDRAIL_ID]);
     await prod.initialize();
-    expect((await prodDb.pool.query("SELECT status,failure_reason FROM guardrail_validation_run WHERE id='missing-model-report'")).rows)
-      .toEqual([{ status: "failed", failure_reason: "No model bindings" }]);
     // A platform release does not claim that installation tests have passed.
     expect((await prodDb.pool.query("SELECT origin FROM guardrail WHERE id = $1", [DEFAULT_GUARDRAIL_ID])).rows).toEqual([{ origin: "local" }]);
-    const baseline = await prod.systemBaseline();
-    expect(baseline.version).toBeTruthy();
-    expect((await prod.defaultGuardrailReadiness()).guardrailStatus).toBe("active");
     expect((await prod.getGuardrail(DEFAULT_GUARDRAIL_ID)).readiness).toBe("ready");
     expect((await prodDb.pool.query("SELECT validation_run_id, platform_release FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0])
       .toMatchObject({ validation_run_id: null, platform_release: { source: "bundled" } });
     await prod.initialize();
-    expect(await prod.systemBaseline()).toEqual(baseline);
     expect((await prodDb.pool.query("SELECT count(*)::int AS count FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0].count).toBe(1);
     expect((await prod.listPolicies()).map(p => p.id)).toEqual(expect.arrayContaining(["builtin-jailbreak", "builtin-content-safety"]));
-    expect((await prod.defaultGuardrailReadiness()).modelIndependent).toBe(true);
     expect(await prod.requiredPlatformModelBindings()).toEqual([]);
     const updated = await prod.getGuardrail(DEFAULT_GUARDRAIL_ID);
     expect(updated.draftConfig.policyBindings).toHaveLength(12);
@@ -410,7 +390,7 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
 
   });
 
-  it("imports Default versions without source configuration and switches the baseline explicitly", async () => {
+  it("imports Default versions through the ordinary local test and release workflow", async () => {
     const parsed = parsePackage((await uat.packages.exportPackage(guardrailId, [published[0]!])).bytes);
     const versions = parsed.versions.map(item => rebuilt(parsed, item, { ...item.content, guardrailId: DEFAULT_GUARDRAIL_ID, plan: { ...item.content.plan, guardrail_id: DEFAULT_GUARDRAIL_ID } }));
     const bytes = buildPackage({ source: { id: "bank-uat-system", name: "UAT system baseline" }, guardrail: { id: DEFAULT_GUARDRAIL_ID, name: "Default Guardrail" },
@@ -421,21 +401,15 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     // An authorized source adds a version to the local Default; import alone never changes basic protection.
     expect((await prodDb.pool.query("SELECT origin FROM guardrail WHERE id = $1", [DEFAULT_GUARDRAIL_ID])).rows).toEqual([{ origin: "local" }]);
     expect((await prodDb.pool.query("SELECT origin FROM guardrail_version WHERE guardrail_id = $1 AND version = $2", [DEFAULT_GUARDRAIL_ID, published[0]])).rows).toEqual([{ origin: "imported" }]);
-    const previousBaseline = (await prod.systemBaseline()).version;
-    expect(previousBaseline).toBe("20261021-000000.001Z");
     const before = await prod.desiredStateForPool("default");
-    // Like any imported version, it serves only once released here.
-    await expect(prod.setSystemBaseline({ version: published[0]!, reason: "CR-7", actorId: "admin" })).rejects.toMatchObject({ code: "baseline_version_not_ready" });
     await testHere(DEFAULT_GUARDRAIL_ID, published[0]!, "passed");
     await prod.releaseGuardrailVersion({ guardrailId: DEFAULT_GUARDRAIL_ID, version: published[0]!, actorId: "admin" });
 
-    const baseline = await prod.setSystemBaseline({ version: published[0]!, reason: "CR-7 adopt UAT baseline", actorId: "admin" });
-    expect(baseline).toEqual({ guardrailId: DEFAULT_GUARDRAIL_ID, version: published[0] });
+    expect((await prod.desiredStateForPool("default")).artifacts).toEqual(before.artifacts);
+    await prod.packages.checkVersionEnvironment(DEFAULT_GUARDRAIL_ID, published[0]!);
     const after = await prod.desiredStateForPool("default");
     expect(after.artifacts.length).toBe(before.artifacts.length + 1);
     expect(after.artifacts.some(item => item.guardrailId === DEFAULT_GUARDRAIL_ID && item.guardrailVersion === published[0])).toBe(true);
-    const { rows: [audit] } = await prodDb.pool.query("SELECT detail FROM audit_event WHERE kind = 'system.baseline_changed'");
-    expect(audit.detail).toMatchObject({ previousVersion: previousBaseline, version: published[0], reason: "CR-7 adopt UAT baseline" });
   });
 
   /** Another installation whose catalog differs in one Policy, with its own database. */
@@ -660,7 +634,6 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
       expect((await database.pool.query("SELECT * FROM audit_event WHERE kind = 'guardrail.restored'")).rows).toHaveLength(1);
       expect((await database.pool.query("SELECT payload FROM controller_outbox WHERE payload->>'restored' = 'true'")).rows).toHaveLength(1);
       expect((await service.trafficRouting.list()).length).toBe(0);
-      expect(await service.systemBaseline()).toEqual({ guardrailId: DEFAULT_GUARDRAIL_ID, version: null });
     } finally { await database.drop(); }
   });
 

@@ -78,10 +78,10 @@ describe("ControlPlaneLayout", () => {
     expect(screen.queryByText("TaskLattice Guard")).toBeNull();
   });
 
-  it("lets platform administrators use the Default version and testing workspace", () => {
+  it("applies the ordinary authoring boundary to Default", () => {
     pathname = "/guardrails/guardrail-default"; role = "admin";
     render(<ControlPlaneLayout />);
-    expect(screen.getByText("Page content")).toBeTruthy();
+    expect(screen.queryByText("Page content")).toBeNull();
   });
 
   it.each(["/settings/models", "/settings/guardrail-catalog", "/access", "/audit-log"])("prevents a user from mounting %s", path => {

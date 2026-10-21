@@ -46,7 +46,7 @@ export const immutableVersionsEn = {
   waiverActor: "Recorded by {{actor}} at {{time}}",
   releaseHints: {
     released_waiver: "A platform administrator waived test passage for this release. Original test outcomes are unchanged.",
-    released: "This version can be routed to, made the baseline and exported.",
+    released: "This version can be routed to and exported.",
     released_retest_failed: "A test after release failed. The release stands; decide whether to move traffic away with a Router change.",
     untested: "Run its own test suite against exactly this content. It can be released once the test passes.",
     testing: "Its test suite is running against this version's signed content.",
@@ -57,7 +57,7 @@ export const immutableVersionsEn = {
   releaseTitle: "Release version {{version}}?",
   releaseDescription: "The version becomes available for routing. Its version number and content do not change.",
   releaseEvidence: "Released with test report {{run}}: {{passed}}/{{total}} cases passed, {{time}}.",
-  releaseImpact: "Releasing changes no Router and no baseline. Route traffic to it through an approved Router change.", compiledDescription: "Runtime configuration and dependencies produced by this release.",
+  releaseImpact: "Releasing does not change any Router. Route traffic to it through an approved Router change.", compiledDescription: "Runtime configuration and dependencies produced by this release.",
 };
 
 export const immutableVersionsZh: typeof immutableVersionsEn = {

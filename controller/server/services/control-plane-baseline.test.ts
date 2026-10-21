@@ -1,7 +1,7 @@
 vi.mock("./testing-report-retention.js", async importOriginal => ({ ...await importOriginal<typeof import("./testing-report-retention.js")>(), pruneTestingReports: vi.fn() }));
 import { resolve } from "node:path";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getTableName } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -23,13 +23,6 @@ const baseline = () => ({
   status: "draft", excludedTestCaseIds: [],
   runtimeProfile: "auto", deletedAt: null,
 });
-
-function legacyBaseline() {
-  const previous = JSON.parse(readFileSync(resolve("../tests/fixtures/default-capability-consolidation.json"), "utf8"));
-  return { ...baseline(), draftConfig: normalizeGuardrailDraft({
-    ...baseline().draftConfig, policyBindings: previous.bindings,
-  }) };
-}
 
 const keyDirectory = mkdtempSync(resolve(tmpdir(), "guard-baseline-signing-test-"));
 const keyPath = resolve(keyDirectory, "key.pem");
@@ -66,7 +59,7 @@ function harness(reads: unknown[][], config: Partial<ControllerConfig> = {}, upd
         if (["policy_imported_version", "policy_resource", "policy_resource_version"].includes(tableName)) return [];
         if (fields && Object.keys(fields).length === 1 && "count" in fields) return [{ count: versionCount }];
         const next = reads.shift();
-        if (!next) throw new Error("Unexpected database read in baseline reconciliation.");
+        if (!next) throw new Error("Unexpected database read in preconfigured Guardrail initialization.");
         return next;
       });
       query.from = (table: Parameters<typeof getTableName>[0]) => { tableName = getTableName(table); return query; };
@@ -91,144 +84,25 @@ function harness(reads: unknown[][], config: Partial<ControllerConfig> = {}, upd
   return { service, inserts, updates, reads };
 }
 
-describe("Default baseline validation gate", () => {
-  it.each(["mixed", "model-enabled"].flatMap(previous => ["missing", "failed"].map(validationStatus => [previous, validationStatus])))
-  ("migrates the system-owned %s Default through local validation, retaining the old release (%s validation)", async (previous, validationStatus) => {
-    const stored = { ...(previous === "mixed" ? legacyBaseline() : baseline()), status: "active" };
-    if (previous === "model-enabled") {
-      stored.draftConfig.policyBindings.splice(2, 0, ...["builtin-jailbreak", "builtin-content-safety"].map(id => {
-        const policy = policies.find(p => p.id === id)!;
-        return { policyId: id, policyVersion: policy.version, action: null, parameterValues: {},
-          enabledRuleIds: policy.rules.map(r => r.id), ruleOrder: policy.rules.map(r => r.id),
-          ruleActions: {}, enabledRails: [...policy.rails], reasoningPolicy: null, testCaseOverrides: {} };
-      }));
-    }
-    const upgraded = { ...stored, draftRevision: 3, draftConfig: baseline().draftConfig };
-    const cases = generatedTestCases(stored.id, upgraded.draftConfig, policies);
-    expect(cases.filter(item => ["builtin-jailbreak", "builtin-content-safety"].includes(item.policyId)))
-      .toHaveLength(0);
-    // Reads: Default, user edits, last published version, validation, ...
-    const reads: unknown[][] = [[stored], [], [{ sourceDraftRevision: 2, artifactId: "legacy-artifact" }], validationStatus === "failed" ? [{ status: "failed" }] : []];
-    if (validationStatus === "missing") reads.push(cases, [{ id: "new-validation" }]);
-    const test = harness(reads, {}, { guardrail: [upgraded] });
-    await test.service.initialize();
-    expect(test.reads).toEqual([]);
-    expect(test.updates).toEqual([{ table: "guardrail", value: expect.objectContaining({
-      draftConfig: defaultGuardrailDraft(policies), excludedTestCaseIds: [],
-    }) }]);
-    expect(test.updates.some((item) => item.table === "controller_state")).toBe(false);
-    expect(test.inserts.some((item) => ["guardrail_version", "router"].includes(item.table))).toBe(false);
-    expect(test.inserts).toContainEqual({ table: "guardrail_test_case", value: cases });
-    expect(test.inserts).toContainEqual({ table: "audit_event", value: expect.objectContaining({
-      kind: "guardrail.default.baseline_upgraded", detail: expect.objectContaining({
-        draftRevision: 3, policies: upgraded.draftConfig.policyBindings.map((item) => item.policyId),
-      }),
-    }) });
-    const validation = test.inserts.filter((item) => item.table === "guardrail_validation_run");
-    expect(validation).toHaveLength(validationStatus === "missing" ? 1 : 0);
-    if (validationStatus === "missing") expect(validation[0]!.value).toMatchObject({
-      sourceDraftRevision: 3, status: "queued", excludedCaseIds: [], createdBy: null,
-      metrics: { total: cases.length, passed: 0 },
-    });
-    expect(test.inserts.some((item) => item.value.kind === "guardrail.compile_requested" || item.value.kind === "runner.desired_state_changed")).toBe(false);
-  });
-
-  it("installs the complete signed platform baseline without executing tests or requiring models", async () => {
-    const stored = baseline();
-    const cases = generatedTestCases(stored.id, stored.draftConfig, policies);
-    const test = harness([[stored], [], [], cases], { artifactSigningKeyPath: keyPath });
-    await test.service.initialize();
-    expect(test.reads).toEqual([]);
-    const artifact = test.inserts.find(item => item.table === "guardrail_artifact")!.value;
-    expect(verify(null, Buffer.from(artifact.checksum as string), publicKey, Buffer.from(artifact.signature as string, "base64"))).toBe(true);
-    expect(JSON.stringify(artifact.plan)).not.toContain("tali.guard.jailbreak.v1");
-    expect(JSON.stringify(artifact.plan)).not.toContain("tali.guard.content-safety.v1");
-    const version = test.inserts.find(item => item.table === "guardrail_version")!.value;
-    expect(version).toMatchObject({ status: "ready", testSuite: expect.any(Array),
-      platformRelease: { source: "bundled", contentDigest: artifact.checksum } });
-    expect(version).not.toHaveProperty("validationRunId");
-    expect(test.inserts.some(item => item.table === "guardrail_validation_run")).toBe(false);
-    expect(test.updates).toContainEqual({ table: "guardrail", value: expect.objectContaining({ status: "active" }) });
-    expect(test.updates).toContainEqual({ table: "controller_state", value: { baselineVersion: artifact.guardrailVersion } });
-  });
-
-  it.each(["queued", "running", "failed"])("never compiles around a %s validation or retries it on restart", async (status) => {
-    const test = harness([[baseline()], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status }]]);
+describe("Preconfigured Guardrail initialization", () => {
+  it.each(["draft", "active", "disabled", "deleted"])("never changes an existing %s Guardrail on startup", async status => {
+    const stored = { ...baseline(), name: "My edited Default", status: status === "deleted" ? "disabled" : status,
+      deletedAt: status === "deleted" ? new Date() : null };
+    const test = harness([[stored]]);
     await test.service.initialize();
     expect(test.reads).toEqual([]);
     expect(test.updates).toEqual([]);
-    expect(test.inserts.map((item) => item.table)).toEqual(["controller_state", "runner_pool"]);
+    expect(test.inserts.map(item => item.table)).toEqual(["controller_state", "runner_pool"]);
   });
 
-  it("keeps startup available when automatic baseline publication has no version slots", async () => {
-    const test = harness([[baseline()], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status: "passed", guardrailVersion: candidate().guardrailVersion, candidateArtifact: candidate() }], []], {}, {}, 10);
-    await expect(test.service.initialize()).resolves.toBeUndefined();
-    expect(test.reads).toEqual([]);
-    expect(test.inserts.some(item => item.table === "guardrail_version")).toBe(false);
-    expect(test.updates.some(item => item.table === "controller_state")).toBe(false);
-  });
-
-  it("publishes precisely the validated candidate for the system-owned Default", async () => {
-    const stored = { ...baseline(), status: "active" };
-    const content = candidate();
-    const validation = { id: "validation-new", status: "passed", guardrailVersion: content.guardrailVersion, sourceDraftRevision: 2,
-      candidateArtifact: content, candidateDigest: artifactContentDigest(content), candidateInspection: { testSuite: { total: 1, digest: testSuiteDigest(suite) } }, candidatePolicies: [], testSuite: suite };
-    const test = harness([[stored], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [validation], [], []], { artifactSigningKeyPath: keyPath });
-    await test.service.initialize();
-    expect(test.reads).toEqual([]);
-    expect(test.inserts).toContainEqual({ table: "guardrail_artifact", value: expect.objectContaining({
-      checksum: validation.candidateDigest, plan: content.plan, generation: 10,
-    }) });
-    expect(test.inserts).toContainEqual({ table: "guardrail_version", value: expect.objectContaining({
-      version: content.guardrailVersion, sourceDraftRevision: 2, status: "ready", createdBy: null, validationRunId: validation.id,
-    }) });
-    expect(test.inserts).toContainEqual({ table: "audit_event", value: expect.objectContaining({
-      kind: "guardrail.published", detail: expect.objectContaining({ validationRunId: validation.id, contentDigest: validation.candidateDigest }),
-    }) });
-    expect(test.updates).toContainEqual({ table: "guardrail", value: expect.objectContaining({ status: "active" }) });
-    // Only the very first Default version becomes the baseline (the update is guarded by "none set").
-    expect(test.updates).toContainEqual({ table: "controller_state", value: { baselineVersion: content.guardrailVersion } });
-    expect(test.inserts.some((item) => item.value.kind === "guardrail.compile_requested")).toBe(false);
-  });
-
-  it("does not publish twice when the validated version already exists", async () => {
-    const test = harness([[baseline()], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status: "passed", guardrailVersion: "20260906-010000.001Z" }], [{ version: "20260906-010000.001Z" }]]);
-    await test.service.initialize();
-    expect(test.reads).toEqual([]);
-    expect(test.updates).toEqual([]);
-    expect(test.inserts.map((item) => item.table)).toEqual(["controller_state", "runner_pool"]);
-  });
-
-  it("tests again instead of publishing a run that passed before candidates were retained", async () => {
-    const stored = baseline();
-    const cases = generatedTestCases(stored.id, stored.draftConfig, policies);
-    const test = harness([[stored], [], [{ sourceDraftRevision: 1, artifactId: "old-artifact" }], [{ status: "passed", guardrailVersion: "20260906-010000.001Z", candidateArtifact: null }], [], cases, [{ id: "retest" }]]);
-    await test.service.initialize();
-    expect(test.reads).toEqual([]);
-    expect(test.inserts.some((item) => item.table === "guardrail_version")).toBe(false);
-    expect(test.inserts).toContainEqual({ table: "guardrail_validation_run", value: expect.objectContaining({ status: "queued", createdBy: null }) });
-  });
-
-  it("leaves user-authored Default changes to explicit Validate and Publish", async () => {
-    const stored = legacyBaseline();
-    stored.draftConfig.policyBindings[0]!.ruleActions = { "category/denied_insults": "allow" };
-    const original = structuredClone(stored);
-    const test = harness([[stored], [{ id: "user-edit" }], []]);
-    await test.service.initialize();
-    expect(test.reads).toEqual([]);
-    expect(test.updates).toEqual([]);
-    expect(test.inserts.map((item) => item.table)).toEqual(["controller_state", "runner_pool"]);
-    expect(stored).toEqual(original);
-  });
-
-  it.each([null, "admin-user"])("only resumes automatic publication for system validation (actor %s)", async (createdBy) => {
+  it.each([null, "user"])("does not auto-publish a completed test (actor %s)", async createdBy => {
     const content = candidate();
     const run = { id: "validation-1", guardrailId: "guardrail-default", guardrailVersion: content.guardrailVersion, createdBy, status: "running", subject: "draft" };
     const test = harness([[], [{ guardrailId: run.guardrailId }], [{ id: run.guardrailId }], [run], [{ payload: { plan: content.plan, runtimeProfile: "auto" } }]]);
-    const reconcile = vi.spyOn(test.service, "initialize").mockResolvedValue();
-    await test.service.completeValidation({ runId: "validation-1", status: "passed", metrics: emptyValidationMetrics(), results: [], candidateArtifact: content });
-    expect(reconcile).toHaveBeenCalledTimes(createdBy === null ? 1 : 0);
-    expect(test.reads).toEqual([]);
+    const initialize = vi.spyOn(test.service, "initialize");
+    await test.service.completeValidation({ runId: run.id, status: "passed", metrics: emptyValidationMetrics(), results: [], candidateArtifact: content });
+    expect(initialize).not.toHaveBeenCalled();
+    expect(test.inserts.some(item => item.table === "guardrail_version")).toBe(false);
   });
 });
 
