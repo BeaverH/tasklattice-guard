@@ -101,7 +101,7 @@ export function Tabs({
     </div>
   );
 }
-export function TabsList({ className, ...props }: ComponentProps<"div">) {
+export function TabsList({ className, children, ...props }: ComponentProps<"div">) {
   const { orientation, activation } = useContext(Context);
   const List = orientation === "vertical" ? TabListVertical : TabList;
   return (
@@ -110,7 +110,9 @@ export function TabsList({ className, ...props }: ComponentProps<"div">) {
       data-slot="tabs-list"
       className={className}
       activation={activation as "automatic" | "manual"}
-    />
+    >
+      {Children.toArray(children)}
+    </List>
   );
 }
 export function TabsTrigger({

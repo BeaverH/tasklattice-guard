@@ -38,7 +38,7 @@ describe("Testing HTTP paths", () => {
     const created = await app.request("/api/v1/guardrails/guard-1/test-runs", { method: "POST" });
     expect(created.status).toBe(202);
     expect(await created.json()).toEqual(run);
-    expect(service.requestValidation).toHaveBeenCalledWith({ guardrailId: "guard-1", actorId: "admin-1", compilerAvailable: true });
+    expect(service.requestValidation).toHaveBeenCalledWith({ guardrailId: "guard-1", actorId: "admin-1", compilerAvailable: true, testModelRules: true });
     const list = await app.request("/api/v1/test-runs?guardrailId=guard-1");
     expect(list.status).toBe(200);
     expect(await list.json()).toEqual({ items: [run], count: 1 });

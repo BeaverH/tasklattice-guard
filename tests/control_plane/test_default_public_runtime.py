@@ -16,7 +16,10 @@ from scripts.evaluate_default_public import build_default_plan, diagnostic_cases
 async def test_public_evaluator_local_ablation_transports_history():
     built = build_default_plan(local_components_only=True)
     plan = built["plan"]
-    assert len(plan["policy_bindings"]) == 34
+    assert len(plan["policy_bindings"]) == 12
+    assert not {"builtin-jailbreak", "builtin-content-safety"} & {
+        binding["policy_id"] for binding in plan["policy_bindings"]
+    }
     assert built["draft"]["safetyLevel"] == "balanced"
     assert built["draft"]["outputDelivery"] == "full_buffered"
     seen = []

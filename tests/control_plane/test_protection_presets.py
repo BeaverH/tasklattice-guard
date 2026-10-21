@@ -59,11 +59,13 @@ def preset_requests() -> list[dict]:
       console.log(JSON.stringify(output));
     """
     result = subprocess.run(["node", "--import", "tsx", "--input-type=module", "-e", source], cwd=Path(__file__).resolve().parents[2] / "controller", text=True, capture_output=True, check=True, timeout=30)
-    return json.loads(result.stdout)
+    requests = json.loads(result.stdout)
+    assert len(requests) == 15  # 14 Profiles plus the combined China/Singapore draft.
+    return requests
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("preset_index", range(16))
+@pytest.mark.parametrize("preset_index", range(15))
 async def test_profiles_pass_real_model_free_composition(preset_requests, preset_index) -> None:
     preset = preset_requests[preset_index]
     request = protocol.ControllerMessage.FromString(base64.b64decode(preset["wire"])).validation_request

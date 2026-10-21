@@ -25,7 +25,7 @@ function showDelete() {
 }
 
 describe("Testing Report display and deletion", () => {
-  it.each(["local", "imported"])("shows the %s resource's traffic version instead of its latest testing report", origin => {
+  it.each(["local", "imported"])("keeps the %s registry focused on request rate without stale report or version details", origin => {
     const trafficVersion = "20261009-090837.640Z";
     const guardrail = {
       id: run.guardrail_id, name: "Bank assistant", status: "enforce", origin, policy_bindings: [],
@@ -35,8 +35,11 @@ describe("Testing Report display and deletion", () => {
     } as Guardrail;
     render(<GuardrailRegistry guardrails={[guardrail]} onOpen={vi.fn()} />);
     expect(screen.queryByText("100%")).toBeNull();
-    expect(screen.getByText(trafficVersion, { selector: "a" })).toBeTruthy();
-    expect(screen.getByText("Bank traffic")).toBeTruthy();
+    expect(screen.getByText("Bank assistant").closest("a")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "dashboard.metrics.request_rate" })).toBeTruthy();
+    expect(screen.getByText("guardrails.requestRateUnavailable")).toBeTruthy();
+    expect(screen.queryByText(trafficVersion)).toBeNull();
+    expect(screen.queryByText("Bank traffic")).toBeNull();
     expect(screen.queryByText(run.guardrail_version)).toBeNull();
     expect(screen.queryByText("guardrails.notRun")).toBeNull();
   });

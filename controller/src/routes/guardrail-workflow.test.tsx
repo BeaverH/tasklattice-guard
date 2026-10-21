@@ -68,7 +68,7 @@ describe("Guardrail edit, test and publish workflow", () => {
   beforeEach(() => { routing.tab = "testing"; routing.role = "user"; routing.pageSize = undefined; routing.window = "24h"; routing.severity = undefined; routing.navigate.mockReset(); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-  it("keeps Default reports and version testing available without user draft actions for an author", async () => {
+  it("keeps Default reports read-only without user draft or testing actions", async () => {
     routing.role = "user";
     const failedDraft = { ...report, id: "failed-draft", status: "failed" as const, source_draft_version: 5, guardrail_version: "unpublished-candidate" };
     const passedVersion = { ...report, subject: "version" as const };
@@ -96,7 +96,7 @@ describe("Guardrail edit, test and publish workflow", () => {
     await screen.findByRole("dialog");
     expect(screen.queryByRole("button", { name: "guardrails.editAction" })).toBeNull();
     expect(screen.queryByRole("button", { name: "guardrails.publishVersion" })).toBeNull();
-    expect(screen.getByRole("button", { name: "validation.runAgain" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "validation.runAgain" })).toBeNull();
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -251,7 +251,7 @@ describe("Guardrail edit, test and publish workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "guardrails.runReviewed" }));
     expect(screen.queryByRole("combobox")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "immutableVersions.runVersionTests" })[1]);
-    await waitFor(() => expect(run).toHaveBeenCalledWith(draft.id, versions[1].version));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(draft.id, versions[1].version, true));
     await screen.findByText("immutableVersions.localTestReportDescription");
     await waitFor(() => expect(screen.getAllByRole("dialog")).toHaveLength(1));
     const dialog = screen.getByRole("dialog");
@@ -259,7 +259,7 @@ describe("Guardrail edit, test and publish workflow", () => {
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "validation.runAgain" }).hasAttribute("disabled")).toBe(false));
     fireEvent.click(within(dialog).getByRole("button", { name: "validation.runAgain" }));
     await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
-    expect(run).toHaveBeenLastCalledWith(draft.id, versions[1].version);
+    expect(run).toHaveBeenLastCalledWith(draft.id, versions[1].version, true);
     expect(draftRun).not.toHaveBeenCalled();
     expect(api.getTestCases).toHaveBeenCalledWith(draft.id);
   });
@@ -326,7 +326,7 @@ describe("Guardrail edit, test and publish workflow", () => {
     expect(screen.getByRole("tab", { name: /guardrails.validationHistoryTab/ }).getAttribute("aria-selected")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "guardrails.testDraft" }));
     fireEvent.click(screen.getByRole("button", { name: "guardrails.testNow" }));
-    await waitFor(() => expect(run).toHaveBeenCalledWith(draft.id, { onProgress: expect.any(Function) }));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(draft.id, { onProgress: expect.any(Function) }, true));
     expect(screen.getByText("guardrails.testingInPlace")).toBeTruthy();
     expect(screen.getByRole("button", { name: "guardrails.continueEditing" }).hasAttribute("disabled")).toBe(true);
     page.completeTest(); finishRun(report);

@@ -181,12 +181,15 @@ message ValidationRequest {
   optional bool test_model_rules = 9;
 }
 
+// A model-dependent Rule excluded from this test run, not from publication.
 message ValidationSkippedRule {
   string policy_id = 1;
   string rule_id = 2;
+  // Human-readable explanation of why this Rule was excluded from execution.
   string reason = 3;
 }
 
+// Frozen execution scope and evidence for the full or local-only test run.
 message ValidationScope {
   bool test_model_rules = 1;
   repeated ValidationSkippedRule skipped_rules = 2;

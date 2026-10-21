@@ -32,6 +32,6 @@ describe('Router target versions', () => {
   it('says how to get a version routable when every version is still pending', async () => {
     guardrail.mockResolvedValue({ id: 'bank', versions: [version('v1', 'pending')] });
     mount();
-    expect(await screen.findByText(/No version of this Guardrail is released here yet/)).toBeTruthy();
+    expect(await screen.findByText(/This Guardrail has no released versions yet/)).toBeTruthy();
   });
 });
