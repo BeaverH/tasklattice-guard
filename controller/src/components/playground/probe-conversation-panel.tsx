@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
 import {
   AssistantRuntimeProvider,
@@ -38,6 +39,7 @@ type PlaygroundThreadMessage = {
 const MESSAGE_PARTS = { Text: PlaygroundMessageText };
 
 export function ProbeConversationPanel({
+  actionsContainer,
   guardrail,
   guardrails,
   versions,
@@ -60,6 +62,7 @@ export function ProbeConversationPanel({
   onRetryDraft,
   onViewDetails,
 }: {
+  actionsContainer?: HTMLElement | null;
   guardrail: Guardrail;
   guardrails: Guardrail[];
   versions: GuardrailVersion[];
@@ -114,16 +117,20 @@ export function ProbeConversationPanel({
     isSendDisabled: !selectedModel || !targetReady,
   });
 
+  const clearAction = (
+    <Button type="button" variant="ghost" className="min-h-11 shrink-0 text-muted-foreground" disabled={!turns.length} onClick={onClear} aria-label={t("playground.clearSession")}>
+      <Eraser />
+      <span>{t("playground.clearSession")}</span>
+    </Button>
+  );
+
   return (
-    <section className="flex h-[calc(100dvh-14rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-xs">
-      <header className="flex items-center gap-3 border-b bg-muted/20 px-4 py-3.5 sm:px-5">
+    <section className="flex h-[calc(100dvh-16rem)] min-h-[30rem] min-w-0 flex-col overflow-hidden">
+      {actionsContainer === undefined ? <header className="flex items-center gap-3 border-b bg-muted/20 px-4 py-2 sm:px-5">
         <span className="grid size-9 place-items-center rounded-xl border bg-card text-primary"><MessageSquareText className="size-4.5" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">{t("playground.conversationTitle")}</h2><p className="mt-0.5 truncate text-xs text-muted-foreground">{t("playground.conversationDescription")}</p></div>
-        <Button type="button" variant="ghost" className="min-h-11 shrink-0 text-muted-foreground" disabled={!turns.length} onClick={onClear} aria-label={t("playground.clearSession")}>
-          <Eraser />
-          <span className="hidden sm:inline">{t("playground.clearSession")}</span>
-        </Button>
-      </header>
+        {clearAction}
+      </header> : actionsContainer ? createPortal(clearAction, actionsContainer) : null}
 
       {target.kind === "draft" ? (
         <DraftPreviewNotice

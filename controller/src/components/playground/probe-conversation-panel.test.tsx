@@ -80,7 +80,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function ConversationHarness({ request }: { request: (message: string) => Promise<PlaygroundInteraction> }) {
+function ConversationHarness({ request, actionsContainer }: { request: (message: string) => Promise<PlaygroundInteraction>; actionsContainer?: HTMLElement }) {
   const [turns, setTurns] = useState([interaction("turn-1", "First question", "First answer")]);
   const [pending, setPending] = useState(false);
   const submit = useCallback(async (message: string) => {
@@ -95,6 +95,7 @@ function ConversationHarness({ request }: { request: (message: string) => Promis
 
   return (
     <ProbeConversationPanel
+      actionsContainer={actionsContainer}
       guardrail={guardrail}
       guardrails={[guardrail]}
       versions={[version]}
@@ -110,7 +111,7 @@ function ConversationHarness({ request }: { request: (message: string) => Promis
       pending={pending}
       onModelChange={() => undefined}
       onSubmitMessage={submit}
-      onClear={() => undefined}
+      onClear={() => setTurns([])}
       onGuardrailChange={() => undefined}
       onTargetChange={() => undefined}
       onRetryDraft={() => undefined}
@@ -125,6 +126,24 @@ describe("ProbeConversationPanel", () => {
     delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
   });
   afterEach(cleanup);
+
+  it("clears the conversation through the shared header action", () => {
+    const header = document.createElement("header");
+    document.body.append(header);
+    const view = render(<ConversationHarness request={vi.fn()} actionsContainer={header} />);
+    try {
+      const clear = screen.getByRole("button", { name: "playground.clearSession" });
+      expect(header.contains(clear)).toBe(true);
+      expect(screen.queryByRole("heading", { name: "playground.conversationTitle" })).toBeNull();
+      fireEvent.click(clear);
+      expect(screen.queryByText("First question")).toBeNull();
+      expect(screen.queryByText("First answer")).toBeNull();
+      expect((clear as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      view.unmount();
+      header.remove();
+    }
+  });
 
   it("shows the submitted user message and assistant waiting state after an existing turn", async () => {
     const response = deferred<PlaygroundInteraction>();

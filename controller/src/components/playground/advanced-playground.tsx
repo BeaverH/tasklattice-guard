@@ -27,7 +27,7 @@ export function AdvancedPlayground({
   return (
     <section
       aria-label={t("routing.advancedRequestWorkbench")}
-      className="advanced-workbench flex min-w-0 flex-col overflow-hidden border bg-card"
+      className="advanced-workbench flex min-w-0 flex-col overflow-hidden"
     >
       <PathTargetBar workbench={workbench} />
       {workbench.error && (
