@@ -14,7 +14,7 @@ export const rolePermissions: Readonly<Record<AccountRole, Readonly<Partial<Reco
   },
   user: {
     guardrails: "write", policies: "write", playground: "write", routers: "write", endpoints: "write",
-    runtime: "read", runners: "read",
+    runtime: "read", runners: "write",
   },
 };
 

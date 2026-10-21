@@ -1,4 +1,5 @@
 import type { TokenModule } from "../../shared/access-tokens.js";
+import type { AccessAction, PermissionResource } from "../../shared/rbac.js";
 
 // Shared route allowlist for session RBAC and token scopes. Unclassified APIs deny access.
 export const tokenRoutePermissions: ReadonlyArray<readonly [string, string, TokenModule, "read" | "write"]> = [
@@ -145,4 +146,13 @@ export function requiredTokenPermission(method: string, path: string) {
   }
   return tokenRoutePermissions.find(([verb, template]) => verb === method &&
     new RegExp(`^${template.replace(/:[^/]+/g, "[^/]+")}$`).test(path));
+}
+
+/** Platform baseline maintenance retains its token scope, but needs admin account authority. */
+export function requiredAccountPermission(method: string, path: string): { resource: PermissionResource; action: AccessAction } | undefined {
+  const permission = requiredTokenPermission(method, path);
+  if (!permission) return undefined;
+  const platformMaintenance = permission[2] === "runners" && permission[3] === "write"
+    && (path === "/api/v1/system/baseline" || path.startsWith("/api/v1/guardrails/guardrail-default/"));
+  return { resource: platformMaintenance ? "settings" : permission[2], action: permission[3] };
 }

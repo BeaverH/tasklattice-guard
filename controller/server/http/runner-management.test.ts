@@ -19,6 +19,16 @@ const config = loadConfig({
 });
 
 describe("Runner instance management HTTP routes", () => {
+  it.each(["admin", "user"])("lets %s update Runner capacity with its own actor identity", async role => {
+    const updateRunnerPool = vi.fn().mockResolvedValue({ id: "pool" });
+    const app = appWith({ user: { id: "actor", role } }, { updateRunnerPool });
+    const targets = { desiredReplicas: 2, safeRpsPerRunner: 50, maxConcurrencyPerRunner: 64 };
+    const response = await app.request("/api/v1/runner-pools/pool", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(targets),
+    });
+    expect(response.status).toBe(200);
+    expect(updateRunnerPool).toHaveBeenCalledExactlyOnceWith({ id: "pool", actorId: "actor", ...targets });
+  });
   it("requires authentication for source identities", async () => {
     const app = appWith(null, {});
     expect((await app.request("/api/v1/system/version")).status).toBe(401);
@@ -39,13 +49,13 @@ describe("Runner instance management HTTP routes", () => {
     expect(body.dataPlane[1].software).toMatchObject({ version: "0.2.0", dirty: null, source: "unknown" });
     expect(body.controlPlane).toHaveProperty("commit");
   });
-  it("force-removes a syncing registration and closes only the removed boot's connection", async () => {
+  it.each(["admin", "user"])("lets %s force-remove a syncing registration and closes only the removed boot connection", async role => {
     const removeRunnerInstance = vi.fn().mockResolvedValue({ bootId: "boot-1" });
     const removeRunnerConnection = vi.fn();
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { removeRunnerInstance }, { removeRunnerConnection });
+    const app = appWith({ user: { id: "actor", role } }, { removeRunnerInstance }, { removeRunnerConnection });
     const response = await app.request("/api/v1/runner-instances/runner-syncing?force=true&bootId=boot-1", { method: "DELETE" });
     expect(response.status).toBe(204);
-    expect(removeRunnerInstance).toHaveBeenCalledWith({ runnerId: "runner-syncing", actorId: "admin-1", force: true, bootId: "boot-1" });
+    expect(removeRunnerInstance).toHaveBeenCalledWith({ runnerId: "runner-syncing", actorId: "actor", force: true, bootId: "boot-1" });
     expect(removeRunnerConnection).toHaveBeenCalledWith("runner-syncing", "boot-1");
   });
 
@@ -57,33 +67,16 @@ describe("Runner instance management HTTP routes", () => {
     expect(removeRunnerInstance).not.toHaveBeenCalled();
   });
 
-  it("does not let a member force-remove a syncing Runner", async () => {
-    const removeRunnerInstance = vi.fn();
-    const app = appWith({ user: { id: "member-1", role: "user" } }, { removeRunnerInstance });
-    const response = await app.request("/api/v1/runner-instances/runner-syncing?force=true&bootId=boot-1", { method: "DELETE" });
-    expect(response.status).toBe(403);
-    expect(removeRunnerInstance).not.toHaveBeenCalled();
-  });
-  it("does not allow a member to remove a Runner registration", async () => {
-    const removeRunnerInstance = vi.fn();
-    const app = appWith({ user: { id: "member-1", role: "user" } }, { removeRunnerInstance });
-
-    const response = await app.request("/api/v1/runner-instances/runner-offline", { method: "DELETE" });
-
-    expect(response.status).toBe(403);
-    expect(removeRunnerInstance).not.toHaveBeenCalled();
-  });
-
-  it("forwards an offline Runner removal to the service for an administrator", async () => {
+  it.each(["admin", "user"])("forwards offline Runner removal for %s", async role => {
     const removeRunnerInstance = vi.fn().mockResolvedValue(undefined);
-    const app = appWith({ user: { id: "admin-1", role: "admin" } }, { removeRunnerInstance });
+    const app = appWith({ user: { id: "actor", role } }, { removeRunnerInstance });
 
     const response = await app.request("/api/v1/runner-instances/runner-offline", { method: "DELETE" });
 
     expect(response.status).toBe(204);
     expect(removeRunnerInstance).toHaveBeenCalledWith({
       runnerId: "runner-offline",
-      actorId: "admin-1",
+      actorId: "actor",
     });
   });
 });

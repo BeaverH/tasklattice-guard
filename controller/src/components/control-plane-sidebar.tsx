@@ -1,7 +1,7 @@
 import { hasPermission, isPlatformAdministrator, roleHome } from "../../shared/rbac";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Bot, Cable, CircleHelp, FlaskConical, History, LibraryBig, ReceiptText, Rocket, ScrollText, ServerCog, Settings, ShieldCheck, UsersRound } from "lucide-react";
+import { Activity, Bot, Cable, CircleHelp, FlaskConical, GitBranch, History, LibraryBig, ReceiptText, Rocket, ScrollText, Server, ServerCog, Settings, ShieldCheck, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { BrandLogo } from "@/components/brand-logo";
@@ -59,6 +59,15 @@ const navigation = [
       { label: "nav.providers", to: "/settings/providers", icon: ServerCog },
       { label: "nav.models", to: "/settings/models", icon: Bot },
       { label: "nav.guardrailCatalog", to: "/settings/guardrail-catalog", icon: LibraryBig },
+    ],
+  },
+  {
+    scope: "platform",
+    label: "nav.platformOperations",
+    items: [
+      { label: "nav.health", to: "/settings/health", icon: Activity },
+      { label: "nav.runner", to: "/settings/runner", icon: Server },
+      { label: "nav.version", to: "/settings/version", icon: GitBranch },
     ],
   },
   {

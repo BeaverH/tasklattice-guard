@@ -223,7 +223,8 @@ describe("Runner fleet overview and details", () => {
 });
 
 describe("Runner capacity planning", () => {
-  it("opens planning on demand and saves the same capacity contract", async () => {
+  it.each(["admin", "user"])("lets %s open planning and save capacity targets", async role => {
+    mocks.role = role;
     renderPage();
     await editCapacity();
     expect(screen.getByText(/Changing them does not start or stop Runners/)).toBeTruthy();
@@ -249,7 +250,7 @@ describe("Runner capacity planning", () => {
     await waitFor(() => expect(screen.queryByRole("spinbutton")).toBeNull());
   });
 
-  it("allows non-admins to inspect planning without changing targets", async () => {
+  it("does not offer target changes for an unknown role", async () => {
     mocks.role = "member";
     renderPage();
     await screen.findByRole("button", { name: "runner-ready" });
@@ -260,7 +261,8 @@ describe("Runner capacity planning", () => {
 });
 
 describe("Runner removal permissions and recovery", () => {
-  it("offers offline removal in expanded details and preserves its confirmation", async () => {
+  it.each(["admin", "user"])("offers %s offline removal with confirmation", async role => {
+    mocks.role = role;
     renderPage();
     expect(screen.queryByRole("button", { name: "Remove runner-offline" })).toBeNull();
     await expand("runner-offline");
@@ -273,7 +275,8 @@ describe("Runner removal permissions and recovery", () => {
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Offline Runner removed"));
   });
 
-  it.each([0, 1])("preserves force removal with boot identity during syncing (applied=%s)", async appliedGeneration => {
+  it.each([["admin", 0], ["admin", 1], ["user", 0], ["user", 1]] as const)("preserves force removal for %s with boot identity (applied=%s)", async (role, appliedGeneration) => {
+    mocks.role = role;
     mocks.listRunnerPools.mockResolvedValue({ items: [{ ...runnerPool, instances: [{ ...runnerPool.instances[1], status: "syncing", appliedGeneration }] }] });
     renderPage();
     await expand("runner-ready");
@@ -285,7 +288,7 @@ describe("Runner removal permissions and recovery", () => {
     await waitFor(() => expect(mocks.removeRunnerInstance).toHaveBeenCalledWith("runner-ready", { force: true, bootId: "boot-ready" }));
   });
 
-  it.each(["offline", "syncing"] as const)("does not expose %s removal to non-admins", async status => {
+  it.each(["offline", "syncing"] as const)("does not expose %s removal to an unknown role", async status => {
     mocks.role = "member";
     mocks.listRunnerPools.mockResolvedValue({ items: [{ ...runnerPool, instances: [{ ...runnerPool.instances[1], status }] }] });
     renderPage();

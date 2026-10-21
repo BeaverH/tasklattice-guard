@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Building2, LockKeyhole, ShieldCheck } from "lucide-react";
+import { Building2, LockKeyhole } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { BrandLogo } from "@/components/brand-logo";
@@ -67,10 +67,6 @@ export function LoginPage() {
               <Button type="submit" size="lg" className="mt-1 min-h-[44px] w-full" disabled={loginPending}>{loginPending ? t("auth.loginSubmitting") : t("auth.loginSubmit")}</Button>
             </form>
 
-            <div className="mt-8 flex gap-3 rounded-xl border bg-muted/35 p-4">
-              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-              <div><p className="text-sm font-medium">{t("auth.defaultAdmin")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("auth.defaultAdminDescription")}</p></div>
-            </div>
           </div>
         </div>
       </section>

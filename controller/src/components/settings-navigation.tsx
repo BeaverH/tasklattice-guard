@@ -3,6 +3,8 @@ import { Activity, GitBranch, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/lib/auth";
+import { isPlatformAdministrator } from "../../shared/rbac";
 
 const settingsItems = [
   { to: "/settings/health", label: "nav.health", icon: Activity },
@@ -12,7 +14,10 @@ const settingsItems = [
 
 export function SettingsNavigation() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (isPlatformAdministrator(user?.role)) return null;
 
   return (
     <Tabs value={pathname} className="mt-5 min-w-0 max-w-full gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

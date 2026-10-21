@@ -17,12 +17,13 @@ Platform management controls both who can change configuration and how services 
 
 Users see Guardrail Design, Integration and Runtime observability, and land on Guardrails. Runtime logs contain requests, responses, enforcement results and execution steps, and belong to the tenant workflow. Captured request and response bodies load on demand; existing capture levels, redaction and retention rules still apply. Activity audit records describe who changed configuration and belong to the platform. Users cannot access audit records through pages, APIs or personal Tokens.
 
-Administrators land on Providers and see two platform groups:
+Administrators land on Providers and see three platform groups:
 
 - Models & detection: Providers, Models (including pricing) and Guardrail Catalog, for shared model services and detector bindings.
+- Platform operations: Health, Runner and Version, for service health, Runner management and software versions.
 - Access & audit: Users & access and Audit log, for account authority and configuration activity review.
 
-Users open Settings from the sidebar footer to view Health, Runner and Version at their existing `/settings/*` paths. These operational pages and APIs are readable by users; changing Runner capacity or removing instances still requires an administrator. Runtime observability includes Billing, where users select a Guardrail to inspect its model usage and estimated costs. Old Guardrail usage links redirect to Billing; the Guardrail list no longer includes a monthly cost column. Models retains its local model/pricing tabs. Both roles retain their account, password, personal Access Tokens and documentation. Direct access to the other role's workspace shows an access explanation, and corresponding APIs deny access.
+Administrators open operational pages directly from the Platform operations sidebar group. Users retain Settings in the sidebar footer and its Health, Runner and Version tabs. Both roles use the existing `/settings/*` paths. Users and administrators can edit Runner capacity targets and remove offline registrations or force-remove initializing or syncing registrations through the same confirmation flow. Serving Runners remain protected. These operations also require `runners:write` when using a personal Token. Platform Default testing, release, version deletion and baseline changes still require an administrator. Runtime observability includes Billing, where users select a Guardrail to inspect its model usage and estimated costs. Old Guardrail usage links redirect to Billing; the Guardrail list no longer includes a monthly cost column. Models retains its local model/pricing tabs. Both roles retain their account, password, personal Access Tokens and documentation. Direct access to the other role's workspace shows an access explanation, and corresponding APIs deny access.
 
 Design workflows read a reduced model-capability projection without Provider addresses, credential hints, control-plane model configuration or test bodies.
 

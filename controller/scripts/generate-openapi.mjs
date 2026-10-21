@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { apiTags, operationContract } from '../shared/api-contract.ts';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { GUARD_AUTH_COOKIE_PREFIX } from '../server/auth.ts';
-import { tokenRoutePermissions } from '../server/http/token-permissions.ts';
+import { requiredAccountPermission, tokenRoutePermissions } from '../server/http/token-permissions.ts';
 import { accountRoles, hasPermission } from '../shared/rbac.ts';
 import { createAccessTokenSchema } from '../shared/access-tokens.ts';
 import { assignmentInputSchema, modelConfigurationInputSchema } from '../server/model-config/domain.ts';
@@ -137,7 +137,8 @@ try {
     const sessionOnly = middleware.includes('accountSession'); const authenticated = middleware.includes('authenticated');
     assert(!authenticated || permission || sessionOnly || path === '/api/v1/account/identity', `Missing token policy: ${method} ${path}`);
     const platformDefault = method === 'POST' && /^\/api\/v1\/guardrails\/:(?:id|guardrailId)\/(?:test-runs|publish|versions\/:version\/(?:test-runs|release|environment-check))$/.test(path);
-    const allowedRoles = platformDefault ? ['admin', 'user'] : permission ? accountRoles.filter(role => hasPermission(role, permission[2], permission[3])) : [...accountRoles];
+    const accountPermission = requiredAccountPermission(method, path);
+    const allowedRoles = platformDefault ? ['admin', 'user'] : accountPermission ? accountRoles.filter(role => hasPermission(role, accountPermission.resource, accountPermission.action)) : [...accountRoles];
     const role = allowedRoles.length === 1 ? allowedRoles[0] : 'user';
     const operation = { operationId:id, summary: `${method} ${template}`, tags:[sessionOnly || path==='/api/v1/account/identity' ? 'Account' : permission?.[2] ?? 'System'],
       description: permission ? `${platformDefault ? 'For Default, requires the admin role and runners:write instead. For tenant Guardrails, requires the user role. ' : ''}Requires ${permission[2]}:${permission[3]} for personal access tokens. ${permission[3]==='write' ? 'Write includes read access; account role restrictions still apply. ' : ''}Allowed account roles: ${allowedRoles.join(', ')}. Token access covers all resources in the selected module.` : sessionOnly ? 'Browser session only. Personal access tokens cannot manage credentials. Ownership is taken from the authenticated session.' : path==='/api/v1/account/identity' ? 'Returns the authenticated identity and token permissions. Effective permissions are capped by the current account role.' : 'Public system health information; no credential is required.',

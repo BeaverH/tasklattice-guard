@@ -29,29 +29,32 @@ describe("ControlPlaneSidebar", () => {
 
   beforeEach(async () => { await i18n.changeLanguage("en"); });
 
-  it("groups administrator pages by model services and governance", () => {
+  it("groups administrator pages by model services, platform operations and governance", () => {
     render(<SidebarProvider><TooltipProvider><ControlPlaneSidebar /></TooltipProvider></SidebarProvider>);
     const expected = {
       Providers: "/settings/providers",
       Models: "/settings/models", "Guardrail Catalog": "/settings/guardrail-catalog",
+      Health: "/settings/health", Runner: "/settings/runner", Version: "/settings/version",
       "Users & access": "/access", "Audit log": "/audit-log",
     };
     for (const [label, path] of Object.entries(expected)) expect(screen.getByRole("link", { name: label }).getAttribute("href")).toBe(path);
     const groups = {
       "Models & detection": ["Providers", "Models", "Guardrail Catalog"],
+      "Platform operations": ["Health", "Runner", "Version"],
       "Access & audit": ["Users & access", "Audit log"],
     };
     for (const [label, links] of Object.entries(groups)) {
       const group = screen.getByText(label).closest('[data-sidebar="group"]') as HTMLElement;
       expect(within(group).getAllByRole("link").map(link => link.textContent)).toEqual(links);
     }
-    for (const label of ["Guardrails", "Playground", "Policy Library", "Routers", "Endpoints", "Settings", "Runtime logs", "Health", "Runner", "Version", "Billing"]) expect(screen.queryByRole("link", { name: label })).toBeNull();
+    for (const label of ["Guardrails", "Playground", "Policy Library", "Routers", "Endpoints", "Runtime logs", "Settings", "Billing"]) expect(screen.queryByRole("link", { name: label })).toBeNull();
     expect(document.body.textContent).not.toContain("Guardrail Design");
     expect(document.body.textContent).not.toContain("Integration");
     expect(document.body.textContent).not.toContain("Runtime observability");
     expect(screen.getByRole("link", { name: "TaskLattice Guard" }).getAttribute("href")).toBe("/settings/providers");
     expect(screen.getByRole("link", { name: "Documentation" }).closest('[data-sidebar="footer"]')).toBeTruthy();
   });
+
   it("shows users workflow groups and runtime observations without platform audit", () => {
     identity.role = "user";
     render(<SidebarProvider><TooltipProvider><ControlPlaneSidebar /></TooltipProvider></SidebarProvider>);
@@ -71,15 +74,15 @@ describe("ControlPlaneSidebar", () => {
     render(<SidebarProvider><ControlPlaneSidebar /><SidebarTrigger /></SidebarProvider>);
     expect(screen.getByRole("link", { name: "Providers" })).toBeTruthy();
     await act(async () => { await i18n.changeLanguage("zh-CN"); });
-    for (const name of ["模型与检测", "访问与审计"]) expect(screen.getByText(name)).toBeTruthy();
-    const paths = { "模型提供商": "/settings/providers", "检测器目录": "/settings/guardrail-catalog" };
+    for (const name of ["模型与检测", "平台运行", "访问与审计"]) expect(screen.getByText(name)).toBeTruthy();
+    const paths = { "模型提供商": "/settings/providers", "检测器目录": "/settings/guardrail-catalog", "健康": "/settings/health", "执行节点": "/settings/runner", "版本": "/settings/version" };
     for (const [name, path] of Object.entries(paths)) expect(screen.getByRole("link", { name }).getAttribute("href")).toBe(path);
     for (const name of ["Providers", "Provider", "Guardrail Catalog", "Runner"]) expect(screen.queryByRole("link", { name })).toBeNull();
     const rail = document.querySelector('[data-sidebar="rail"]');
     fireEvent.click(screen.getAllByRole("button", { name: "展开或收起导航" }).find(button => button !== rail)!);
     for (const name of Object.keys(paths)) expect(screen.getByRole("link", { name }).getAttribute("aria-label")).toBe(name);
     await act(async () => { await i18n.changeLanguage("en"); });
-    for (const name of ["Providers", "Guardrail Catalog"]) expect(screen.getByRole("link", { name }).getAttribute("aria-label")).toBe(name);
+    for (const name of ["Providers", "Guardrail Catalog", "Health", "Runner", "Version"]) expect(screen.getByRole("link", { name }).getAttribute("aria-label")).toBe(name);
   });
 
   it("localizes every tenant navigation group and entry in Chinese", async () => {

@@ -44,6 +44,7 @@ vi.mock("react-i18next", () => ({
       "nav.guardrails": "Guardrails",
       "nav.platform": "Platform",
       "nav.settings": "Settings",
+      "nav.platformOperations": "Platform operations",
       "nav.modelServices": "Models & detection",
       "nav.accessAudit": "Access & audit",
       "nav.runtimeObservations": "Observability",
@@ -99,11 +100,12 @@ describe("ControlPlaneLayout", () => {
     expect(screen.queryByText("Page content")).toBeNull();
   });
 
-  it("labels the Runner settings page independently from Health", () => {
+  it.each([["admin", "Platform operations"], ["user", "Settings"]])("labels the Runner page under the %s navigation group", (accountRole, group) => {
     pathname = "/settings/runner";
+    role = accountRole;
     render(<ControlPlaneLayout />);
 
-    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(screen.getByText(group)).toBeTruthy();
     expect(screen.getByText("Runner")).toBeTruthy();
   });
 

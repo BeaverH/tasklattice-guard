@@ -19,21 +19,44 @@ function setup(identity: TokenIdentity | null = { id: "owner", role: "admin", to
   const accessTokens = { authenticate: vi.fn().mockResolvedValue(identity), recordRequest: vi.fn(), list: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({ secret: "one-time-secret" }), revoke: vi.fn() };
   const createRouter = vi.fn().mockResolvedValue({ id: "new" });
+  const updateRunnerPool = vi.fn().mockResolvedValue({ id: "pool" });
   const app = createHttpApp({ config, auth: { api: { getSession } } as unknown as ControllerAuth,
     accessTokens: accessTokens as unknown as AccessTokenService,
     service: { trafficRouting: { list: async () => [], create: createRouter }, listGuardrails: async () => [],
       queryRuntimeEvents: async () => ({ items: [], count: 0 }),
       querySecurityEvents: async () => ({ items: [], count: 0, nextCursor: null }),
       getRuntimeEvent: async (_id: string, includeContent: boolean) => ({ id: "event", metadata: includeContent ? { contentBefore: [{ text: "Captured tenant request" }] } : {} }),
-      listAuditEvents: async () => ({ items: [] }),
+      listAuditEvents: async () => ({ items: [] }), updateRunnerPool,
     } as unknown as ControlPlaneService,
     runnerControl: {} as RunnerControlServer, metrics: {} as ControllerMetrics });
   const request = (method: string, path: string, authorization: string | null = "Bearer test", body?: unknown, extra: Record<string,string> = {}) => app.request(`/api/v1${path}`, {
     method, headers: { cookie: "valid-session", ...(authorization === null ? {} : { authorization }), "content-type": "application/json", ...extra }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  return { request, accessTokens, getSession, createRouter };
+  return { request, accessTokens, getSession, createRouter, updateRunnerPool };
 }
 describe("Access token HTTP authority", () => {
+  it.each(["admin", "user"])("allows %s Runner writes only with the matching token grant", async role => {
+    const targets = { desiredReplicas: 2, safeRpsPerRunner: 50, maxConcurrencyPerRunner: 64 };
+    const writable = setup({ id: "owner", role, tokenId: "token", permissions: { runners: "write" } });
+    expect((await writable.request("PATCH", "/runner-pools/pool", "Bearer test", targets)).status).toBe(200);
+    expect(writable.updateRunnerPool).toHaveBeenCalledExactlyOnceWith({ id: "pool", actorId: "owner", ...targets });
+    expect(writable.accessTokens.recordRequest).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "token" }), "PATCH", "/api/v1/runner-pools/:id", 200);
+    const readOnly = setup({ id: "owner", role, tokenId: "token", permissions: { runners: "read" } });
+    expect((await readOnly.request("PATCH", "/runner-pools/pool", "Bearer test", targets)).status).toBe(403);
+    expect(readOnly.updateRunnerPool).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["PUT", "/system/baseline"],
+    ["POST", "/guardrails/guardrail-default/test-runs"],
+    ["POST", "/guardrails/guardrail-default/publish"],
+    ["POST", "/guardrails/guardrail-default/versions/v1/test-runs"],
+    ["POST", "/guardrails/guardrail-default/versions/v1/release"],
+    ["POST", "/guardrails/guardrail-default/versions/v1/environment-check"],
+    ["DELETE", "/guardrails/guardrail-default/versions/v1"],
+  ])("does not grant a user token platform maintenance through runners:write: %s %s", async (method, path) => {
+    const { request } = setup({ id: "owner", role: "user", tokenId: "token", permissions: { runners: "write" } });
+    expect((await request(method!, path!, "Bearer test", {})).status).toBe(403);
+  });
   it("uses token identity instead of a concurrent browser session and reports its scopes", async () => {
     const { request, getSession } = setup();
     expect(await (await request("GET", "/account/identity")).json()).toMatchObject({ userId: "owner", tokenId: "token", permissions: { routers: "read" } });

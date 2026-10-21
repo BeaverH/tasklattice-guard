@@ -41124,7 +41124,7 @@
     },
     "/api/v1/runner-instances/{runnerId}": {
       "delete": {
-        "description": "Removes only the resource identified by this path. An already absent resource may return 404. By default only offline registrations can be removed. force=true with the observed bootId also permits initializing/syncing registrations and closes the matching control connection. Serving Runners remain protected; changed state or boot identity returns 409. Does not stop the process or delete a Pod; a running Runner may register again. Requires runners:write for personal access tokens. Write includes read access; account role restrictions still apply. Allowed account roles: admin. Token access covers all resources in the selected module.",
+        "description": "Removes only the resource identified by this path. An already absent resource may return 404. By default only offline registrations can be removed. force=true with the observed bootId also permits initializing/syncing registrations and closes the matching control connection. Serving Runners remain protected; changed state or boot identity returns 409. Does not stop the process or delete a Pod; a running Runner may register again. Requires runners:write for personal access tokens. Write includes read access; account role restrictions still apply. Allowed account roles: admin, user. Token access covers all resources in the selected module.",
         "operationId": "deleteRunnerInstancesByRunnerId",
         "parameters": [
           {
@@ -41266,9 +41266,10 @@
         "tags": [
           "runners"
         ],
-        "x-account-role": "admin",
+        "x-account-role": "user",
         "x-account-roles": [
-          "admin"
+          "admin",
+          "user"
         ],
         "x-idempotency": {
           "mode": "idempotent-effect"
@@ -41276,7 +41277,7 @@
         "x-product-area": "Platform Settings",
         "x-retry-policy": "Refresh Runner state after an uncertain response. A reconnect may create a new registration.",
         "x-source": "server/http/app.ts#960",
-        "x-token-account-role": "admin",
+        "x-token-account-role": "user",
         "x-token-permission": {
           "access": "write",
           "module": "runners"
@@ -41421,7 +41422,7 @@
     },
     "/api/v1/runner-pools/{id}": {
       "patch": {
-        "description": "Updates the supplied fields; omitted fields are retained. Validation or draft state may be invalidated. Requires runners:write for personal access tokens. Write includes read access; account role restrictions still apply. Allowed account roles: admin. Token access covers all resources in the selected module.",
+        "description": "Updates the supplied fields; omitted fields are retained. Validation or draft state may be invalidated. Requires runners:write for personal access tokens. Write includes read access; account role restrictions still apply. Allowed account roles: admin, user. Token access covers all resources in the selected module.",
         "operationId": "patchRunnerPoolsById",
         "parameters": [
           {
@@ -41557,9 +41558,10 @@
         "tags": [
           "runners"
         ],
-        "x-account-role": "admin",
+        "x-account-role": "user",
         "x-account-roles": [
-          "admin"
+          "admin",
+          "user"
         ],
         "x-idempotency": {
           "mode": "not-guaranteed"
@@ -41567,7 +41569,7 @@
         "x-product-area": "Platform Settings",
         "x-retry-policy": "Do not automatically retry an uncertain write. Read its result or current resource first.",
         "x-source": "server/http/app.ts#956",
-        "x-token-account-role": "admin",
+        "x-token-account-role": "user",
         "x-token-permission": {
           "access": "write",
           "module": "runners"

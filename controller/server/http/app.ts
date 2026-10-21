@@ -12,7 +12,7 @@ import { pathTestSchema, parseHttpRequest, requestSource } from "../../shared/pl
 import { openApiDocument, apiReferenceHtml, apiAgentIndex } from "./openapi.js";
 import { allowsTokenPermission, effectiveTokenPermissions } from "../../shared/access-tokens.js";
 import type { AccessTokenService, TokenIdentity } from "../services/access-tokens.js";
-import { requiredTokenPermission } from "./token-permissions.js";
+import { requiredAccountPermission, requiredTokenPermission } from "./token-permissions.js";
 import { partialModelActivationSchema } from "../../shared/model-activation.js";
 import { routerDraftSchema, previewRouter, selectorFields, selectableSelectorFields, RoutingEvaluationError, routingInputSchema } from "../../shared/traffic-routing.js";
 import { routingEventSchema } from "../services/traffic-routing.js";
@@ -1242,7 +1242,9 @@ function authentication(auth: ControllerAuth, tokens?: AccessTokenService): Midd
       }
       const permission = requiredTokenPermission(context.req.method, context.req.path);
       if (context.req.path !== "/api/v1/account/identity" || context.req.method !== "GET") {
-        if (!permission || !allowsTokenPermission(actor.permissions, permission[2], permission[3], actor.role))
+        const accountPermission = requiredAccountPermission(context.req.method, context.req.path);
+        if (!permission || !accountPermission || !hasPermission(actor.role, accountPermission.resource, accountPermission.action)
+          || !allowsTokenPermission(actor.permissions, permission[2], permission[3], actor.role))
           return context.json({ error: { code: "insufficient_token_permission", message: "This token does not allow the requested operation." } }, 403);
       }
       if (!isAccountRole(actor.role)) return context.json({ error: { code: "forbidden", message: "A user or admin account is required." } }, 403);
@@ -1261,9 +1263,9 @@ function authentication(auth: ControllerAuth, tokens?: AccessTokenService): Midd
     if (!session) return context.json({ error: { code: "unauthenticated", message: "Authentication is required." } }, 401);
     const role = session.user.role ?? "user";
     if (!isAccountRole(role)) return context.json({ error: { code: "forbidden", message: "A user or admin account is required." } }, 403);
-    const permission = requiredTokenPermission(context.req.method, context.req.path);
+    const permission = requiredAccountPermission(context.req.method, context.req.path);
     const accountRoute = context.req.path === "/api/v1/account/identity" || context.req.path === "/api/v1/account/access-tokens" || context.req.path.startsWith("/api/v1/account/access-tokens/");
-    if ((!permission && !accountRoute) || (permission && !hasPermission(role, permission[2], permission[3])))
+    if ((!permission && !accountRoute) || (permission && !hasPermission(role, permission.resource, permission.action)))
       return context.json({ error: { code: "forbidden", message: "Your account role does not allow this operation." } }, 403);
     context.set("actor", { id: session.user.id, role });
     await next();

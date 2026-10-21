@@ -67,6 +67,9 @@ describe("Generated OpenAPI contract", () => {
     expect(contract.paths["/api/v1/telemetry/events"].get["x-account-roles"]).toEqual(["user"]);
     expect(contract.paths["/api/v1/telemetry/events/{id}"].get["x-account-roles"]).toEqual(["user"]);
     expect(contract.paths["/api/v1/audit-events"].get["x-account-roles"]).toEqual(["admin"]);
+    expect(contract.paths["/api/v1/runner-pools/{id}"].patch["x-account-roles"]).toEqual(["admin", "user"]);
+    expect(contract.paths["/api/v1/runner-instances/{runnerId}"].delete["x-account-roles"]).toEqual(["admin", "user"]);
+    expect(contract.paths["/api/v1/system/baseline"].put["x-account-roles"]).toEqual(["admin"]);
   });
   it("separates product tags from grants and describes retry boundaries for every operation", () => {
     for (const methods of Object.values(contract.paths) as any[]) {

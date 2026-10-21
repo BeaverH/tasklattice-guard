@@ -21,9 +21,10 @@ describe("Account RBAC", () => {
     expect(hasPermission("admin", permission.resource, permission.action)).toBe(false);
     expect(hasPermission("user", permission.resource, permission.action)).toBe(true);
   });
-  it("allows operational reads without granting platform writes", () => {
-    expect(hasPermission("user", "runners", "read")).toBe(true);
-    expect(hasPermission("user", "runners", "write")).toBe(false);
+  it.each(["admin", "user"])("allows %s to manage Runners without changing platform authority", role => {
+    expect(hasPermission(role, "runners", "read")).toBe(true);
+    expect(hasPermission(role, "runners", "write")).toBe(true);
+    expect(hasPermission(role, "settings", "write")).toBe(role === "admin");
     for (const path of ["/settings", "/settings/health", "/settings/runner", "/settings/version", "/settings/runner/"]) {
       expect(pagePermission(path)).toEqual({ resource: "runners", action: "read" });
     }

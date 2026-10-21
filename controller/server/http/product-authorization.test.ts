@@ -57,7 +57,12 @@ const protectedRoutes = [
 ] as const;
 
 const platformRoutes = [
-  ...protectedRoutes.filter(([, path]) => /^\/(model|runner)/.test(path)),
+  ...protectedRoutes.filter(([, path]) => /^\/model/.test(path)),
+  ["PUT", "/system/baseline"],
+  ["POST", "/guardrails/guardrail-default/publish"],
+  ["POST", "/guardrails/guardrail-default/versions/version/release"],
+  ["POST", "/guardrails/guardrail-default/versions/version/environment-check"],
+  ["DELETE", "/guardrails/guardrail-default/versions/version"],
   ["GET", "/model-pricing"], ["GET", "/model-pricing/catalog?q=model"],
   ["GET", "/model-configuration"], ["GET", "/model-providers"], ["GET", "/models"],
   ["GET", "/audit-events"],
@@ -166,12 +171,12 @@ describe("Session freshness and read-only access", () => {
     expect((await auth.api.getSession({ headers }))?.user.role).toBe("admin");
     const unexpected = vi.fn().mockResolvedValue({ status: "queued" });
     const app = createHttpApp({ config, auth: auth as unknown as ControllerAuth,
-      service: { updateRunnerPool: unexpected } as unknown as ControlPlaneService,
-      runnerControl: { hasDefaultCompiler: () => true } as RunnerControlServer, metrics: {} as ControllerMetrics });
-    const response = await app.request("/api/v1/runner-pools/pool", { method: "PATCH", headers, body: JSON.stringify({ desiredReplicas: 1, safeRpsPerRunner: 50, maxConcurrencyPerRunner: 2 }) });
+      service: { setSystemBaseline: unexpected } as unknown as ControlPlaneService,
+      runnerControl: { distributeDesiredState: vi.fn() } as unknown as RunnerControlServer, metrics: {} as ControllerMetrics });
+    const response = await app.request("/api/v1/system/baseline", { method: "PUT", headers, body: JSON.stringify({ version: "20261020-090915.265Z", reason: "Reviewed baseline" }) });
     expect(response.status).toBe(state === "active" ? 200 : state === "demoted" ? 403 : 401);
     if (state === "active") expect(unexpected).toHaveBeenCalledExactlyOnceWith({
-      id: "pool", actorId: data.user![0]!.id, desiredReplicas: 1, safeRpsPerRunner: 50, maxConcurrencyPerRunner: 2,
+      actorId: data.user![0]!.id, version: "20261020-090915.265Z", reason: "Reviewed baseline",
     });
     else expect(unexpected).not.toHaveBeenCalled();
   });

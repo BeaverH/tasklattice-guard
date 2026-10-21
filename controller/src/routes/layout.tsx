@@ -1,5 +1,5 @@
 import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
-import { pagePermission, hasPermission, roleHome } from "../../shared/rbac";
+import { pagePermission, hasPermission, isPlatformAdministrator, roleHome } from "../../shared/rbac";
 import { EmptyState } from "@/components/product-shell";
 import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';
@@ -66,6 +66,8 @@ export function ControlPlaneLayout() {
   if (["/", "/dashboard"].includes(pathname)) return <Navigate to={home} replace />;
   const permission = pagePermission(pathname);
   const forbidden = permission !== null && !hasPermission(auth.user.role, permission.resource, permission.action);
+  const group = location.group === "nav.settings" && isPlatformAdministrator(auth.user.role)
+    ? "nav.platformOperations" : location.group;
 
   return (
     <TooltipProvider>
@@ -76,9 +78,9 @@ export function ControlPlaneLayout() {
             <div className="flex min-w-0 items-center gap-3">
               <SidebarTrigger className="size-11 rounded-lg" />
               <Separator orientation="vertical" className="h-5 self-center" />
-              {location.group ? <Breadcrumb className="min-w-0">
+              {group ? <Breadcrumb className="min-w-0">
                 <BreadcrumbList className="flex-nowrap">
-                  <BreadcrumbItem className="hidden sm:inline-flex">{t(location.group)}</BreadcrumbItem>
+                  <BreadcrumbItem className="hidden sm:inline-flex">{t(group)}</BreadcrumbItem>
                   <BreadcrumbSeparator className="hidden sm:block" />
                   <BreadcrumbItem className="min-w-0">
                     {pathname.startsWith('/integration/routers/') ? <Link to="/integration/routers" className="truncate">{t(location.page)}</Link> : pathname.startsWith("/account/") ? <Link to="/account" className="truncate">{t(location.page)}</Link> : <BreadcrumbPage className="truncate">{t(location.page)}</BreadcrumbPage>}
