@@ -117,6 +117,24 @@
   --radius-large: 0;
   --shadow-surface: none;
   --shadow-overlay: 0 4px 12px rgb(0 0 0 / 0.2);
+  --brand-signal: #008ca3;
+  --brand-surface: var(--sidebar);
+}
+
+.dark {
+  --brand-signal: #42e3ff;
+}
+
+.brand-lattice-mark {
+  display: block;
+  overflow: visible;
+  color: currentColor;
+}
+
+.brand-on-primary {
+  --brand-signal: #42e3ff;
+  --brand-surface: var(--primary);
+  color: var(--primary-foreground);
 }
 
 [data-slot="sidebar"] svg:not(.brand-lattice-mark) {

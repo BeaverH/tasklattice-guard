@@ -4,6 +4,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Bot, Cable, CircleHelp, FlaskConical, History, LibraryBig, ReceiptText, Rocket, ScrollText, ServerCog, Settings, ShieldCheck, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { BrandLogo } from "@/components/brand-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -94,10 +95,7 @@ export function ControlPlaneSidebar() {
             onClick={() => setOpenMobile(false)}
             className="flex min-h-11 items-center gap-2.5 rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center"
           >
-            <ShieldCheck className="size-5 shrink-0 text-primary" strokeWidth={2.2} />
-            <span className="min-w-0 text-sm font-semibold tracking-[-0.02em] text-foreground group-data-[collapsible=icon]:hidden">
-              TaskLattice <span className="font-medium text-muted-foreground">Guard</span>
-            </span>
+            <BrandLogo wordmarkClassName="group-data-[collapsible=icon]:hidden" />
           </Link>
         </SidebarHeader>
 

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Building2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +35,7 @@ export function LoginPage() {
       <section className="relative hidden overflow-hidden border-r bg-primary px-10 py-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between xl:px-14">
         <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] [background-size:48px_48px]" />
         <div className="relative flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl border border-white/20 bg-white/10"><ShieldCheck className="size-5" /></span>
-          <span className="text-base font-semibold tracking-[-0.02em]">TaskLattice <span className="font-normal text-white/70">Guard</span></span>
+          <BrandLogo onPrimary />
         </div>
         <div className="relative max-w-lg">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/65">{t("auth.brandEyebrow")}</p>
@@ -54,7 +54,7 @@ export function LoginPage() {
         </div>
         <div className="flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-md">
-            <div className="mb-8 flex items-center gap-2 lg:hidden"><ShieldCheck className="size-5 text-primary" /><span className="font-semibold">TaskLattice Guard</span></div>
+            <div className="mb-8 lg:hidden"><BrandLogo /></div>
             <span className="inline-flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><LockKeyhole className="size-5" /></span>
             <p className="mt-6 text-sm font-medium text-primary">{t("auth.loginEyebrow")}</p>
             <h1 className="mt-2 font-sans text-3xl font-normal tracking-normal">{t("auth.loginTitle")}</h1>
