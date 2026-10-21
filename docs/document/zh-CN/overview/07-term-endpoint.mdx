@@ -4,46 +4,42 @@ title: "Endpoints：应用身份与接入"
 summary: "认识 LiteLLM、Scan 两种 Endpoint 接入类型，以及凭据、Router 绑定和接入健康。"
 order: 6
 ---
-<strong>是什么：</strong>应用、Agent 或网关的认证身份及其协议接入点，可绑定一个 Router。
+Endpoint 认证应用、Agent 或网关身份，并选择检测协议。不同信任边界需要独立凭据，调用方提供的 Header 不能代替认证。
 
-<strong>为什么：</strong>不同信任边界要隔离凭据和调用上下文，不能把外部 header 当成认证身份。
-
-<strong>怎么用：</strong>
-
-1. 运维人员创建 Endpoint 并发放凭据。
-2. 集成方按对应的协议调用检测接口。
-3. 集成方核对接入验证和运行健康。
-
-<strong>例子：</strong>客服应用和内部测试网关分别使用自己的 Endpoint 凭据，运行日志才能区分是谁发起检查。
+例如，客服应用与内部测试网关分别使用自己的 Endpoint，运行记录才能区分它们的调用。
 
 <a id="endpoint-integration-types" />
+## 选择接入类型
 
-## 支持哪两种接入类型
+两种类型都使用 Endpoint 凭据，并由绑定的 Router 选择 Guardrail Version。
 
-创建 Endpoint 时选择数据面接入协议。系统只提供 LiteLLM 和 Scan，两者均使用独立 Endpoint 凭据，并由绑定的 Router 选择实际执行的 Guardrail Version。
-
-| 接入类型 | 适合谁 | 如何送检 |
+| 类型 | 适用调用方 | 检测契约 |
 | --- | --- | --- |
-| **LiteLLM 的 TaskLattice Guard**（`litellm-generic-guardrail`） | LiteLLM 网关，或实现 LiteLLM Generic Guardrail 契约的自研网关、Agent | 用 `x-api-key` 调用 Endpoint 下的 `/beta/litellm_basic_guardrail_api`。使用 `litellm_call_id` 关联输入与输出。支持 Provider 的 WebSocket 输出保护。 |
-| **Scan（F5 兼容）**（`f5-scan`） | Python、requests、curl、F5 Scan 测试脚本，或需要独立文本检查的应用 | 用该 Endpoint 的 Bearer 凭据调用 `/runtime/v1/endpoints/{endpoint_id}/backend/v1/scans`，通过 `input` 提交文本，`scanDirection` 选择 request 或 response。每次调用独立，不生成业务模型回答。 |
+| LiteLLM（`litellm-generic-guardrail`） | LiteLLM 或实现其 Generic Guardrail 契约的调用方 | HTTP 检查非流式 Input 与完整的 Output，WebSocket 检查流式 Output。HTTP 使用 `x-api-key` 认证。 |
+| Scan（`f5-scan`） | 独立文本检查、脚本或数据集评测 | 通过 `input` 提交文本，`scanDirection=request` 或 `response` 选择方向。使用该 Endpoint 的 Bearer 凭据认证。 |
 
-已有 LiteLLM 网关时，选择 LiteLLM。独立的文本扫描和数据集评测，选择 Scan。客户端必须遵守对应的请求和响应契约，先判断 outcome，再决定如何交付内容。参见[接入说明](/document/developer/endpoint-setup)、[LiteLLM 请求示例](/document/developer/gateway-connect)和[调用方职责](/document/developer/endpoint-setup#endpoint-delivery)。
+共享的 `litellm_call_id` 关联 Input 与 Output。未提供时，两次检测不会共享固定的调用上下文。每次 Scan 请求彼此独立，两种协议都不生成业务模型回答。
+
+[LiteLLM Provider 示例](/document/developer/gateway-connect#gateway-litellm-provider-example)实现了网关契约。其流式支持要求 fail-closed、Enforce 模式，以及 full 或 window 缓冲。
+
+地址、凭据与验证步骤参见 [Endpoint 接入指南](/document/developer/endpoint-setup)。调用方必须在内容继续流转前执行检测结果。
 
 <a id="state-endpoint" />
-
-## Endpoint 启停、接入与健康
+## 区分启停、接入进度与健康
 
 <StateMachineDiagram kind="endpoint" locale="zh-CN" />
 
-Endpoint 保存启停状态 active ↔ disabled，运维人员可以恢复。软删除是另一个独立的条件，不等于 disabled。
+| 维度 | 含义 |
+| --- | --- |
+| 启停 | 保存为 `active` 或 `disabled`，有权限的用户可以修改。软删除是另一条件。 |
+| 接入进度 | 如 `applying`、`awaiting_callback`、`verified` 或 `disabled`。 |
+| 运行健康 | 如 `healthy`、`waiting` 或 `degraded`，来自运行观察。 |
 
-- `applying / awaiting_callback / verified / disabled` 是接入设置的进度。
-- `healthy / waiting / degraded` 等运行健康来自观察。
-
-两者都不能代替认证凭据、Router 绑定或对实际流量的核对。凭据的签发、轮换和撤销，也独立于 Endpoint 的启停状态。
+接入验证成功不能证明真实流量健康。还要检查凭据、Router 下发和检测结果。凭据的签发、轮换与撤销仍是独立操作。
 
 <a id="state-credentials" />
+## 凭据与 Decision 不属于资源状态
 
-## 凭据与请求结果不是资源状态
+个人 Access Token 授权管理调用，Endpoint 凭据授权运行时检测。每种凭据都有自己的签发与撤销状态。
 
-个人 Access Token 是否有效、过期或撤销，由有效期和撤销时间判断。Endpoint 凭据有自己的签发和撤销记录。它们都不是 Guardrail 或 Router 的生命周期。一次检测的 allow、transform、block 是这次请求的 Decision，不会让某个资源变成绿色或红色状态。
+allow、transform 和 block 描述一次检测结果，不会改变 Endpoint 或 Router 的生命周期。

@@ -4,85 +4,109 @@ title: "Endpoint integration guide"
 summary: "Choose LiteLLM or Scan, configure an Endpoint and credentials, and verify that check results affect actual delivery."
 order: 0
 ---
-Start application integration here: choose a protocol, obtain the runtime address and credential, then verify real requests. To automate configuration editing, testing and publication, read [Control-plane API integration](/document/developer/developer-api-access).
+Start here when connecting an application to Guard. Choose an inspection protocol, obtain an Endpoint address and credential, then test actual delivery.
+
+For resource editing and publication automation, use [control-plane integration](/document/developer/developer-api-access).
 
 <a id="endpoint-protocols" />
-## Choose an Endpoint type
+## Choose the inspection protocol
 
-There are two Endpoint types. **Both receive requests on a Runner and use the Endpoint's published Router to select a Guardrail Version**. The request body does not select a Scanner or Guardrail.
+Both Endpoint types authenticate the caller and use a published Router to select a Guardrail Version.
 
-| Type | Use case | Authentication | Calls and output |
-| --- | --- | --- | --- |
-| [LiteLLM](/document/developer/gateway-connect) | LiteLLM Provider, custom gateway or Agent | `x-api-key` | A shared Call ID correlates input and output and pins the version. Complete text and WebSocket output. |
-| [Scan (F5 compatible)](/document/developer/scan-protocol) | Python requests, curl, dataset evaluations | Bearer Token | Each scan is routed independently. Complete text only. Scans are not correlated. |
+| Type | Authentication | Input and complete Output | Streaming Output | Call correlation |
+| --- | --- | --- | --- | --- |
+| [LiteLLM protocol](/document/developer/gateway-connect) | `x-api-key` | Supported | WebSocket extension | A shared Call ID can pin the version across Input and Output. |
+| [Scan, F5 compatible](/document/developer/scan-protocol) | Bearer credential | Supported | Unsupported | Each scan uses a new independent route assignment. |
 
-Custom clients can implement the LiteLLM contract without deploying LiteLLM. HTTP is the transport, not another Endpoint type. Each protocol document owns its JSON fields, errors and result semantics.
+A custom gateway or Agent can implement the LiteLLM contract without deploying LiteLLM. HTTP is a transport, not a third Endpoint type. The protocol guides define fields, errors and result handling.
 
 <a id="endpoint-prepare" />
-## Prepare the runtime address and credential
+## Obtain the address and credential
 
-1. Confirm three things: the Guardrail Version and the Router are published, the configuration reached the Runners, and the execution dependencies are ready.
-2. Create a separate Endpoint for the client in [Endpoints](/integration/endpoints), select its type and bind a Router.
-3. Save the complete credential shown once and copy the **Endpoint runtime address** from its details, including `/runtime/v1/endpoints/<endpoint_id>`.
+1. Confirm the target Guardrail Version's Released status. Check its dependencies.
+2. Prepare a published Router that targets this exact version.
+3. Create an Endpoint under [Endpoints](/integration/endpoints). Select its type and Router.
+4. Save the complete credential when it appears. Copy the Endpoint runtime address, including `/runtime/v1/endpoints/<endpoint_id>`.
+5. Confirm that the runtime applied the configuration before testing traffic.
 
-Administrators can set Helm `runner.publicUrl` (Controller environment variable `CONTROLLER_RUNTIME_PUBLIC_URL`) to an external HTTP(S) base URL, including its port. Both Scan and LiteLLM addresses use that URL; Helm also inherits the shared top-level `publicUrl` when set. Without either override, addresses use the incoming Controller request origin (scheme, hostname and port). Reverse proxies must overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` with the external address. The UI and data plane can share a domain and port when the gateway routes `/runtime/v1/endpoints/` to Runtime and other paths to Controller. Internal calls, including Playground, continue to use `CONTROLLER_RUNTIME_SERVICE_URL`. Copy the full Endpoint path rather than only the UI origin.
+Use the Endpoint credential for inspection. Personal management tokens cannot replace it. Caller-provided headers or JSON claims do not automatically establish trusted identity.
 
-Use an Endpoint credential, not a Controller Personal Access Token. The credential sets the Endpoint identity. Claims in the body and headers are not trusted identity by default. Routers match the fields that the selected Adapter supplies. Verify identity headers through a trusted proxy. See [Endpoint and Routing](/document/operator/operator-routing).
+<a id="endpoint-address-configuration" />
+### Deployment address settings
+
+Administrators can set Helm `runner.publicUrl`, corresponding to `CONTROLLER_RUNTIME_PUBLIC_URL`. Helm can also inherit top-level `publicUrl`. Without an override, generated addresses use the incoming Controller request origin.
+
+A reverse proxy must supply the correct external host and scheme. Route `/runtime/v1/endpoints/` to the runtime service. Other UI and management paths go to Controller. Internal calls use `CONTROLLER_RUNTIME_SERVICE_URL` independently.
+
+Copy the full Endpoint address. The console's host alone may not be the runtime address.
 
 <a id="endpoint-litellm" />
-## Connect LiteLLM
+## Connect through the LiteLLM Provider example
 
-The **TaskLattice Guard Provider** is built into the TaskLattice LiteLLM image.
+The TaskLattice LiteLLM image includes the TaskLattice Guard Provider. Its configuration belongs to LiteLLM, not the Endpoint details.
 
-1. In LiteLLM Admin, open **Guardrails → Guardrail Garden → TaskLattice Guard → Create Guardrail**.
-2. Enter the **Endpoint** address and complete **Secret**, choose inspection points and the settings below, then select **Verify & connect**. The Provider activates immediately without a restart.
-3. Send real model input and output and inspect Endpoint **Runtime activity**. `/verify` checks only the credential and the Adapter type. It does not prove that the inspection path works.
+1. Open **Guardrails → Guardrail Garden → TaskLattice Guard → Create Guardrail** in LiteLLM Admin.
+2. Enter the Endpoint address and complete Secret.
+3. Select inspection points and failure handling.
+4. Select **Verify & connect**. The Provider applies the configuration without a restart.
+5. Send real Input and Output checks. Inspect Endpoint runtime activity and actual client delivery.
 
-| Provider setting | Behavior |
-| --- | --- |
-| Inspection points | **Before model** inspects the input. **After model** inspects the output. Select one or both. |
-| Guard unavailable | Default **Block request**. **Continue without protection** applies only to network failures, timeouts and HTTP 502, 503 or 504. It never bypasses Policy blocks, 4xx, 500 or invalid responses. |
-| Runtime timeout | 1–60 seconds. Default 10 seconds. |
-| Apply to every request | On by default. Disable it only when clients select the Guardrail explicitly. |
+`/verify` checks credentials and adapter compatibility only. It does not execute a Policy inspection.
 
-LiteLLM owns these settings. The Endpoint details do not show their live values. The Provider opens a WebSocket for streaming output while clients keep using SSE. Custom clients implement the [LiteLLM protocol](/document/developer/gateway-connect) directly.
+| Provider setting | Default | Behavior |
+| --- | --- | --- |
+| Inspection points | Select for your integration | Before model checks Input. After model checks Output. Protected streaming requires both. |
+| Guard unavailable | Block request | Continue without protection applies only to eligible failures of non-streaming callbacks. |
+| Runtime timeout | 10 seconds | Range: 1–60 seconds. |
+| Apply to every request | Enabled | Disable only when callers explicitly select the Guardrail. |
+
+For non-streaming callbacks, eligible failures include network errors, timeouts and HTTP 502, 503 or 504. They exclude Policy blocks, 4xx, 500 and invalid responses.
+
+Protected streaming requires **Block request**, both inspection points and **Enforce** mode. The example Provider supports `full_buffered` and `window_buffered`, but rejects `interruptible`. Business clients retain SSE while the Provider uses WebSocket with Guard.
+
+See [Provider limits](/document/developer/gateway-connect#gateway-litellm-provider-limits) before reusing this example. Other gateways implement the [protocol contract](/document/developer/gateway-connect) through their own adapters.
 
 <a id="endpoint-scan" />
-## Connect Scan (F5 compatible)
+## Connect Scan
 
-Set the F5 script's `CALYPSOAI_URL` to the Endpoint base URL including its UUID, `https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>`, and `CALYPSOAI_TOKEN` to that Scan Endpoint's complete credential. Append `/backend/v1/scans` while preserving the UUID path. The path selects the Endpoint, Bearer authentication verifies credential ownership, and its Router selects the Guardrail. The old root path is no longer available; update any client URL-joining logic that discards the base path.
+Set `CALYPSOAI_URL` to the full Endpoint base address. Set `CALYPSOAI_TOKEN` to its complete credential. Append `/backend/v1/scans` without discarding the Endpoint path.
 
-Administrators can configure **Default flagOnly** when creating a Scan Endpoint or viewing its details (initially `true`). Requests that omit `flagOnly` use this value; explicit request values take precedence. Choose `false` to distinguish blocked and redacted results. Changes take effect after Runner synchronization.
+Users with Endpoint write access can configure **Default flagOnly**. New Endpoints default to `true`. Requests that omit the field use this setting. An explicit boolean overrides it.
 
-To verify the connection, send a real scan with the [Scan cURL and JSON examples](/document/developer/scan-protocol#scan-connection). Scan has no `/verify`. Check the script against the documented compatibility scope. Placeholder fields for project selection, Scanner configuration and request correlation have no effect.
+Submit a real scan with the [Scan request example](/document/developer/scan-protocol#scan-connection). Scan does not support `/verify`. Compatibility placeholders cannot select projects, configure Scanners or correlate requests.
 
 <a id="endpoint-delivery" />
-## Enforce checks around model calls
+## Apply results around model calls
 
-Inspect input and enforce blocking or replacement before the application calls the model. Buffer and inspect output before delivery. Guard inspects the submitted content and records evidence. The client owns model calls, retries, cancellation and final delivery. LiteLLM streaming clients deliver only server `delta.text`.
+Inspect Input before calling the model. Apply any block or replacement first. For complete Output, inspect the answer before delivery. For streaming Output, deliver only Guard's released `delta.text`.
 
-A successful HTTP `200` or Python `raise_for_status()` is not an allow decision. Read the LiteLLM `action` or the Scan `result.outcome`. Unknown enum values, invalid JSON and timeouts never mean that the inspection passed. **Fail Closed** stops the application without a valid result. **Fail Open** applies only to inspection failures that are explicitly eligible. It never applies to a normal block, replacement or `flagged` result.
+Read LiteLLM `action` or Scan `result.outcome`. HTTP `200` or Python `raise_for_status()` alone does not permit delivery. Unknown values, invalid JSON and timeouts do not prove inspection passed.
+
+Fail-closed stops the flow without a valid result. Fail-open applies only to failures that the integration explicitly permits. It cannot reinterpret a block, replacement or flag as a pass.
+
+Guardrail Monitor and Bypass modes have separate semantics. They can return original content without enforcing detections. Check the mode when assessing protection. The application owns model calls, retries, cancellation and final delivery.
 
 <a id="endpoint-verification" />
 ## Verify actual delivery
 
-Compare known test cases, [runtime logs](/logs) and content actually delivered to the application. **Published** means that an executable version exists. **Distributed** means that the Runners accepted the configuration. Protection also requires that the client submits content and enforces the results.
+Compare known examples, [runtime logs](/logs) and delivered content. A published version, applied configuration and a correctly integrated caller are separate requirements.
 
-| Check | LiteLLM | Scan |
+| Check | LiteLLM protocol | Scan |
 | --- | --- | --- |
-| Authentication and execution | `/verify`, then real input/output checks | Submit request/response scans directly |
-| Result handling | All three actions. Replacement count and order. | All four outcomes. Both `flagOnly` and `verbose` settings. |
-| Correlation | A shared Call ID pins the version. Expired context fails. | Each scan is independent. Placeholders cannot correlate calls. |
-| Output delivery | Inspect the complete text first. Stream only server deltas. | Wait for the complete JSON, then evaluate the outcome. |
-| Failures | Bad credentials, wrong type, expired context, disconnect, malformed replacement | Bad credentials, wrong type, 413/415/422, failed checks and timeout |
+| Authentication and execution | Verify connection, then inspect actual Input and Output. | Submit actual request and response scans. |
+| Result handling | Handle all three actions and replacement arrays. | Handle all four outcomes and Endpoint defaults. |
+| Correlation | Test shared Call IDs and expired context. | Confirm scans remain independent. |
+| Delivery | Check replacements and server-released stream text. | Wait for complete JSON before applying the outcome. |
+| Failures | Test credentials, field types, expired context, disconnects and invalid replacements. | Test credentials, types, body limits, media types, inspection failures and timeouts. |
 
-**Verified** requires authenticated inspection traffic. Traffic in one direction does not prove that the other direction was inspected. Evaluation reports must separate content judgments from execution failures. See each protocol for exact statuses and retry boundaries.
+An Endpoint's Verified setup state requires authenticated inspection traffic. One direction does not prove the other ran. Keep execution failures separate from content judgments in evaluation reports.
 
 <a id="endpoint-credentials" />
-## Rotate or disable credentials
+## Rotate credentials or disable the Endpoint
 
-1. Choose **Generate new credential**, securely save its one-time value and mark it as saved.
-2. Update the client: Secret / `x-api-key` for LiteLLM, Bearer Token for Scan. Send a real request.
-3. Confirm traffic succeeds, then revoke the old credential, keeping at least one active credential.
+1. Select **Generate new credential**. Save its complete value securely.
+2. Update the application credential.
+3. Send a real request with the new credential.
+4. Revoke the old credential after successful verification. Retain at least one active credential.
 
-Key hints cannot recover a Secret. Turning off **Accept callbacks** rejects all check requests authenticated with that Endpoint's credentials.
+Credential hints cannot recover the secret. Turning off **Accept callbacks** rejects inspection requests that use this Endpoint's credentials.

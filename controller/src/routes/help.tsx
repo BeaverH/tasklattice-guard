@@ -1,4 +1,4 @@
-import { isValidElement, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { isValidElement, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Link, useLinkProps, useParams, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, ChevronRight, Search, X } from "lucide-react";
 import type { MDXComponents } from "mdx/types";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SyntaxCode } from "@/components/syntax-code";
 import { cn } from "@/lib/utils";
-import { getHelpContent, searchHelpContent, type HelpContent, type HelpDocument } from "@/features/help-content";
+import { getHelpContent, searchHelpContent, type HelpContent, type HelpDocument, type HelpSection } from "@/features/help-content";
 import { decodeDocumentAnchor, documentHref } from "@/features/help-navigation";
 
 function DocumentNavigationLink({ href = "", ...props }: ComponentProps<"a">) {
@@ -95,11 +95,64 @@ function HelpContents({ content, activeDocumentId, onNavigate, idPrefix }: { con
   </nav>;
 }
 
-function OnThisPage({ document, activeAnchor, label, onNavigate }: { document: HelpDocument; activeAnchor: string; label: string; onNavigate: () => void }) {
-  const sections = document.sections.length ? document.sections : [{ id: document.id, title: document.title, depth: 2 }];
-  return <nav aria-label={`${label}: ${document.title}`} className="border-l pl-4">
-    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground">{label}</p>
-    <div className="space-y-0.5">{sections.map(section => <DocumentNavigationLink key={section.id} href={documentHref(document, section.id)} aria-current={activeAnchor === section.id ? "location" : undefined} className={`block rounded-sm py-1 text-[13px] leading-5 hover:text-foreground focus-visible:outline-primary ${section.depth >= 3 ? "pl-3" : ""} ${activeAnchor === section.id ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={onNavigate}>{section.title}</DocumentNavigationLink>)}</div>
+function ContentsTitle({ title }: { title: string }) {
+  const parts = title.match(/^(.+?)[：:]\s*(.+)$/u);
+  return parts ? <>
+    <span className="block text-balance">{parts[1]}</span>
+    <span className="mt-0.5 block text-pretty text-xs font-normal text-muted-foreground">{parts[2]}</span>
+  </> : <span className="block text-pretty">{title}</span>;
+}
+
+function OnThisPage({ document, activeAnchor, labels, onNavigate }: { document: HelpDocument; activeAnchor: string; labels: HelpContent["labels"]; onNavigate: () => void }) {
+  const idPrefix = useId();
+  const navigation = useRef<HTMLElement>(null);
+  const groups = useMemo(() => {
+    const sections = document.sections.length ? document.sections : [{ id: document.id, title: document.title, text: document.title, depth: 2 }];
+    const result: { section: HelpSection; children: HelpSection[] }[] = [];
+    for (const section of sections) {
+      const parent = result.at(-1);
+      if (!parent || section.depth <= parent.section.depth) result.push({ section, children: [] });
+      else parent.children.push(section);
+    }
+    return result;
+  }, [document]);
+  const activeGroupId = (groups.find(group => group.section.id === activeAnchor || group.children.some(section => section.id === activeAnchor)) ?? groups[0]).section.id;
+  const [expandedGroupId, setExpandedGroupId] = useState(activeGroupId);
+  useEffect(() => setExpandedGroupId(activeGroupId), [activeGroupId, document.id]);
+  useEffect(() => {
+    const panel = navigation.current?.parentElement;
+    const link = navigation.current?.querySelector<HTMLElement>('a[aria-current="location"]');
+    if (!panel || !panel.clientHeight) return;
+    if (!link) { panel.scrollTop = 0; return; }
+    if (!link.getClientRects().length) return;
+    const panelRect = panel.getBoundingClientRect();
+    const linkRect = link.getBoundingClientRect();
+    if (linkRect.top < panelRect.top + 12) panel.scrollTop += linkRect.top - panelRect.top - 12;
+    else if (linkRect.bottom > panelRect.bottom - 12) panel.scrollTop += linkRect.bottom - panelRect.bottom + 12;
+  }, [activeAnchor, expandedGroupId, document.id]);
+
+  return <nav ref={navigation} aria-label={`${labels.onThisPage}: ${document.title}`} className="min-w-0">
+    <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-wide text-foreground">{labels.onThisPage}</p>
+    <ul className="space-y-2">{groups.map(group => {
+      const expanded = expandedGroupId === group.section.id;
+      const current = activeGroupId === group.section.id;
+      const childrenId = `${idPrefix}-${group.section.id}`;
+      return <li key={group.section.id}>
+        <div className="flex items-start">
+          <DocumentNavigationLink href={documentHref(document, group.section.id)} aria-label={group.section.title} aria-current={activeAnchor === group.section.id ? "location" : undefined} className={cn("min-h-11 min-w-0 flex-1 rounded-sm px-3 py-2.5 text-[13px] leading-5 font-semibold hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary", current ? "text-foreground" : "text-muted-foreground", activeAnchor === group.section.id && "text-primary")} onClick={() => { setExpandedGroupId(group.section.id); onNavigate(); }}>
+            <ContentsTitle title={group.section.title} />
+          </DocumentNavigationLink>
+          {group.children.length ? <button type="button" aria-expanded={expanded} aria-controls={childrenId} aria-label={`${expanded ? labels.collapseSection : labels.expandSection}: ${group.section.title}`} className="flex size-11 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setExpandedGroupId(expanded ? "" : group.section.id)}>
+            <ChevronRight aria-hidden="true" className={cn("size-3.5", expanded && "rotate-90")} />
+          </button> : null}
+        </div>
+        {group.children.length ? <div id={childrenId} hidden={!expanded} className="ml-3 border-l border-border/70">
+          <ul>{group.children.map(section => <li key={section.id}>
+            <DocumentNavigationLink href={documentHref(document, section.id)} aria-current={activeAnchor === section.id ? "location" : undefined} className={cn("-ml-px block min-h-9 border-l-2 px-3 py-2 text-pretty text-[13px] leading-5 hover:bg-muted/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary", section.depth > group.section.depth + 1 && "pl-6 text-xs", activeAnchor === section.id ? "border-primary bg-primary/5 font-medium text-primary" : "border-transparent text-muted-foreground")} onClick={onNavigate}>{section.title}</DocumentNavigationLink>
+          </li>)}</ul>
+        </div> : null}
+      </li>;
+    })}</ul>
   </nav>;
 }
 
@@ -125,7 +178,6 @@ export function HelpPage() {
   const mobileContents = useRef<HTMLDetailsElement>(null);
   const inlineContents = useRef<HTMLDetailsElement>(null);
   const desktopDirectory = useRef<HTMLDivElement>(null);
-  const pageContents = useRef<HTMLElement>(null);
   const results = useMemo(() => searchHelpContent(content, query), [content, query]);
   const searching = Boolean(query.trim());
   const { labels } = content;
@@ -178,16 +230,6 @@ export function HelpPage() {
     if (linkRect.top < panelRect.top + 12) panel.scrollTop += linkRect.top - panelRect.top - 12;
     else if (linkRect.bottom > panelRect.bottom - 12) panel.scrollTop += linkRect.bottom - panelRect.bottom + 12;
   }, [activeDocument.id]);
-  useEffect(() => {
-    const panel = pageContents.current;
-    const link = panel?.querySelector<HTMLElement>('a[aria-current="location"]');
-    if (!panel) return;
-    if (!link) { panel.scrollTop = 0; return; }
-    const panelRect = panel.getBoundingClientRect();
-    const linkRect = link.getBoundingClientRect();
-    if (linkRect.top < panelRect.top + 12) panel.scrollTop += linkRect.top - panelRect.top - 12;
-    else if (linkRect.bottom > panelRect.bottom - 12) panel.scrollTop += linkRect.bottom - panelRect.bottom + 12;
-  }, [activeAnchor, activeDocument.id]);
 
   function directory(desktop = false) {
     return <>
@@ -220,7 +262,7 @@ export function HelpPage() {
       {directory(true)}
     </aside>
     <div className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 xl:px-12">
-      <div className="mx-auto grid w-full max-w-[76rem] xl:grid-cols-[minmax(0,1fr)_12rem] xl:items-start xl:gap-8">
+      <div className="mx-auto grid w-full max-w-[84rem] xl:grid-cols-[minmax(0,1fr)_clamp(15rem,18vw,18rem)] xl:items-start xl:gap-8">
         <div className="min-w-0">
           <details ref={mobileContents} className="mb-5 rounded-lg border bg-card px-3 lg:hidden">
             <summary className="flex min-h-11 cursor-pointer list-item items-center py-3 text-sm font-medium">{labels.contents}</summary>
@@ -228,7 +270,7 @@ export function HelpPage() {
           </details>
           <details ref={inlineContents} className="sticky top-16 z-10 mb-5 rounded-lg border bg-card px-3 shadow-sm xl:hidden">
             <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{labels.onThisPage} · {activeDocument.title}</summary>
-            <div className="max-h-[50dvh] overflow-y-auto pb-3"><OnThisPage document={activeDocument} activeAnchor={activeAnchor} label={labels.onThisPage} onNavigate={closeContents} /></div>
+            <div className="max-h-[50dvh] overflow-y-auto pb-3"><OnThisPage document={activeDocument} activeAnchor={activeAnchor} labels={labels} onNavigate={closeContents} /></div>
           </details>
           <DocumentArticle key={activeDocument.id} document={activeDocument} />
           <nav aria-label={labels.articleNavigation} className="mt-16 grid gap-3 border-t pt-6 sm:grid-cols-2">
@@ -236,8 +278,8 @@ export function HelpPage() {
             {next ? <DocumentNavigationLink href={documentHref(next)} className="rounded-lg border p-4 text-sm hover:border-primary/40 hover:bg-primary/5"><span className="block text-xs text-muted-foreground">{labels.nextArticle} →</span><span className="mt-1 block font-medium">{next.title}</span></DocumentNavigationLink> : null}
           </nav>
         </div>
-        <aside ref={pageContents} className="sticky top-24 hidden max-h-[calc(100dvh-7rem)] overflow-y-auto xl:block" aria-label={labels.onThisPage}>
-          <OnThisPage document={activeDocument} activeAnchor={activeAnchor} label={labels.onThisPage} onNavigate={closeContents} />
+        <aside className="document-page-contents sticky top-24 hidden max-h-[calc(100dvh-7rem)] overflow-y-auto xl:block" aria-label={labels.onThisPage}>
+          <OnThisPage document={activeDocument} activeAnchor={activeAnchor} labels={labels} onNavigate={closeContents} />
         </aside>
       </div>
     </div>

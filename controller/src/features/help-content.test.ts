@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { helpStructuralComponents } from "../components/help/document-blocks";
 import { getHelpContent, searchHelpContent, type HelpLocale } from "./help-content";
 import { enforcementActionConflictOrder, enforcementActionDisplayOrder } from "../../shared/enforcement-action.generated";
+import { detectorRefs } from "../../shared/policy-definition";
 
 const locales: HelpLocale[] = ["zh-CN", "en"];
 const article = (locale: HelpLocale, id: string) => getHelpContent(locale).documents.find(document => document.id === id)!;
@@ -14,7 +15,7 @@ describe("repository documentation", () => {
     const content = getHelpContent(locale);
     expect(content.categories.map(category => category.id)).toEqual(["overview", "operator", "admin", "developer", "api"]);
     expect(content.categories.every(category => category.articles.length >= 2)).toBe(true);
-    expect(content.documents).toHaveLength(23);
+    expect(content.documents).toHaveLength(22);
     expect(content.documents[0].id).toBe("quickstart-protection");
     expect(content.categories[1].articles[0].id).toBe("user-lifecycle");
     expect(content.categories[2].articles[0].id).toBe("platform-runtime");
@@ -105,8 +106,8 @@ describe("repository documentation", () => {
       const section: Element[] = [];
       for (let node = heading?.nextElementSibling; node && !/^H[1-3]$/.test(node.tagName); node = node.nextElementSibling) section.push(node);
       const choices = section.find(node => node.tagName === "TABLE");
-      expect(choices?.querySelectorAll("tbody > tr")).toHaveLength(7);
-      for (const ref of ["text/regex", "text/keyword", "text/conditions", "code/fenced-block", "model/classifier", "model/grounding", "service/formal-verification"]) expect(choices?.textContent).toContain(ref);
+      expect(choices?.querySelectorAll("tbody > tr")).toHaveLength(detectorRefs.length);
+      for (const ref of detectorRefs) expect(choices?.textContent).toContain(ref);
       const example = section.find(node => node.tagName === "PRE")?.textContent;
       for (const field of ["stages:", "detector:", "text/regex", "risk_level:", "on_match:", "action: transform"]) expect(example).toContain(field);
       expect(example).not.toContain("colang_flow");

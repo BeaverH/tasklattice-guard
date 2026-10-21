@@ -1,56 +1,35 @@
 ---
 id: "user-review-policy"
-title: "How to understand a Policy"
+title: "Review a Policy before use"
 summary: "Use its protection goal, Rules, Test Cases, version, and binding parameters to understand what it actually does."
 order: 1
 ---
-To understand a Policy, start with the risk it addresses, then inspect how it checks content and which examples demonstrate the behavior. Finally, confirm the version your application actually binds. The name alone does not define its coverage.
+Read a Policy's Rules and tests before selecting it. Its name alone does not define coverage. Users can maintain shipped, local and imported Policies in Policy Studio.
 
-- A Policy is a reusable capability, not an application router.
-- A Rule is the smallest executable behavior. When you disable a Rule, the compiled behavior changes.
-- A Test Case states whether a Rule or scenario should allow, transform, or block.
-- A Guardrail pins an immutable Policy Version.
-- Required parameters are resolved when the Policy is bound to a Guardrail.
+<a id="policy-review-goal" />
+## Review purpose and coverage
 
-> The system manages built-in Policies. An operator with administrator access can maintain custom Policies in Policy Studio. Both use the same Policy → Rule → Test Case model.
+1. Read the protection goal and compliance sources.
+2. Inspect every Rule and its inspection stage.
+3. Check detector parameters, risk severity and the action after a match.
+4. Review acceptance cases, normal passes and likely false positives.
+5. Identify the exact Policy Version used by the Guardrail.
 
-[Browse Policy Library](/policy-library)
+A Policy supplies reusable behavior. A Guardrail selects that behavior for an application. A Router selects the Guardrail Version for a request.
 
-<a id="developer-policy-runtime" />
+<a id="policy-review-binding" />
+## Inspect the effective binding
 
-## Understand Policy Studio runtime configuration
+| Item | What to inspect |
+| --- | --- |
+| Version | Exact published Policy Version. Later edits do not update the binding automatically. |
+| Rules and stages | Enabled Rules and Input or Output checkpoints. Disabling a Rule changes executable behavior. |
+| Parameters | Declared defaults and values supplied by this Guardrail. Required values must resolve before execution. |
+| Actions | Rule defaults, Policy-level overrides and individual Rule overrides. |
+| Tests | Expected Decision, matched Rule identity and complete replacement output where applicable. |
 
-Rail, Flow, execution mode, Actions, and parameters form the Policy runtime contract.
+A Policy's default action can differ from the action that a Guardrail applies. Test the effective binding before publishing the Guardrail.
 
-Custom Policies automatically use the Colang 2.x programmable runtime. A Policy can refer only to registered, versioned Actions. You cannot upload arbitrary Python.
-
-**Rail**
-
-The NeMo execution phase. Input runs before the model. Output runs before the model output is delivered.
-
-**Flow name**
-
-A named Flow declared in Colang. It must match source exactly and creates Rule ID `flow/{rail}/{flow_name}`.
-
-**detect mode**
-
-Evaluates and records safety. An unsafe result still applies the configured action.
-
-**mutate mode**
-
-The Flow may return effective replacement content such as redaction or rewrite.
-
-**Advanced runtime**
-
-Parallel group marks bindings that can safely run at the same time. Timeout limits the execution time. Failure mode controls errors.
-
-**Action dependencies**
-
-Registered provider names and exact versions invoked by the Flow.
-
-**Binding parameters**
-
-Reviewed values exposed by a Policy and resolved when a Guardrail pins its version.
-
+Follow [create, test and publish a Policy](/document/operator/operator-create-policy).
 
 [Open Policy Library](/policy-library)

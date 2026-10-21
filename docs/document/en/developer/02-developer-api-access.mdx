@@ -5,47 +5,55 @@ summary: "Use Controller management APIs to bring Policy, Guardrail, and Router 
 outcome: "Outcome: an authorized, reviewed configuration workflow that tracks versions and asynchronous state."
 order: 3
 ---
-This chapter is for custom editors, approval flows and CI/CD: use Controller APIs to read configuration, save drafts, test and publish versions. For inspecting actual model traffic, start with the [Endpoint integration guide](/document/developer/endpoint-setup). Publishing configuration does not automatically route application traffic through Guard.
+Use Controller APIs to integrate configuration editing, testing and publication into your own tools. For content inspection around model calls, use [Endpoint integration](/document/developer/endpoint-setup).
 
 <a id="developer-control-workflow" />
-## Map your editing flow to Controller operations
+## Build the configuration workflow
 
-1. **Read current state**: Use `GET /api/v1/policies/{id}`, `GET /api/v1/guardrails/{id}`, and related operations to show current objects and versions. Do not rely on a disconnected local copy.
-2. **Save a candidate**: Create or update Policy and Guardrail drafts according to each resource's OpenAPI schema. Show users the difference between a draft and a published version. For Router changes, read the draft before `PUT /api/v1/routers/{id}/draft` and handle revision conflicts.
-3. **Test and review**: Submit Test Cases, start a test run, and use its returned `runId` to read the Testing Report. Before Router publication, call `POST /api/v1/routers/{id}/publication-preview` and review the exact Guardrail Version and Endpoint bindings. Passing tests or a preview do not publish anything.
-4. **Publish and confirm**: Call the appropriate publish API only after an authorized operator approves. Router publication includes the reviewed `expectedDraftRevision` and `idempotencyKey`. After `202`, read publication and rollout status. If versions or bindings change after review, review them again rather than silently adopting a new revision.
+| Step | Controller operations | Your integration's responsibility |
+| --- | --- | --- |
+| Read | Policy, Guardrail and Router queries | Present current resources, versions and revisions. |
+| Edit | Resource creation and draft updates | Distinguish drafts from published versions. Handle revision conflicts. |
+| Test | Test Case updates, test runs and reports | Track returned run IDs. Display actual results. |
+| Publish | Policy or Guardrail publication | Review the current tested content before publication. |
+| Route | Router preview, change submission and approval | Review exact versions and Endpoint bindings. Separate submitter and approver. |
+| Observe | Publication and rollout queries | Distinguish accepted, published and applied configuration. |
 
-For example, CI can create a draft and run the tests when a configuration change is merged. A separate approval step controls the production publication. Controller checks permissions, resource references, and version constraints. **Your system owns** its editing experience, change provenance, approval rules, conflict presentation, and final status shown to operators.
+Router changes use the reviewed `expectedDraftRevision`, `reviewedSnapshot` and `reviewedEndpointIds`. Submission creates a change request. A separate approval publishes it. Follow the [routing and retry workflow](/document/api/api-contract-retries#api-contract-router-publish).
+
+Your integration owns its editor, approval presentation, change provenance and final status messages. Controller checks account authority, module grants, references and version constraints.
 
 <a id="developer-control-auth" />
-## Control-plane identity and credentials
+## Authenticate management calls
 
-The browser console authenticates with a session. A custom backend or automation can use a Personal Access Token that its owning account creates. Select the module read or write grants and the expiry under Account → Access Tokens. The secret shows only once. To create, list or revoke tokens, you need the browser session of that account. An existing token cannot create another token. Keep personal tokens out of end-user browser code.
+The console uses a browser session. A backend or automation can use a personal Access Token from its owning account. Create tokens under [Account → Access Tokens](/account/access-tokens). Select module grants and expiry. The complete secret appears once.
 
-Call `GET /api/v1/account/identity` with `Authorization: Bearer <token>` first and inspect `effectivePermissions`. Grants cover the resources in the selected modules. Write includes read. Writes also require that the account is an admin now. Invalid or expired credentials return `401`. Insufficient permission returns `403`.
+Creating, listing and revoking personal tokens requires the owner's browser session. Existing personal tokens cannot create other tokens. Keep tokens in your backend configuration.
 
-```sh
-curl "{controllerOrigin}/api/v1/account/identity" \
-  -H "Authorization: Bearer $GUARD_ACCESS_TOKEN"
+Call `GET /api/v1/account/identity` first. Include `Authorization: Bearer <token>`. Inspect `effectivePermissions` before starting the workflow:
+
+- `user` accounts manage business Guardrails, Policies, Routers and Endpoints.
+- `admin` accounts manage platform settings and accounts, and read activity audits.
+- Effective token authority combines the current role and selected module grants. Write includes read.
+
+Invalid or expired credentials return `401`. Insufficient authority returns `403`. See [role boundaries](/document/admin/platform-access#admin-governance).
+
+```bash
+curl --fail-with-body "{controllerOrigin}/api/v1/account/identity"   -H "Authorization: Bearer $GUARD_ACCESS_TOKEN"
 ```
 
-An Endpoint runtime credential (LiteLLM `x-api-key` or Scan Bearer Token) is only for [data-plane inspection](/document/developer/endpoint-setup#endpoint-protocols), not for Controller configuration. A Personal Access Token cannot replace an Endpoint credential for model-request inspection.
-
-[Manage Access Tokens](/account/access-tokens)
-
-[Sign-in security](/account/security)
+Endpoint credentials authenticate runtime inspection only. They cannot replace personal tokens for management operations. Personal tokens cannot replace Endpoint credentials for content inspection.
 
 <a id="developer-api-contract" />
-## Follow OpenAPI and preserve retry boundaries
+## Use the current contract and retry rules
 
-People can read `/api/docs`. Custom editors and tools can import `/api/openapi.json`. `/api/llms.txt` gives a compact index. Each operation's `x-token-permission`, `x-idempotency`, and `x-retry-policy` describe its grant, duplicate-request semantics, and retry guidance. Tags group product capabilities, not permissions.
+| Reference | Use |
+| --- | --- |
+| [API reference](/api/docs) | Human-readable operation details. |
+| [OpenAPI](/api/openapi.json) | Request and response schemas, permissions and retry rules. |
+| [Router contract](/api/openapi.json?module=routers) | A filtered contract for routing operations. |
+| [Tool index](/api/llms.txt) | A compact operation index. |
 
-A timeout does not prove that a write did not happen. Not every `POST` is safe to send again. For Router publication, preserve the same `idempotencyKey` and request content and inspect the returned publication identity. See [versioned contracts and retries](/document/api/api-contract-retries).
+Read `x-token-permission`, `x-idempotency` and `x-retry-policy` for each operation. Product tags do not define permissions.
 
-[Management API reference](/api/docs)
-
-[Full OpenAPI](/api/openapi.json)
-
-[Router API contract](/api/openapi.json?module=routers)
-
-[API agent index](/api/llms.txt)
+A timeout does not prove that a write failed. Read the resource before retrying uncertain writes. Preserve the values that the operation's retry policy requires.

@@ -4,407 +4,291 @@ title: "Guardrails"
 summary: "Understand what a Guardrail contains, how its versions are tested and released, how it applies Decisions, and how model costs are calculated."
 order: 2
 ---
-<strong>What:</strong> A Guardrail is a logical entity. It has two parts:
+A Guardrail combines protection for one business scenario. Its draft selects Policy Versions, enabled Rules, parameters, actions and tests. Publication freezes this configuration as a Guardrail Version.
 
-- **Static part:** a set of Policies and its tests. The tests include the Test Cases that the Guardrail inherits from its Policies, and the custom Test Cases that you add to the Guardrail. A **Guardrail Version** freezes the static part.
-- **Dynamic part:** the security events that the Guardrail records when it inspects traffic, its runtime metrics, and model usage and cost. You see them on the Guardrail pages in the UI.
-
-Policy, Endpoint and Router are also logical entities. A Guardrail is not a Rule, and it is not a Router.
-
-<strong>Why:</strong> One Policy can serve many applications. A Guardrail selects the Policies that one application needs, and freezes them with their tests in versions that people can review.
-
-<strong>How:</strong>
-
-1. Select Policies in the Guardrail draft.
-2. Run the tests.
-3. Publish a Guardrail Version.
-4. Publish a Router that sends Endpoint traffic to that version.
-
-Readiness and traffic references are shown separately. Different Routers can use different versions of the same Guardrail at once; one Policy count or latest report cannot describe them all.
+Runtime events, metrics, operating mode and costs describe operation in this environment. They remain separate from immutable version content.
 
 <a id="glossary-resource-map" />
-
-## Resource relationship map
+## Resource relationships
 
 <ResourceMap locale="en" />
 
-<strong>Keep two relationships apart:</strong>
-
-- A Guardrail binds Policy Versions.
-- A Policy contains Rules and Test Cases. Each Rule maps to an implementation. Test Cases verify the behavior.
-
-A production call goes from an Endpoint, through a Router, to one pinned Guardrail Version. The Runner returns a Decision and the evidence for it.
+A Guardrail binds Policy Versions. A Policy contains Rules and Test Cases. An Endpoint authenticates a call, and its Router selects one exact Guardrail Version.
 
 <a id="glossary-term-guardrail" />
+## Guardrail configuration
 
-## Guardrail
-
-A logical entity for one business scenario. Its static part is a set of Policies and its tests. Its dynamic part is its security events and runtime metrics. After its tests pass, you publish its static part as an immutable Guardrail Version. The [product introduction](#term-guardrail) shows the full relationship.
-
-<a id="guardrail-usage-cost" />
-
-## Usage & cost
-
-Costs are for internal accounting, not customer billing. Policies, Routing Policies and rules that do not call a model incur no model cost. The Guardrails list shows **Month cost (USD)**. Click the amount to open **Usage & cost**, with calls, input/output tokens, model breakdowns and daily trends. It covers all versions of the Guardrail, including runtime traffic, draft/version tests and Playground inspection. Filter by source and this month, last 7 days or last 30 days. Period boundaries use UTC.
-
-<a id="guardrail-price-sources" />
-
-### Where prices come from
-
-A USD catalog derived from LiteLLM ships with the application, so offline deployments work without downloads. Administrators can inspect the bundled version and correct prices in [Models → Model prices](/settings/models?tab=pricing). Prices apply globally to the same provider/model; manual prices override the bundled catalog. Custom gateways can select an exact catalog entry. Unlisted small models require a manual price or an explicit free setting.
-
-Matching uses the actual provider and model, not model size or a different provider's price. Operators supply their own prices for self-hosted models. Missing prices remain **Unaccounted**. All prices and costs use **USD**.
-
-<a id="guardrail-cost-calculation" />
-
-### Calculation
-
-Token rates are **USD per million tokens**:
-
-```text
-Cost (USD) = (uncached input tokens × input rate
-              + cached input tokens × cache rate
-              + output tokens × output rate) / 1,000,000
-```
-
-Cached input is subtracted from total input before calculating the uncached portion. With no caching, 1,000 input tokens at USD 0.20/M and 100 output tokens at USD 0.60/M cost **USD 0.00026**.
-
-For models billed by request, configure **USD per thousand calls**: cost equals calls × rate / 1,000. Explicitly free models cost USD 0, even if token usage is unavailable.
-
-<a id="guardrail-unaccounted-calls" />
-
-### Accounted and unaccounted calls
-
-Missing prices, token usage, model identity or unsupported billing details leave a call **Unaccounted**. Cached usage without a cache rate is also unaccounted. Partial totals show the accounted amount alongside the unaccounted count; entirely unknown totals show Unaccounted. No model calls means USD 0.
-
-Runner telemetry can arrive with a delay. Failed model requests are recorded too; without usage they remain unaccounted. These totals cover Guardrail inspection calls, excluding the application's own chat model, connection probes and control-plane authoring. Amounts are estimates; discounts, taxes, subscriptions and self-hosted hardware costs are not inferred.
-
-Each call retains its effective price and amount. Price changes only affect subsequent calls; old calls are not recalculated or backfilled. Costs are environment-specific dynamic data: **they are excluded from Guardrail Versions, imports and exports**. The destination uses its own global prices for new calls.
-
-<a id="guardrail-logging-level" />
-
-## Logging levels and body capture
-
-Administrators choose INFO, DEBUG, or TRACE under **Guardrail → Actions → Edit log level**. Once distributed to the Runner, changes apply to new calls without republishing. Each correlated call keeps the level selected at its first check.
-
-- **INFO (default):** retains audit records, findings, and execution traces for all checks, without bodies, including blocks and errors.
-- **DEBUG:** a Medium, High, or Critical Rule match in either phase selects the original request / response bodies received for the whole correlated call.
-- **TRACE:** retains originals received for every call, without requiring a Rule match.
-
-Only originals are retained; rewritten copies are not additionally captured. Action does not change selection: a High match that only records and allows qualifies at DEBUG; a Low block does not. Input and Output share a call ID, allowing an output match to enrich the earlier input record. A nonexistent response is never manufactured.
-
-[Enforce-mode Rule and Log Level table](/document/admin/concept-logs#runtime-log-capture) · [Whole-call capture conditions and boundaries](/document/admin/concept-logs#runtime-log-request-response)
-
-<a id="export-a-guardrail" />
-
-## Export a Guardrail
-
-To export, use one of these entries:
-
-- On **Guardrails**, open the **Actions** menu of the row and choose **Export…**.
-- On an immutable version, choose **Export…**.
-
-Select the released versions to download. The dialog selects no version for you, so the package holds exactly the versions that you select. The package never includes unpublished draft edits. If **Export** is not available, publish a version first.
-
-The release package is a signed `.zip`. Each version in it carries two items:
-
-- Its signed Artifact: the frozen Policy implementations and the compiled configuration.
-- Its tests.
-
-The package does not need a Policy Library. It does not include Testing Reports.
-
-To import the package into another Controller:
-
-1. Open the arrow menu next to **Create Guardrail**.
-2. Choose **Import release package**.
-3. Run the tests of each imported version there. An imported version starts as pending.
-4. Release each version after its tests pass.
-
-To run a version, the target environment needs these items:
-
-- A compatible TaskLattice/NeMo runtime.
-- The model capabilities that the version declares.
-- Credentials configured in that environment.
+A stable Guardrail identity can retain an editable draft and several immutable versions. Different Routers can use different versions concurrently. There is no single resource-wide “current version”.
 
 <a id="term-policy-binding" />
+### Policy Binding
 
-## Policy Binding
+A Binding pins a Policy Version and stores its scenario-specific settings. These include enabled Rules and Rails, parameter values and action overrides. The Policy supplies defaults.
 
-<strong>What:</strong> The reference from a Guardrail to one Policy Version. It also holds the settings of this Guardrail for that Policy: the enabled Rules and Rails, the parameter values, and the action overrides. Policy Bindings are part of the static part of the Guardrail.
-
-In most cases you do not tune a Policy in its Binding. The Policy author sets the defaults on each Rule. A Policy is an aggregate of Rules. It also records its compliance sources, which you see on its **Compliance** tab.
-
-<strong>Why:</strong> A Binding turns a reusable Policy into the reviewed behavior of one scenario.
-
-<strong>How:</strong>
-
-1. Configure the Binding in the Guardrail draft.
-2. Supply the required parameters.
-3. Run the tests.
-4. Publish. The Guardrail Version freezes the Binding.
-
-<strong>Example:</strong> Two support applications use the same keyword Policy Version. Each Binding supplies a different `blocked_words` list.
+For example, two applications can bind the same keyword Policy Version with different `blocked_words` lists. Each Guardrail publishes its own reviewed configuration.
 
 <a id="term-parameter" />
+### Binding Parameter
 
-## Binding Parameter
-
-Binding parameter · reviewed value
-
-A Policy value that a person reviews and sets when a Guardrail pins the Policy Version.
-
-Parameters are versioned configuration. Untrusted runtime input should not override them.
-
-For example, an administrator sets `blocked_words` to a list before publishing. A user request cannot change that list at runtime.
+A Binding Parameter is a reviewed configuration value. Set required values in the draft before testing and publication. Untrusted runtime content must not replace these values.
 
 <a id="term-guardrail-version" />
+### Guardrail Version
 
-## Guardrail Version
+A version freezes Policy Bindings, Rules, parameters, tests, compiled Artifact, dependencies and checksum. Editing a draft does not change an existing version.
 
-<strong>What:</strong> An immutable snapshot of the static part of a Guardrail. It contains the pinned Policy Bindings, Rules, parameters, tests, compiled Artifact, dependencies and checksum.
-
-<strong>Why:</strong> Routing, the runtime baseline and export refer to Guardrail Versions. Each reference names one exact version. No "latest" pointer exists.
-
-<strong>How:</strong>
-
-1. Make sure that the version is released. Test and release an imported version in this environment first.
-2. Publish a Router Revision whose Target pins the version.
-3. Make sure that the Runners apply the new state.
-
-To serve a different version, submit a Router change that pins it.
-
-<strong>Example:</strong> You publish Guardrail v2. A Router that pins v1 does not move to v2. To change production traffic, review the Router and publish it again.
-
-<a id="term-validation-run" />
-
-## Testing Report
-
-Testing Report · one test run
-
-The record of one run of the Test Cases of a draft or of a version, through the real runtime. It progresses through Queued and Running to Passed or Failed. A completed result is immutable; retesting creates another report. Administrators can delete completed reports after impact review.
-
-- A draft can publish only when all required cases of its current revision pass.
-- Releasing a pending version requires its latest completed **version test** in this environment to have passed, matching both its Artifact and frozen test suite. A draft test is not a substitute for this Release action.
+Routers, baseline selection and exports reference exact versions. Publishing v2 does not move a Router pinned to v1. Use a reviewed Router change to switch traffic.
 
 <a id="term-checksum" />
+### Checksum
 
-## Checksum
+The SHA-256 checksum identifies the compiled configuration. Compare it when checking which Artifact a test or deployment used. The checksum alone does not prove tests passed.
 
-Configuration hash · SHA-256
+<a id="term-validation-run" />
+## Testing Reports and release evidence
 
-A digest of the immutable compiled configuration.
+A Testing Report records one execution of a draft's or version's tests. It progresses through Queued and Running to Passed or Failed. A completed result stays unchanged. Retesting creates another report.
 
-It proves that the Artifact that runs is exactly the published version.
+Draft tests bind a draft revision and tested candidate. Publication freezes that candidate. Testing alone does not create an immutable version.
 
-<a id="user-decisions" />
+Imported versions start Pending. Test their frozen content in the destination environment. Explicit Release requires the latest completed version test to pass with matching Artifact and test-suite digests.
 
-## Decision: allow, transform, and block
+The system normally retains two Passed reports and one Failed report per immutable version. Unversioned history shares a separate retention group. Protected platform evidence can remain outside those limits.
 
-The caller must apply the final Decision. A Decision is not only a risk label.
-
-**Allow / pass**
-
-The content can continue to the next phase.
-
-**Transform**
-
-Use the content that the Decision returns. TaskLattice redacts or rewrites that content, or changes it in a different way.
-
-**Block / reject**
-
-Stop the phase. For blocked input, do not call the model. Do not deliver blocked output.
-
-
-> Playground shows the input inspection, the model call and the output inspection as one path that you can inspect.
-
-[Open Playground](/playground)
-
-[View runtime logs](/logs)
-
-<a id="term-decision" />
-
-## Decision runtime semantics
-
-allow · transform · block
-
-The final result of TaskLattice for the current phase: allow, transform or block.
-
-The caller must apply the Decision and its action. A Decision is not only a score to show.
-
-<a id="term-enforcement-action" />
-
-## Enforcement Action
-
-Enforcement Action · action after a match
-
-The response that a Rule requests after it matches: allow, block or transform. The Policy sets the default on the Rule. A Policy Binding can override it. [Actions after a Rule matches](/document/overview/glossary-definition#term-rule-actions) lists the three values and their precedence.
-
-An Enforcement Action is not the verdict of an evaluator. It is also not a Python Action that NeMo calls. The integrating caller applies some lifecycle actions.
-
-<a id="term-output-delivery" />
-
-## Output Delivery
-
-interruptible · window buffered · full buffered
-
-How the Runner holds model output until the Output Rail finishes its inspection.
-
-More buffering stops the leak of content that the Output Rail blocks later. It also increases the delivery latency.
-
-<a id="term-failure-mode" />
-
-## Failure Mode
-
-fail-open · fail-closed
-
-The safety behavior when an Action times out or fails.
-
-- **Fail-open** continues and records the evidence.
-- **Fail-closed** blocks.
-
-Required inspections often use the conservative behavior.
-
-<a id="concept-boundaries" />
-
-## Authentication, configuration, and execution boundaries
-
-Each component has one responsibility:
-
-- The control plane manages Policy, Guardrail and Router versions.
-- Runners do the inspections.
-- Applications and gateways make the model calls and apply the Decision that they receive.
-
-Two credential types exist, and you cannot use one in place of the other:
-
-- A Personal Access Token calls the management APIs.
-- An Endpoint credential calls the runtime inspections.
-
-Headers or claims that a caller supplies are not trusted identity by default.
-
-Read the role guides as one handoff in this order:
-
-1. Configuration and tests.
-2. Endpoint credential assignment.
-3. Application integration.
-4. Traffic publication.
-5. Observation and changes.
-
-The sidebar keeps the order of daily responsibilities.
-
+Automatic cleanup can retain compact latest-test or release evidence without detailed results or bodies. The absence of a full report does not automatically invalidate a release. Manual report deletion performs a separate impact check.
 
 <a id="glossary-states" />
-
-## Guardrail lifecycle and readiness
+## Lifecycle and readiness
 
 <StateLegend locale="en" />
 
-A Guardrail is a stable identity with an editable draft and at most **10 immutable versions**. Imported and locally created Guardrails have the same editing, testing, publishing and deletion capabilities. Package imports also enforce source ownership, including during restoration; see [Deletion and restoration](#guardrail-deletion-restoration). Version configuration, Policy bindings, Artifacts and Test Cases are immutable; local reports, release status and routing references can change.
+A Guardrail retains at most **10 immutable versions**, counting Pending and Released together. Retesting and Release do not consume another version slot. Old versions are not removed automatically.
 
 <a id="state-guardrail-readiness" />
+### Protection state and operating mode
 
-### Protection state and runtime mode
+The UI shows **Not ready, Enforce, Monitor, or Bypass**. Readiness requires a retained Released version with matching release evidence.
 
-The UI shows **Not ready, Enforce, Monitor, or Bypass**. Enforce, Monitor and Bypass all require at least one retained Released version with matching local Passed evidence. Controller checks the Guardrail ID, version, Artifact digest and frozen test-suite digest. A tested but unpublished draft or a Pending imported version remains Not ready.
+For business Guardrails, that evidence can be a matching local Passed report or retained compact release evidence. The platform-maintained Default also accepts matching bundled platform-release provenance.
+
+A tested but unpublished draft does not establish readiness. Neither does a newly imported Pending version.
 
 <StateMachineDiagram kind="guardrail-readiness" locale="en" />
 
 | State | Online behavior |
 | --- | --- |
-| Not ready | Publish or Release a tested version before changing modes. |
-| Enforce | Detect and apply published policy actions. This is the default. |
-| Monitor | Detect and record findings, including errors and timeouts, but always allow original content. |
-| Bypass | Skip detection and allow original content; logs explicitly identify the bypass and do not fabricate passed checks. |
+| Not ready | Publish or Release a qualifying version before selecting an operating mode. |
+| Enforce | Detect and apply configured protection actions. This is the default mode. |
+| Monitor | Detect and record findings, errors and timeouts. Allow original content. |
+| Bypass | Skip detection and allow original content. Logs identify the bypass rather than inventing successful checks. |
 
-An administrator opens **Actions → Change mode** on any Guardrail detail tab to open the right-hand drawer directly. The drawer lists Enforce, Monitor and Bypass with the configured mode selected. Select a mode, review its behavior, optionally add a reason, then apply it. Selecting or canceling alone does not change the running mode. To recover from Bypass, select Enforce or Monitor in the same drawer. The main badge retains the last fully applied mode while the panel shows the requested mode, Runner confirmations, and pending, offline, unsupported or rejected replicas. The Runtime tab only displays the mode and application progress. If rollout is incomplete, open the drawer and keep the requested mode selected to **Retry rollout** after fixing the reported problem. Older Runners require an upgrade to support modes.
+Use **Actions → Change mode** with Guardrail write permission. Select the mode. Review its behavior and optional reason. Apply the change.
 
-The mode belongs to the Guardrail, covering every online version and Endpoint reference. It takes effect on new request/output checks; an open output stream keeps its starting mode. Monitor forwards stream chunks immediately and detects the complete response after the stream ends. Bypass acquires no detector. Detection failures in Monitor are recorded while allowing traffic; authentication, Endpoint state, routing and transport limits still apply.
+The main badge retains the last fully applied mode during rollout. The panel shows requested mode, confirmations and pending, offline, unsupported or rejected instances. Correct failures before choosing **Retry rollout**.
 
-Draft tests, version tests and explicit Playground evaluation always execute real detection. Publishing a version, editing a draft, a failed retest or changing Router targets preserves the mode and immutable content. Removing the last released version or its final passing evidence, deleting the resource or restoring it resets the mode to Enforce. Modes and audit history are local operating data and are not exported or imported. Readiness does not imply healthy Runners or actual traffic.
+The mode covers all online versions and Endpoint references of the Guardrail. New checks use the applied mode. An open Output stream retains its starting mode.
+
+Monitor forwards stream chunks immediately and checks the complete response after the stream ends. Authentication, Endpoint state, routing and transport limits still apply. Bypass does not acquire a detector.
+
+Draft tests, version tests and explicit Playground trials always execute detection. Editing, publishing, retest failure and Router changes preserve the mode while a qualifying release remains.
+
+Removing the last qualifying release, deleting the resource or restoring it resets the mode to Enforce. Modes and audit history are local operating data. Export and import do not transfer them.
 
 <a id="guardrail-registry-columns" />
+### Read the Guardrails list
 
-### What each registry column answers
-
-| Column | Meaning and navigation |
+| Column | Meaning |
 | --- | --- |
-| Guardrail | Name and stable ID; opens the detail page. |
-| Protection | Not ready / Enforce / Monitor / Bypass, with Runner application progress shown separately. |
-| Month cost (USD) | Costs across all versions in the current UTC month, including runtime, testing and Playground calls. The info icon explains the scope; click the amount to open Usage & cost. Missing prices or usage are shown as unaccounted calls. |
-| Traffic versions | Exact versions pinned by published Routers with bound Endpoints, plus the runtime baseline. Each Router shows its own Active, Distributing or Failed rollout status and links to its detail page. Version links open that exact version. Unpublished drafts, disabled Routes, zero-weight Targets and Routers without Endpoints are excluded. |
-| Updated | The Guardrail resource update time, not the latest test, request or Router update. |
+| Guardrail | Opens the resource by name and stable identity. |
+| Protection | Shows readiness or operating mode. Incomplete application progress appears separately. |
+| Request rate | Shows recent reported request-rate history. Open it to inspect the runtime window. |
+| Updated | Shows the resource update time. It is not the last request or Router change. |
+| Actions | Provides permitted resource operations. |
 
-The resource registry does not show a single **Policies** count or **Testing Report** result. Policy counts describe a specific draft or version; reports describe individual local test runs. Inspect them in version details and the Testing Report tab. The version list retains per-version Policy counts and latest test results.
+Inspect Policy counts and test results for a specific draft or version. Inspect routing references and Router rollout separately. Costs are under [Billing](/billing).
 
-Traffic versions describe desired routing configuration, not observed requests. Even with an Active Router, check Endpoint state and Runtime logs to verify use. Runners or in-flight requests can use older versions during a transition. Multiple versions can serve concurrently; there is no single resource-wide current version. The old Protected label mixed references with readiness and is no longer a Guardrail display state.
+Readiness does not establish healthy Runners or actual traffic. Check the Endpoint, Router and runtime records. Multiple versions and in-flight calls can coexist during a transition.
 
 <a id="state-guardrail" />
-
-### Resource, draft, version and report are separate
+### Separate resource, draft, version and report state
 
 <StateMachineDiagram kind="guardrail-lifecycle" locale="en" />
 
-The diagram uses stored lifecycle values. The resource field `draft / active / disabled` is **not itself UI readiness**. Publishing a draft or releasing a pending version records active; removing or returning the last stored released version to Pending records draft; soft deletion records disabled and deletedAt. A confirmed re-import from the owning source can restore an imported identity to draft. This is not a regular enable/disable switch.
-
-| Scope | States | What determines them |
+| Scope | States | Meaning |
 | --- | --- | --- |
-| Guardrail UI state | Not ready / Enforce / Monitor / Bypass | Release evidence determines availability; the selected operating mode determines online behavior. |
-| Resource lifecycle | `draft / active / disabled` | Publication, Release, deletion and restoration operations; not a live evidence check. |
-| Working draft | Untested / Testing / Test failed / Tested / Published | Unpublished changes and the latest draft report for the current revision. A version retest does not test the working draft. |
-| Immutable Version | Pending / Released (`pending / ready`) | Local publication or explicit Release, and later evidence deletion or resource deletion. |
-| Testing Report | Queued / Running / Passed / Failed | One execution; Passed and Failed are terminal for that report. |
+| Resource lifecycle | `draft / active / disabled` | Stored lifecycle. It does not recompute live release evidence. Soft deletion records disabled and a deletion time. |
+| Working draft | Untested / Testing / Test failed / Tested / Published | Describes draft changes and tests for its revision. Version retests do not test this draft. |
+| Immutable Version | Pending / Released (`pending / ready`) | Indicates whether the environment released that version. Content remains immutable. |
+| Testing Report | Queued / Running / Passed / Failed | Describes one execution. Completed outcomes are terminal. |
 
-| Operation | Draft and version | Reports, traffic and readiness |
-| --- | --- | --- |
-| Create in UI | Editable draft, no immutable version. | Not ready; no automatic routing. |
-| Test draft | Report binds the draft revision and executed candidate content. | In the normal user workflow, passing permits publication but does not itself create a version. |
-| Publish draft | Reuses the tested candidate and freezes Policies, Artifact and cases under its timestamp version. A new version starts Released without a separate Release step. | Defaults to Enforce on first release; later releases preserve the mode. Routers stay pinned. The first Default Guardrail publication fills an empty runtime baseline; later baseline switches are explicit. |
-| Edit draft | Configuration, runtime profile and Test Case changes require testing the new revision. Renaming the Guardrail or changing its log level does not invalidate draft tests. Existing versions stay unchanged. | The current protection mode remains while a qualifying version exists. Earlier version content is unaffected. |
-| Import | Verify signatures and static content, review, then confirm writes. Newly imported versions are Pending. First import seeds an editable draft; incremental imports do not overwrite it. | Reports and source release status do not travel. Test and Release here. Adding Pending versions does not invalidate existing qualifying releases. |
-| Retest version | Execute the signed Artifact and frozen cases unchanged. | Generates local evidence. Failure alone does not revoke an existing release. |
-| Change Router | Pin an exact version through the change approval and rollout workflow. | Does not change version content, test evidence or resource readiness. Check Router, Endpoint and Runtime logs for delivery. |
-| Export | Only selected qualifying Released versions, dependencies and frozen cases enter the signed package. | Reports, runtime logs, routing and baseline pointers do not travel. |
+Creating a Guardrail creates a draft, without automatic routing. Publishing a tested draft creates a Released version directly. Editing its configuration or Test Cases requires testing the new revision.
+
+Import verifies signed content and creates Pending versions. Initial import seeds an editable draft. Incremental import preserves that draft. Source reports and release status do not transfer.
+
+Retesting preserves version content. Failure alone does not revoke an existing release. Routing changes preserve protection content and evidence.
 
 <a id="state-guardrail-version" />
-
-### Immutable Version: Pending and Released
+### Immutable versions: Pending and Released
 
 <StateMachineDiagram kind="guardrail-version" locale="en" />
 
-The diagram uses the two persisted states: `pending` and `ready`. The UI calls version `ready` **Released**, while a ready resource displays **Enforce, Monitor or Bypass**. Publishing a tested draft creates a new Released version directly; importing a new version creates Pending. System initialization can also test and publish the built-in Default Guardrail automatically. Testing, test failed, ready to release and retest failed are additional indications, not extra version states.
+The persisted states are `pending` and `ready`. The UI calls version `ready` **Released**. This differs from the resource's Enforce, Monitor or Bypass display.
+
+Normal installation provisions the bundled Default release without running a local test. Its platform-release provenance provides the release basis.
 
 <a id="guardrail-build-states" />
+#### Version state details
 
 <StateCards>
 <StateCard title="Pending" code="pending" state="distributing">
-<StateDetail label="Meaning">Static content exists but has not been released here, or its final matching Passed report was deleted. Testing may be absent, running, failed, or passed and awaiting Release.</StateDetail>
-<StateDetail label="Transitions">The most recent completed version test for this exact content and frozen suite passes here; an administrator explicitly releases it to ready. The UI waits for an ongoing version test to finish.</StateDetail>
-<StateDetail label="Next step">Run version tests, inspect the report and Release after passing. The version content remains unchanged.</StateDetail>
+<StateDetail label="Meaning">The environment did not release this content, or it lost its last qualifying release evidence.</StateDetail>
+<StateDetail label="Transitions">A matching version test passes. An authorized user explicitly releases the version.</StateDetail>
+<StateDetail label="Next step">Run the frozen tests. Inspect the results. Release after passing.</StateDetail>
 </StateCard>
 <StateCard title="Released" code="Released" state="ready">
-<StateDetail label="Meaning">Stored as ready. Normal publication and evidence-deletion flows preserve matching local Passed evidence. The version is eligible for Router and export selection, or baseline selection for the Default Guardrail; runtime dependency checks still apply. Historical inconsistent records are described below.</StateDetail>
-<StateDetail label="Transitions">Not terminal. Failed retests do not cancel release, but deleting its final matching Passed report returns it to Pending. If another matching report exists, it replaces the release evidence.</StateDetail>
-<StateDetail label="Next step">Pin the exact version in a Router, or switch the Default Guardrail runtime baseline, then verify rollout and actual requests.</StateDetail>
+<StateDetail label="Meaning">The stored release permits version selection. Environment dependencies still require verification.</StateDetail>
+<StateDetail label="Transitions">A failed retest preserves release. Removing the final qualifying evidence can return it to Pending.</StateDetail>
+<StateDetail label="Next step">Pin the exact version in a Router. Confirm rollout and actual requests.</StateDetail>
 </StateCard>
 </StateCards>
 
 <a id="guardrail-deletion-restoration" />
-
 ### Deletion and restoration
 
-- **Testing Report:** administrators permanently delete a completed report and its results from the detail sheet. Queued and Running reports cannot be deleted. Review the impact first; the transaction checks again. If a retained Released version would have no matching Passed report left, it returns to Pending and its release/load-check metadata is cleared. Another matching Passed report preserves release and replaces the deleted release binding when needed. Deleting a failed report, a redundant pass or a draft-only report does not by itself revoke a valid release. Frozen content, cases and audit remain. References and traffic that prevent version deletion also prevent deleting its final proof.
-- **Immutable Version:** deleting a version frees a `n/10` slot. Baseline, published Router, edited Router draft, pending change and pre-approved rollback references block deletion. Calls in the five-minute retention window, recent retirement, and online Runners that have not applied the retiring generation also block deletion. Deleting the version record keeps Artifacts, reports and audit, but orphan reports cannot make a Guardrail Ready. Earlier Router history remains; references to deleted versions cannot be restored directly.
-- **Guardrail:** the Default Guardrail cannot be deleted. Published Router references and pending Router changes block deletion; remove these references first and wait for the five-minute call-retention checks to pass. Deletion does **not** remove Router targets automatically. It soft-deletes the identity, preserving ID, static versions, Artifacts, draft, cases, provenance and audit. It permanently clears local reports, queued test requests, stored runtime events and routing-call records, and returns every retained version to Pending. Late test results and telemetry from before the reset are ignored. Unpublished Router drafts and historical references can remain; they do not make the deleted resource usable.
-- **Restore by re-import:** currently supported for an imported Guardrail from its original owning source. Explicitly confirm restoration of the same ID in import review. Preserved static content and the working draft are reused; the package does not overwrite that draft. Reports and operational data start afresh, so test and Release again here. Traffic is not automatically restored. A locally created Guardrail with the same ID is rejected by package ownership checks even after soft deletion; re-import is not a universal restore mechanism.
+**Testing Report.** Review the deletion impact before removing a completed report. Queued, Running and protected platform-source reports cannot be deleted.
 
-The ten-version limit counts retained Pending and Released records together. Publishing or importing a new version uses a slot; retesting, Release and report deletion do not. Old versions are never removed automatically.
+A replacement must match the same Artifact and frozen suite. Matching archived release evidence or platform-release provenance can also preserve release. Without another qualifying basis, deleting the final proof returns the version to Pending. References or recent traffic can block that deletion.
+
+**Immutable Version.** Deletion frees one version slot. Baseline, published Router, edited Router draft, pending change and approved rollback references can block it. Recent calls, retirement windows and incomplete Runner application also block deletion.
+
+After version deletion, Artifacts, reports and audit history remain. Orphan reports cannot make the Guardrail ready. Historical Routers referencing deleted versions cannot be restored directly.
+
+**Guardrail.** Default cannot be deleted. Remove published routing and pending-change references first. Pass the five-minute call-retention and retirement checks. Deletion does not remove Router Targets automatically.
+
+Soft deletion preserves identity, static versions, Artifacts, draft, cases, provenance and audit. It clears local reports, queued tests, stored runtime events and routing-call records. Retained versions return to Pending. The system ignores late results from before the reset.
+
+**Restore by re-import.** Restoration applies to an imported identity from its original owning source. Confirm the same ID during import review. Preserved static content and the draft remain. Test and Release again in this environment. Routing does not recover automatically.
+
+Re-import cannot restore an unrelated locally created identity. It is not a general recovery mechanism.
 
 <a id="guardrail-implementation-boundaries" />
+### Current differences between verification paths
 
-### Current differences between checks
+These differences remain in the implementation:
 
-The following implementation differences remain; the state definitions above do not mean every entry point uses an identical check:
+- **Draft publication:** the UI requires the latest report for the current revision to pass. The API selects the most recent Passed report for that revision. A later failure or running test does not necessarily prevent API publication. The API still verifies tested content.
+- **Version Release:** the UI waits for running tests. The API checks the latest completed version test, including retained compact evidence. The API checks Artifact and suite digests. Repeating Release on an already Released version currently returns it without another evidence check.
+- **Startup baseline packages:** a configured Default package can fill an empty baseline before local tests or Release. The imported version can remain Pending. This differs from explicit baseline switching, which requires Released. It is an implementation gap, not a supported substitute for the release workflow.
 
-- **Draft publication:** the UI requires the latest draft report to pass for the current revision. The API currently selects the most recent Passed report for that revision, even if a later run failed or is still running. It still verifies the tested content before creating the version.
-- **Version Release:** the UI waits for an ongoing version test; the API checks the latest completed version test. The UI checks the Artifact digest when enabling Release; the API checks both the Artifact and test-suite digests. A repeated Release of an already Released version currently returns it without rechecking evidence.
-- **Historical missing evidence:** the resource list recomputes readiness from retained matching reports, but the version badge, Router publication and baseline selection currently trust stored release status without repeating that evidence check. Thus historical inconsistent data can show Released on a version while the Guardrail is Not ready. Export checks the report bound to the release and rejects missing or mismatched evidence. A retest alone does not automatically repair the stored release binding.
-- **Deployment baseline package:** when startup is configured to import a Default Guardrail package and the baseline is empty, that startup path currently pins the imported version without checking local tests or Release. The imported version can still be Pending. This differs from the explicit baseline-switch action, which requires Released; it is an implementation gap, not an alternative release workflow.
+<a id="user-decisions" />
+## Apply inspection results
+
+The caller must apply the returned result before content continues. HTTP success alone does not permit content delivery.
+
+<a id="term-decision" />
+### Decision
+
+| Decision | Caller responsibility |
+| --- | --- |
+| Allow | Continue with the permitted content. |
+| Transform | Use the returned replacement or valid patches. |
+| Block | Stop the phase. Do not call the model with blocked Input or deliver blocked Output. |
+
+[Playground](/playground) demonstrates the complete path. [Runtime logs](/logs) show inspection evidence.
+
+<a id="term-enforcement-action" />
+### Enforcement Action
+
+A Rule requests allow, block or transform after a match. The Policy sets its default. A Binding can override permitted actions. See [action precedence](/document/overview/glossary-definition#term-rule-actions).
+
+A detector's verdict, a Rule's action and the final Decision have different responsibilities. A NeMo Python Action is an implementation dependency, not an Enforcement Action.
+
+<a id="term-output-delivery" />
+### Output delivery
+
+Streaming inspection supports interruptible, window-buffered and full-buffered delivery. Buffering delays delivery until the applicable inspection completes. Greater buffering can withhold more content, with greater latency.
+
+Interruptible delivery cannot recall content already sent. The [gateway protocol](/document/developer/gateway-connect#gateway-stream-delivery) defines delivery boundaries and Provider limits.
+
+<a id="term-failure-mode" />
+### Failure mode
+
+Failure behavior applies when inspection fails or times out:
+
+- **Fail-open:** continue while recording the failure.
+- **Fail-closed:** block continuation.
+
+Review the versioned configuration and integration behavior. A technical failure is not a successful safe detection.
+
+<a id="concept-boundaries" />
+### Authentication and execution boundaries
+
+The Controller manages configuration and versions. Runners inspect content. Applications and gateways call the business model and apply Decisions.
+
+Personal Access Tokens authorize management APIs. Endpoint credentials authorize runtime inspections. Neither credential replaces the other. Caller-supplied claims are not trusted identity automatically.
+
+<a id="guardrail-logging-level" />
+## Logging and original-content capture
+
+Users with Guardrail write permission choose INFO, DEBUG or TRACE under **Actions → Edit log level**. Applied changes affect new calls without version publication. A correlated call retains its initial logging level.
+
+| Level | Original-content capture |
+| --- | --- |
+| INFO, default | No original bodies. Inspection records, findings and execution traces remain available. |
+| DEBUG | Original request and response bodies when either phase matches a Medium, High or Critical Rule. |
+| TRACE | All received original bodies, without requiring a match. |
+
+Action does not change the capture threshold. A High match with allow qualifies at DEBUG. A Low block does not. Rewritten copies are not captured additionally. Missing responses are not manufactured.
+
+See [capture conditions and privacy boundaries](/document/admin/concept-logs#runtime-log-request-response) before enabling content capture.
+
+<a id="guardrail-usage-cost" />
+## Usage and model costs
+
+Open [Billing](/billing) and filter by Guardrail. Statistics cover its versions, including runtime, draft tests, version tests and Playground inspection. Period boundaries use UTC.
+
+These amounts estimate internal inspection costs. They exclude the application's business model, connection probes and control-plane authoring. Local checks without model calls incur no model cost.
+
+<a id="guardrail-price-sources" />
+### Price sources
+
+A bundled USD catalog derived from LiteLLM supports offline deployments. Administrators configure overrides under [Models → Model prices](/settings/models?tab=pricing).
+
+Prices match the actual provider and model. Manual prices override the catalog globally for that pair. Configure a manual price or explicit free setting for unlisted models. Missing pricing is not free usage.
+
+<a id="guardrail-cost-calculation" />
+### Calculate costs
+
+Token rates use USD per million tokens:
+
+```text
+Cost = (uncached input tokens × input rate
+        + cached input tokens × cache rate
+        + output tokens × output rate) / 1,000,000
+```
+
+Cached input is part of total input. Subtract it before calculating uncached input. With no caching, 1,000 input tokens at USD 0.20/M and 100 output tokens at USD 0.60/M cost USD 0.00026.
+
+Request-based rates use USD per thousand calls. Cost equals calls × rate / 1,000. An explicit free setting yields USD 0, even without token counts.
+
+<a id="guardrail-unaccounted-calls" />
+### Accounted and unaccounted usage
+
+Missing prices, model identity, required usage or unsupported billing details can leave a call **Unaccounted**. Cached usage requires a cache rate. Partial totals show accounted amounts and unaccounted counts. No model calls means USD 0.
+
+Telemetry can arrive late. Failed model requests also appear. Without usage, their cost can remain unaccounted. Estimates do not infer discounts, taxes, subscriptions or hardware costs.
+
+Each call retains its effective price and amount. Price changes affect subsequent calls only. Costs are environment-specific operating data. Version packages do not transfer them.
+
+<a id="export-a-guardrail" />
+## Export and import release packages
+
+1. Open **Actions → Export** on the Guardrails list or an immutable version.
+2. Select the qualifying Released versions. The dialog selects none automatically.
+3. Download the signed `.zip` package.
+
+The package contains selected signed Artifacts, frozen tests and implementation dependencies. It excludes unpublished draft changes, local reports, routing, credentials, logs and costs.
+
+At the destination, choose **Create Guardrail → Import release package**. Review and confirm the import. Configure required runtime capabilities and credentials. Run each imported version's tests. Release each passing version explicitly.
+
+The destination needs compatible TaskLattice and NeMo execution. Import does not activate traffic. Configure and approve routing separately.

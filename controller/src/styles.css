@@ -245,6 +245,13 @@
   }
 }
 
+/* Chapter disclosure keeps the desktop outline compact; short windows retain
+   a narrow scroll affordance when the expanded chapter still exceeds it. */
+.document-page-contents {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
 /* Keep code terms distinct from prose without changing fenced code blocks. */
 .document-article :not(pre) > code {
   border: 1px solid var(--border);

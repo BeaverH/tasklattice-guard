@@ -4,27 +4,39 @@ title: "配置 Provider、Model 与保护能力"
 summary: "连接 Provider、注册并测试 Model，再把兼容模型分配给需要它的 Rail。"
 order: 1
 ---
-Default 是纯本地防护基线，保留已审查的本地 Rule，无需配置检测模型。安装、基线回归与默认流量检查均不调用模型。越狱检测、内容安全等模型 Policy 继续保留在 Policy Library，可按需加入其他 Guardrail；本地规则不替代它们的语义识别能力。
+平台管理员配置共享模型服务和检测器绑定。业务用户在 Guardrail 中选择这些能力。
 
-平台健康检查已固定基线与已启用发布路由实际依赖的模型绑定。未使用的模型配置和历史版本不会让本地平台变为不健康。管理员仍可激活测试失败或未测试的模型绑定，真实测试结果会保留，激活不代表测试通过。**模型能调用**与**某个 Rail 已使用它**是两件事。
+Default 无需检测模型，使用已审查的本地 Rule。模型 Policy 仍可用于其他 Guardrail。本地匹配不能替代模型的语义识别。
 
 <a id="platform-model-steps" />
+## 按顺序配置依赖
 
-## 按依赖顺序配置
+1. 在[模型提供商](/settings/providers)注册服务地址和凭据。
+2. 检查连接。私有 CA 与 TLS 设置仅作用于该 Provider。
+3. 在[模型](/settings/models)注册物理模型。
+4. 执行真实调用测试。发现模型不代表它可调用。
+5. 在[检测器目录](/settings/guardrail-catalog)为兼容能力绑定 Model。
+6. 验证行为样例。保存绑定，再激活配置。
+7. 在[平台健康](/settings/health)查看应用进度。
 
-1. 在 [模型提供商](/settings/providers) 注册模型服务地址与凭据，检查连接。私有 CA 等 TLS 设置只作用于该 Provider。变更后，要重新测试受影响的模型。
-2. 在 [模型](/settings/models) 注册物理模型并执行真实的调用检查。目录里能发现模型，不代表它已经可用。
-3. 在 [检测器目录](/settings/guardrail-catalog) 为具体能力绑定模型，例如 `content_safety.input` 或 `jailbreak.input`。输入和输出绑定独立，模型协议必须符合该能力的契约。
-4. 验证绑定的行为样例，保存并激活配置，再到[平台健康](/settings/health)确认 Runner 已应用。只在 Models 页面测试连接，不等于内容安全或越狱检测已通过行为验证。
+Input 与 Output 的绑定独立。例如 `content_safety.input` 与 `content_safety.output` 分别要求符合对应阶段的契约。
 
-远程 Detector 模块的执行上限为 30 秒，能力探测使用相同的上限。Model 配置中的更长超时不会延长 Guardrail 的执行期限。超时会按失败关闭处理，不能计为成功检测，也不能据此通过发布验收。
+健康检查关注运行基线和已启用发布路由使用的绑定。未使用的配置和历史版本不会让本地安装变为不健康。
 
-在 NVIDIA 托管 API 上使用 `nvidia/nemotron-3.5-lightning-30b-a3b` 进行 Grounding 时，适配器会关闭可选的 thinking 模式，让模型在执行预算内返回 JSON 判定。此选项不改变可迁移的 Policy 定义，也不会加入其他模型服务的请求。发布前仍需验证自己的正反测试用例。
+管理员可激活未测试或失败的绑定。激活保留实际结果，不证明检测通过。发布前仍需验证自己的正反样例。
+
+<a id="platform-model-deadlines" />
+### 执行时限
+
+远程检测器模块的执行预算上限为 30 秒，能力探测使用相同上限。Model 配置中的更长超时不会延长该预算。超时不能计为通过的检测依据。
+
+在 NVIDIA 托管的 `nvidia/nemotron-3.5-lightning-30b-a3b` 上执行 Grounding 时，适配器关闭可选 thinking。此设置仅适用于该适配器，不改变可迁移的 Policy 定义。
 
 <a id="platform-model-boundary" />
+## 区分能力绑定与 Policy
 
-## 控制面与数据面的边界
+能力绑定提供检测器依赖，Policy 定义可复用的保护行为。模型连接成功不能证明某条 Rule 能识别目标内容。
 
-DeepSeek Provider 当前只用于控制面，不能被分配到数据面 Rail。数据面使用受支持的专用模型，或有边界的低参数模型。Controller 只把生效的数据面绑定实际引用的模型和凭据下发给 Runner。检测器目录的**模型能力绑定**和 Policy Library 中的**可复用 Policy** 不是同一个对象。前者提供检测依赖，后者定义要执行的保护行为。
+DeepSeek Provider 当前仅用于控制面。数据面 Rail 需要受支持的专用模型契约。Controller 只下发生效数据面绑定引用的 Model 和凭据。
 
-更细的部署与模型协议说明保存在仓库的 `docs/model-configuration.md`。
+证明服务配置及已知结果的验证样例见[形式验证](/document/operator/operator-create-policy#operator-policy-formal-service)。部署与协议细节保留在仓库的 `docs/model-configuration.md`。

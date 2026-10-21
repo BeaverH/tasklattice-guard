@@ -4,89 +4,106 @@ title: "Business statistics and Prometheus Metrics"
 summary: "Both Controller and Runner expose metrics. Business statistics APIs and Prometheus scrapes have different purposes and credentials."
 order: 5
 ---
-Both Controller and Runner expose metrics. Business statistics APIs and Prometheus scrapes have different purposes and credentials.
+Use business statistics to inspect reported traffic. Use Prometheus to monitor service operation. Their interfaces and credentials differ.
 
-**Business statistics JSON**
+<a id="operator-business-metrics" />
+## Query business statistics
 
-GET `/api/v1/telemetry/metrics` on this Controller. Use a personal token with `runtime:read` or a browser session. Filter by window, `guardrailId`, and `routerId`. Statistics aggregate reported runtime events.
+These APIs use a browser session or a personal token with the corresponding grant and account authority.
 
-**Security Events**
+| API | Grant | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/telemetry/metrics` | `runtime:read`, User role | Aggregate runtime events. Filters include window, `guardrailId` and `routerId`. |
+| `GET /api/v1/telemetry/security-events` | `runtime:read`, User role | Read findings for a required `guardrailId`. Optional filters include window and comma-separated severity. |
+| `GET /api/v1/routers/{id}/traffic-distribution` | `routers:read` | Read historical routing distribution. Route-specific queries are also available. |
 
-GET `/api/v1/telemetry/security-events` requires the User role and `runtime:read`. Supply `guardrailId`; optionally filter by `window` and comma-separated `severity`. Each item is one finding. Pages contain 25 items by default, with `limit=50` also supported. Follow `nextCursor` with unchanged filters and page size. The cursor preserves the time range and ingestion boundary; start without a cursor to browse a fresh range. The list loads independently of statistics, so a statistics error does not hide events or disable pagination.
+Security-event pages contain 25 findings by default. They also support `limit=50`. Follow `nextCursor` with unchanged filters and page size. The cursor fixes time and ingestion boundaries. Start without a cursor for a fresh range.
 
-**Router traffic statistics**
+Event lists load independently from statistics. A statistics error does not disable event pagination. Inspect `data_availability` when evidence is missing. Traffic counts do not establish configuration convergence.
 
-GET `/api/v1/routers/{id}/traffic-distribution`, also available per Route. Requires `routers:read` and reports historical traffic, not configuration rollout status.
+[Business metrics contract](/api/openapi.json?operationId=getTelemetryMetrics)
 
-**Controller /metrics**
+<a id="operator-prometheus" />
+## Configure Prometheus scrapes
 
-Database-backed gauges use a 10-second snapshot cache. Concurrent scrapes share one collection and rendering job. Counters and process metrics remain live; failed collections are not cached.
+| Service | Address | Authentication when configured |
+| --- | --- | --- |
+| Controller | `/metrics` on its HTTP address | `Authorization: Bearer <CONTROLLER_METRICS_TOKEN>` |
+| Runner | `/metrics` on each deployed HTTP address, default container port 8091 | `Authorization: Bearer <GUARD_METRICS_TOKEN>` |
 
-Scrape the Controller HTTP address. When `CONTROLLER_METRICS_TOKEN` is configured, send that Bearer token, not a personal Access Token.
+These scrape credentials are not personal Access Tokens. Configure the scraper's Authorization header. Opening a protected metrics URL in a browser can return `401`.
 
-**Runner /metrics**
+Controller database gauges use a ten-second snapshot cache. Concurrent scrapes share one collection. Counters and process metrics remain live. Collection failures do not enter the cache.
 
-Scrape each Runner HTTP address (default container port 8091). When `GUARD_METRICS_TOKEN` is configured, send that Bearer token. Use your deployed Runner addresses.
-
-
-> Links use this Controller’s address, without fixed localhost ports. A protected Prometheus URL returns 401 when you open it directly. Configure the Authorization header of the scraper. Check `data_availability` when traffic or execution evidence is missing.
-
-[Business metrics API contract](/api/openapi.json?operationId=getTelemetryMetrics)
-
-[Controller Prometheus metrics](/metrics)
-
-[Manage Runners](/settings/runner)
-
-[System health](/settings/health)
+[Controller metrics](/metrics) · [Runner management](/settings/runner) · [Platform health](/settings/health)
 
 <a id="operator-troubleshooting" />
+## Diagnose protection failures in order
 
-## Troubleshooting order
+1. Check Endpoint state, credential ownership, Router binding and Route precedence.
+2. Inspect the exact Guardrail Version and checksum.
+3. Inspect Policy, Rule, checkpoint, Decision and latency in [runtime logs](/logs).
+4. Check specialized models or proof services, network access and credentials.
+5. Distinguish queue saturation, execution deadlines and provider latency from content detections.
 
-Check routing and version first, then Rail, Action, provider, and capacity.
+<a id="runner-liveness-timeouts" />
+### Advanced: diagnose Runner liveness timeouts
 
-1. **Identity and route** — Confirm Endpoint state and credentials, Router binding, Route order, and trusted Selector fields.
+These steps require deployment-log access. A `/health/live` timeout can indicate a blocked event loop even while the process remains alive. Readiness `503` and startup connection refusal are different signals.
 
-2. **Version** — Confirm the expected Guardrail Version and checksum.
+Record the exact Kubernetes probe failure and container termination reason first. Runtime construction uses a background worker. A failed preparation retains the serving release.
 
-3. **Rail and Action** — Inspect Policy, Rule, Rail, Action, Decision, and latency in Runtime logs.
+Only enabled positive-weight Route targets require prewarming. Other verified versions load asynchronously on demand. On-demand leases last 600 seconds. Each release retains at most 128 non-route instances. Full leased capacity can reject a new cold load.
 
-4. **Provider** — Check specialized evaluators, models, networking, and Secrets.
+Unchanged model and credential fingerprints reuse instances. Credential rotation creates a new materialization. Old releases retain dependencies for pinned calls until leases and work drain. Draft previews and validation share the construction worker.
 
-5. **Capacity** — Separate queue saturation, deadlines, and provider latency from true policy failures.
+<a id="runner-diagnostic-events" />
+### Read diagnostic events
 
-[View runtime logs](/logs)
+Diagnostics write to container logs by default.
 
-[View Endpoints](/integration/endpoints)
-
-## Runner liveness timeouts
-
-Runner prepares runtime releases on a single background construction worker and publishes them with short, memory-only locks. Verification, NeMo initialization and snapshot persistence happen before publication. Health checks and existing requests continue to use the serving release. A failed preparation does not change that release. The Runner fingerprints the model configuration and the leased credentials. Unchanged assignments reuse instances. A credential rotation creates a new materialization.
-
-Only versions referenced by enabled Routes with positive target weights are prewarmed. Other verified Artifact definitions remain available to Playground and acquire runtime instances asynchronously on first use. Recent on-demand instances are leased for 600 seconds. Each release keeps at most 128 instances that no route uses. When the leased cache is full, it rejects new cold loads until space is available. Old releases retain their dependencies for pinned calls and close clients after leases and in-flight work drain. Draft previews and validation use the same construction worker and clean up builds that finish after cancellation.
-
-`/health/live` returns a static response on the same event loop as runtime requests. A timeout can indicate a blocked event loop even when the process is still running. A readiness 503 or a refused connection at startup is a different signal. First capture the exact Kubernetes probe failure and the container termination reason.
-
-Runner diagnostics are enabled by default and write to the container log:
-
-| Event | What it shows |
+| Event | Meaning |
 | --- | --- |
-| `runner_event_loop_stalled` | A watchdog thread detects over 2 seconds of scheduling delay, sampled every 0.5 seconds. Includes the event-loop stack, active lifecycle phases and their thread stacks, RSS, cumulative process CPU time, and available cgroup v2 CPU/memory counters. Repeated warnings are limited to one per 30 seconds during a continuous stall. |
-| `runner_event_loop_delayed` / `runner_event_loop_recovered` | Completed scheduling delay / watchdog-observed recovery. The completed delay is recorded even if the watchdog could not run during the stall. |
-| `runner_phase_started` / `runner_phase_finished` | Artifact verification, runtime prewarm and provider replacement, snapshot persistence, compilation, validation, and startup restoration. Completion includes the duration and the result. An unfinished phase helps you find interrupted work. |
+| `runner_event_loop_stalled` | The watchdog detects scheduling delay above two seconds, sampled every 0.5 seconds. Continuous-stall warnings repeat at most every 30 seconds. |
+| `runner_event_loop_delayed` / `runner_event_loop_recovered` | Completed scheduling delay or watchdog-observed recovery. The completed delay can capture stalls the watchdog missed. |
+| `runner_phase_started` / `runner_phase_finished` | Lifecycle phase, duration and result. An unfinished phase can identify interrupted work. |
 
-Phase metadata contains IDs and counts. Stack diagnostics contain file names, line numbers, and function names, without source lines, local variables, credentials, or request content. A Python watchdog cannot run while a native extension holds the GIL, or when the entire container is frozen or killed. Absence of a warning does not exclude these cases.
+Stall diagnostics include stacks, active phases, memory and available CPU or cgroup counters. Stack records include filenames, line numbers and function names. They exclude source lines, local values, credentials and request content.
 
-Collect both current and previous container logs after a restart:
+A native extension holding the GIL or a frozen container can prevent watchdog execution. A missing warning does not exclude those causes.
 
-```sh
+<a id="runner-diagnostic-collection" />
+### Collect logs and compare resource signals
+
+Collect current and previous container logs after a restart:
+
+```bash
 kubectl -n <namespace> describe pod <runner-pod>
 kubectl -n <namespace> logs <runner-pod> --timestamps --since=30m
 kubectl -n <namespace> logs <runner-pod> --previous --timestamps
 ```
 
-Keep Runner stdout/stderr in your centralized log collector: Kubernetes previous-container logs do not survive Pod deletion. Correlate the failure time with `runtime.prepare_release` candidate counts, `runtime.prewarm` duration, and any unexpected stacks waiting inside `readiness` or `admission_load`. Also compare changes in `cpu.stat` throttling counters and `memory.events` OOM counters, memory usage versus limits, and Kubernetes node pressure. Cumulative CPU counters need two samples to calculate a rate.
+Keep stdout and stderr in centralized collection. Kubernetes previous-container logs do not survive Pod deletion.
 
-Prometheus exposes `guard_runner_event_loop_lag_seconds`, `guard_runner_event_loop_delay_seconds` (histogram), and `guard_runner_event_loop_stalls_total`. For example, `increase(guard_runner_event_loop_stalls_total[5m])` finds the incidents that the watchdog observed. The delay histogram also captures completed stalls that the thread missed. A blocked HTTP event loop can prevent `/metrics` scrapes, so retain the diagnostic logs as well.
+Correlate the failure with release candidate counts, prewarm duration and unexpected readiness or admission lock waits. Compare CPU throttling, OOM counters, memory limits and node pressure. Cumulative CPU counters require two samples to calculate rates.
 
-For an isolated performance check, run `.venv/bin/python scripts/benchmark_runner_liveness.py --versions 1 8 32 --repeats 2` from the source checkout. It compares real NeMo prewarm with and without concurrent readiness reads and reports loop delay, CPU time, and RSS. It uses copies of a checked-in fixture. It makes no external model calls and no cluster changes. The results are not a UAT capacity estimate. `--injected-prewarm-seconds` is only for deliberate fault simulation and is labelled separately in the output.
+| Prometheus metric | Purpose |
+| --- | --- |
+| `guard_runner_event_loop_lag_seconds` | Current scheduling lag. |
+| `guard_runner_event_loop_delay_seconds` | Histogram of completed scheduling delays. |
+| `guard_runner_event_loop_stalls_total` | Count of watchdog-observed stalls. |
+
+For example, `increase(guard_runner_event_loop_stalls_total[5m])` finds recently observed stalls. A blocked event loop can also prevent metrics scrapes. Retain diagnostic logs alongside metrics.
+
+<a id="runner-liveness-benchmark" />
+### Run an isolated performance check
+
+From the source checkout, run:
+
+```bash
+.venv/bin/python scripts/benchmark_runner_liveness.py --versions 1 8 32 --repeats 2
+```
+
+The script compares actual runtime construction with and without concurrent readiness reads. It reports loop delay, CPU time and RSS using fixture copies. It makes no external model calls or cluster changes.
+
+These results do not estimate deployment capacity. `--injected-prewarm-seconds` simulates a deliberate delay, with separate output labels.

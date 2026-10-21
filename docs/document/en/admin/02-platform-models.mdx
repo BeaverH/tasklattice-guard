@@ -4,27 +4,39 @@ title: "Configure Providers, Models, and protection capabilities"
 summary: "Connect a Provider, register and test a Model, then assign a compatible Model to the Rail that needs it."
 order: 1
 ---
-Default is a local protection baseline: it retains the reviewed local Rules and needs no detection-model configuration. Installation, baseline regression and default traffic handling make no model calls. Model Policies, including jailbreak and content safety, remain available in the Policy Library for explicit use in other Guardrails; local Rules do not replace their semantic detection.
+Platform administrators configure shared model services and detector bindings. Business users select the resulting capabilities in their Guardrails.
 
-Platform health checks model bindings required by the pinned baseline and enabled published routes. Unused model assignments and historical versions do not make a local installation unhealthy. Administrators may activate failed or untested model bindings; their actual test results remain visible, and activation does not turn them into passing results. **A callable Model** and **a Rail actively using it** are different states.
+Default needs no detection model. It uses reviewed local Rules. Model-backed Policies remain available for other Guardrails. Local matching does not replace semantic model detection.
 
 <a id="platform-model-steps" />
+## Configure dependencies in order
 
-## Configure in dependency order
+1. Register the service address and credential under [Providers](/settings/providers).
+2. Check connectivity. Private-CA and TLS settings apply only to that Provider.
+3. Register the physical model under [Models](/settings/models).
+4. Make a real test call. Model discovery alone does not prove callability.
+5. Assign the Model to a compatible capability under [Guardrail Catalog](/settings/guardrail-catalog).
+6. Validate its behavior examples. Save the binding and activate the configuration.
+7. Inspect application progress under [platform health](/settings/health).
 
-1. Register the service URL and credentials in [Providers](/settings/providers), then check connectivity. Private-CA and related TLS settings apply only to that Provider. After a change, test the affected Models again.
-2. Register a physical model in [Models](/settings/models) and make a real test call. Discovery alone does not prove callability.
-3. In [Guardrail Catalog](/settings/guardrail-catalog), assign a Model to a capability such as `content_safety.input` or `jailbreak.input`. Input and Output bindings are independent and the protocol must fit the capability contract.
-4. Validate behavioral samples, save and activate the assignment, then confirm Runner application in [platform health](/settings/health). A Models test call alone does not prove that content-safety or jailbreak behavior passes validation.
+Input and Output bindings are independent. For example, `content_safety.input` and `content_safety.output` require compatible contracts for their respective stages.
 
-Remote Detector modules have a 30-second execution deadline. Capability probes use the same upper bound; a longer Model timeout does not extend a Guardrail's deadline. Timeouts fail closed and do not count as successful detection or permit publication.
+Health checks the bindings used by the runtime baseline and enabled published routes. Unused assignments and historical versions do not make a local installation unhealthy.
 
-For Grounding with `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA's hosted API, the adapter disables optional thinking so the model can return its JSON classification within that budget. This option does not change the portable Policy definition or requests to other model services. Validate your own positive and negative cases before release.
+Administrators can activate untested or failed bindings. Activation preserves the actual results and does not prove detection passed. Validate your own positive and negative cases before publication.
+
+<a id="platform-model-deadlines" />
+### Execution deadlines
+
+Remote detector modules have a maximum execution budget of 30 seconds. Capability probes use the same upper bound. A longer Model timeout does not extend this budget. Timeouts cannot count as passing inspection evidence.
+
+For Grounding through NVIDIA's hosted `nvidia/nemotron-3.5-lightning-30b-a3b`, the adapter disables optional thinking. This setting applies to that adapter only. It does not modify portable Policy definitions.
 
 <a id="platform-model-boundary" />
+## Distinguish capabilities from Policies
 
-## Control-plane and data-plane boundary
+A capability binding supplies a detector dependency. A Policy defines reusable protection behavior. A successful model connection does not establish that a particular Rule detects the intended content.
 
-The DeepSeek Provider serves only the control plane at this time. You cannot assign it to a data-plane Rail. The data plane uses supported dedicated or bounded low-parameter models. Controller distributes only the Models and credentials referenced by active data-plane bindings to Runners. A **model capability binding** in Guardrail Catalog is different from a reusable **Policy** in the Policy Library. The binding supplies a detection dependency. The Policy defines the protection behavior.
+DeepSeek Providers currently serve the control plane only. Data-plane Rails require supported specialized model contracts. Controller distributes the Models and credentials referenced by active data-plane bindings.
 
-The repository's `docs/model-configuration.md` retains detailed deployment and protocol notes.
+For proof-service setup and known validation examples, see [formal verification](/document/operator/operator-create-policy#operator-policy-formal-service). Deployment and protocol details remain in `docs/model-configuration.md` in the repository.

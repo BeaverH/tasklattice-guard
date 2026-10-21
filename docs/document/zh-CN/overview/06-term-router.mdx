@@ -4,29 +4,25 @@ title: "Routers：路由与灰度"
 summary: "认识 Route、Selector、Target 与 Router Revision，并判断 Runner 是否已应用。"
 order: 5
 ---
-<strong>是什么：</strong>将一个或多个 Endpoints 的流量送往 Guardrail Versions 的可发布配置，包含有序 Routes、Selectors 和加权 Targets。
+Router 为 Endpoint 流量选择执行检测的 Guardrail Version。一个 Router 可以服务多个 Endpoint，每个 Endpoint 最多绑定一个 Router。
 
-<strong>为什么：</strong>保护内容的版本与流量切换分离，才能灰度、回滚和审计。Route 按顺序 first-match-wins，fallback 在最后。
+<a id="router-routes-targets" />
+## Route 与 Target
 
-<strong>怎么用：</strong>
+Router 按顺序检查 Route，第一条匹配的 Route 选择一个加权 Target。最后的 fallback 无条件匹配。
 
-1. 保存草稿并预览。
-2. 发布为不可变的 Router Revision。
-3. 确认 Runner 已应用目标 generation。这时才能认为新流量已经切换。
+每个 Target 固定一个确切的已 Release Guardrail Version。同一 Route 的权重合计 100%。90%／10% 会将命中的逻辑调用分配给两个 Target，不会让每次调用同时经过两个 Guardrail。
 
-<strong>例子：</strong>一个 Route 可以把 90% 的流量送到 Guardrail v1，10% 送到 v2，用来灰度发布。命中哪个 Route，仍取决于 Selector 和 Route 的顺序。
+发布新的 Guardrail Version 不会更新 Router Target。切换流量需要修改 Router 草稿。[路由指南](/document/operator/operator-routing)说明预览、审批和下发流程。
 
 <a id="term-traffic-scope" />
+## Selector：Route 的匹配条件
 
-## Selector
+Selector（Traffic Scope，流量范围）用 AND／OR 组合受支持的请求事实。可用字段取决于绑定的 Endpoint 协议。
 
-Traffic Scope · 流量范围 · 路由条件
+例如，匹配已认证的 `endpoint.id`、`protocol`，或适配器提取的模型。调用方传入的 Header 和 claims 不会自动成为可信身份。
 
-基于可信请求事实构造的 AND/OR 路由表达式。
-
-Selector 定义 Route 的匹配条件。fallback 无条件匹配。可选的字段取决于所绑定 Endpoint 的协议。外部传入的 headers 不一定可信。
-
-例如，按已认证的 `endpoint.id` 或协议类型 `protocol` 选择 Route。所有条件都不匹配时，使用最后的 fallback。
+协议提供共享 Call ID 时，Input 和 Output 沿用所选版本。Scan 请求彼此独立。参见[调用关联](/document/developer/gateway-connect#gateway-call-correlation)。
 
 <a id="state-router" />
 
@@ -47,7 +43,7 @@ Router 状态<strong>不是 Router Revision 里保存的字段</strong>。Contro
 
 ### Router 下发状态详解
 
-以下卡片解释各状态的含义，不表示系统的实时状态。Router 状态由 Controller 根据 revision、generation、Runner 确认和心跳推导。它不是 RouterRevision protobuf 中的生命周期枚举。
+以下卡片解释状态含义，不显示系统实时状态。
 
 <StateCards>
 
@@ -67,7 +63,7 @@ Router 状态<strong>不是 Router Revision 里保存的字段</strong>。Contro
 
 <StateDetail label="下一步">
 
-完成 Route 和 Target 配置后发布。
+完成 Route 和 Target 配置后，提交变更审批。
 
 </StateDetail>
 
@@ -141,4 +137,4 @@ Router 状态<strong>不是 Router Revision 里保存的字段</strong>。Contro
 
 </StateCards>
 
-> 协议中的 DesiredStateResult.accepted 只有在整代配置预热并原子切换后才为 true。Runner 拒绝该代配置时，继续保留之前已应用的配置。这里的确认不同于发布 API 已接受请求。
+> Runner 准备并应用整代配置后才确认生效。拒绝新配置时继续使用此前已应用的配置。API 接受请求本身不能证明下发已经完成。

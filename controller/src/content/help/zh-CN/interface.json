@@ -10,6 +10,8 @@
   "noResultsDescription": "尝试更短的概念名称，例如 Rail、Action、版本或路由。",
   "contents": "文档目录",
   "onThisPage": "本页目录",
+  "expandSection": "展开章节",
+  "collapseSection": "收起章节",
   "articleNavigation": "文章导航",
   "previousArticle": "上一篇",
   "nextArticle": "下一篇",

@@ -5,24 +5,40 @@ summary: "选择 Policy，创建 Guardrail 草稿，验证并发布版本，再�
 outcome: "最终产出：已验证、已发布并可通过 Router 接入流量的 Guardrail Version。"
 order: 0
 ---
-保护一个业务场景时，先复用经过审查的 Policy，再组合、测试和发布 Guardrail。当前控制台的创建和发布入口需要管理员权限。这里按运维任务组织操作步骤，不代表所有登录角色都能执行写入。
+业务 Guardrail 由 `user` 账户创建和管理。平台管理员准备共享服务，并维护 Default 基线。详见[账户角色](/document/admin/platform-access#admin-governance)。
 
-1. **浏览 Policy Library** — 阅读 Policy 的用途、Rules、参数和 Test Cases，确认它能表达所需保护行为。
+<a id="guardrail-build-steps" />
+## 组合并测试草稿
 
-2. **创建 Guardrail** — 描述业务用途和边界，选择 Policy Version，并确认实际启用的 Rules 与 Rails。
+1. 在 [Policy Library](/policy-library) 中查看可用 Policy，阅读其 Rule、参数和 Test Case。
+2. 为业务场景创建 Guardrail，选择确切的 Policy Version。
+3. 核对启用的 Rule、检查阶段、参数值和动作覆盖。
+4. 添加正常、违规与边界样例。
+5. 运行当前草稿的测试，检查生成的测试报告。
 
-3. **运行测试** — 让当前草稿的 Test Case 通过与生产相同的 NeMo 运行时，生成测试报告。失败的结果也会保留为证据。
+编译成功不能单独证明检测行为正确。发布前请修复测试失败。
 
-4. **发布版本** — 把已通过验证的草稿固化为不可变 Guardrail Version。后续修改不会改变已有版本。
+<a id="guardrail-publish-steps" />
+## 发布并接入流量
 
-5. **接入业务流量** — 为应用准备 Endpoint，把 Router 的 Route 指向该固定版本，发布后确认 Runner 已应用目标配置。
+1. 将已测试的草稿发布为不可变 Guardrail Version。
+2. 为应用或网关创建 Endpoint。
+3. 通过 Router 的 Route 指向确切版本，保留最后的 fallback。
+4. 提交路由变更，由另一位具备权限的用户批准。
+5. 确认 Runner 已应用发布的配置。
+6. 发送真实应用请求，检查 Decision 和实际交付内容。
 
-6. **复盘与改进** — 在 Playground 试用行为，根据运行日志与审计证据调整下一版策略。
+模型调用由应用负责。应用必须执行阻断或替换。详见 [Endpoint 接入指南](/document/developer/endpoint-setup)和[路由审批](/document/operator/operator-routing)。
 
-[打开 Policy Library](/policy-library)
+<a id="guardrail-build-readiness" />
+## 检查就绪状态并改进行为
+
+Guardrail 至少保留一个 Released 版本，且仍有匹配的本环境 Passed 依据时，才满足就绪条件。就绪不证明工作草稿已通过测试，也不证明流量正在使用该版本。
+
+导入版本先为 Pending。请在本环境运行其冻结测试，通过后显式 Release。
+
+在 [Playground](/playground) 试用行为，在[运行日志](/logs)核对真实请求。保护行为变化后，请发布新版本。已有 Router Target 继续固定旧版本，直到路由变更经审阅后更新。
+
+容量、删除与恢复规则见[生命周期与测试依据](/document/overview/term-guardrail#state-guardrail-readiness)。
 
 [管理 Guardrails](/guardrails)
-
-**Ready（就绪）**表示至少保留一个在本环境已发布的不可变版本，且仍有匹配的本环境 Passed 报告；不表示草稿已通过测试或流量正在使用它。首页分别展示就绪性、版本容量和具体流量引用。导入的 Guardrail 使用相同操作流程，导入版本先为 Pending，在本环境测试后显式 Release。删除、恢复与测试依据的完整规则见 [Guardrail 生命周期与就绪性](/document/overview/term-guardrail#state-guardrail-readiness)。
-
-[在 Guardrail 中查看 Validation](/guardrails)

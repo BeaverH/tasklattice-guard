@@ -5,24 +5,40 @@ summary: "Select Policies, create a Guardrail draft, validate and publish a vers
 outcome: "Outcome: a validated, published Guardrail Version ready to receive traffic through a Router."
 order: 0
 ---
-To protect a business scenario, first reuse reviewed Policies. Then compose, test and publish a Guardrail. The current console requires administrator access to create and publish. This section groups operational tasks. It does not give write access to every signed-in role.
+Use a `user` account to create and manage business Guardrails. Platform administrators prepare shared services and maintain the Default baseline. See [account roles](/document/admin/platform-access#admin-governance).
 
-1. **Browse Policy Library** — Review purpose, Rules, parameters, and Test Cases.
+<a id="guardrail-build-steps" />
+## Compose and test the draft
 
-2. **Create a Guardrail** — Describe business boundaries and select Policy Versions, Rules, and Rails.
+1. Review available Policies in the [Policy Library](/policy-library). Inspect their Rules, parameters and Test Cases.
+2. Create a Guardrail for the business scenario. Select exact Policy Versions.
+3. Review enabled Rules, inspection stages, parameter values and action overrides.
+4. Add normal, unsafe and boundary examples.
+5. Run the current draft's tests. Inspect the resulting Testing Report.
 
-3. **Run the tests** — Run the Test Cases of the current draft through the production-equivalent NeMo runtime. The result is a Testing Report.
+A successful compilation alone does not prove detection behavior. Resolve test failures before publication.
 
-4. **Publish** — Freeze the passing draft as an immutable Guardrail Version.
+<a id="guardrail-publish-steps" />
+## Publish and connect traffic
 
-5. **Connect business traffic** — Prepare an Endpoint, target the pinned version from a Router Route, publish, and confirm that Runners applied the target configuration.
+1. Publish the tested draft as an immutable Guardrail Version.
+2. Create an Endpoint for the application or gateway.
+3. Target the exact version through a Router Route. Retain the final fallback.
+4. Submit the routing change for approval by a different authorized user.
+5. Confirm that Runners applied the published configuration.
+6. Send real application requests. Check returned Decisions and actual content delivery.
 
-6. **Review and improve** — Try the behavior in Playground and use runtime evidence to plan the next policy version.
+The application owns model calls and must apply blocking or replacement. See [Endpoint integration](/document/developer/endpoint-setup) and [routing approval](/document/operator/operator-routing).
 
-**Ready** means at least one retained immutable version is Released here and still has a matching local Passed report. It does not mean the draft is tested or traffic is using it. The registry separates readiness, retained version capacity and exact traffic references. Imported Guardrails use the same workflow; imported versions start Pending until tested and explicitly released here. See [Guardrail lifecycle and readiness](/document/overview/term-guardrail#state-guardrail-readiness) for deletion, restoration and evidence rules.
+<a id="guardrail-build-readiness" />
+## Check readiness and improve behavior
 
-[Open Policy Library](/policy-library)
+A Guardrail is ready when it retains a Released version with matching local Passed evidence. Readiness does not prove that the working draft passed tests or that traffic uses the version.
+
+Imported versions start Pending. Run their frozen tests in this environment. Release them explicitly after passing.
+
+Use [Playground](/playground) for trials and [runtime logs](/logs) for actual request evidence. Publish a new version after changing protection behavior. Existing Router Targets keep their pinned versions until a reviewed routing change updates them.
+
+See [lifecycle and evidence rules](/document/overview/term-guardrail#state-guardrail-readiness) for capacity, deletion and restoration.
 
 [Manage Guardrails](/guardrails)
-
-[View Validation in a Guardrail](/guardrails)

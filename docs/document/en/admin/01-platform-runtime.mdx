@@ -4,49 +4,49 @@ title: "Platform components, Runners, and runtime health"
 summary: "Separate Controller, Runner, and gateway responsibilities, including Runner and model configuration states."
 order: 0
 ---
-Platform management ensures that the service can execute protection. Controller stores configuration, manages versions, and distributes desired state. Runners authenticate Endpoint requests, execute the deployed checks, and report runtime state. An application or AI Gateway calls the runtime service for production checks while retaining ownership of model calls.
+Platform health describes whether the environment can execute protection. Configuration publication, Runner rollout and actual traffic are separate signals.
 
 <a id="platform-components" />
+## Understand component responsibilities
 
-## Three boundaries to know
+| Component | Responsibility |
+| --- | --- |
+| Controller | Stores resources and versions. Distributes desired configuration. |
+| Runner | Authenticates Endpoint calls, executes inspections and reports application status. |
+| Application or gateway | Calls the business model, submits content and applies each Decision. |
 
-- **Controller** manages Policies, Guardrails, Endpoints, Routers, Providers, Models, and the versions sent to Runners.
-- **Runner** loads signed protection artifacts, applies target generations, executes input or output checks, and acknowledges configuration through heartbeats.
-- **Application or AI Gateway** submits text for checks and enforces each Decision. Runner does not own the application's business session.
+Default is a platform-maintained local baseline. Normal installation provisions its bundled release without claiming a local test run passed. Business users create their own Guardrails from reviewed Policies.
 
 <a id="platform-health" />
+## Inspect health and rollout
 
-## Where to inspect health
+Start with [platform health](/settings/health). Then inspect instance synchronization and capacity under [Runner](/settings/runner).
 
-Start with [platform health](/settings/health) for Controller, baseline protection, Runner convergence, and model capability readiness. Then use [Runner](/settings/runner) for instance synchronization and capacity. A Router is **active** only when both conditions are true:
+An Active Router requires at least one default-pool Runner. Every target instance must acknowledge the desired generation with a fresh heartbeat. One Ready instance does not prove rollout completed.
 
-- The default pool has at least one Runner.
-- Every target Runner acknowledged the desired generation and has a fresh heartbeat.
-
-One ready Runner does not prove that the Router is active.
-
-If a publication remains distributing or failed, compare desired and applied generations, Runner heartbeats, and rejection reasons. Then inspect protection artifacts, model dependencies, and capacity. See [runtime and publication states](/document/overview/term-router#state-router).
+For Distributing or Failed, compare desired and applied generations. Inspect heartbeat freshness and rejection reasons. Then inspect dependencies and capacity. See [Router rollout states](/document/overview/term-router#state-router).
 
 <a id="state-runner" />
-
-## Runner synchronization and capacity
+## Separate synchronization from capacity
 
 <StateMachineDiagram kind="runner" locale="en" />
 
-Runner status combines <strong>configuration reconciliation</strong> and <strong>capacity pressure</strong>. It is not one stored linear state machine:
+| Status | Meaning |
+| --- | --- |
+| Syncing | The instance has not applied the desired generation. |
+| Ready, Busy or Saturated | Configuration converged. Current load determines available capacity. |
+| Offline | The connection or heartbeat is stale. |
 
-- Before the desired generation is applied: syncing.
-- After that, by load: ready, busy or saturated.
-- Disconnection or stale heartbeats: offline.
-- After a reconnection, the generation must converge again.
-
-Router active requires valid acknowledgments from all default-pool Runners. One ready Runner does not prove the rollout.
+Reconnection requires configuration convergence again. These statuses combine synchronization and load, rather than one persistent lifecycle.
 
 <a id="state-models" />
-
-## Providers, Models, and model configuration
+## Check model configuration separately
 
 <StateMachineDiagram kind="model-probe" locale="en" />
 <StateMachineDiagram kind="model-revision" locale="en" />
 
-Provider and Model validation states are pending, validated, or failed. Configuration or protocol changes reset relevant checks to pending until reprobed. Model transport checks and capability validation are separate. Editable model-assignment revisions move between draft and validated. Applying reviewed changes creates an activating snapshot, which becomes active after Runner convergence or failed on activation error. Replacing an active snapshot creates another revision rather than editing it in place.
+Provider and Model checks use Pending, Validated or Failed. Configuration or protocol changes require new checks. Connectivity checks and capability behavior tests answer different questions.
+
+Model-assignment drafts use Draft or Validated. Applying configuration creates an Activating snapshot. It becomes Active after convergence, or Failed after an activation error. Changing an active snapshot creates a new revision.
+
+Administrators can activate untested or failed assignments. Their actual results remain visible. Activation does not convert them to passing tests. See [model configuration](/document/admin/platform-models).

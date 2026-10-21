@@ -4,25 +4,25 @@ title: "Routers: routing and rollout"
 summary: "Understand Routes, Selectors, Targets, Router revisions, and Runner application."
 order: 5
 ---
-<strong>What:</strong> A publishable configuration that sends one or more Endpoints to Guardrail Versions through ordered Routes, Selectors, and weighted Targets.
+A Router selects the Guardrail Version that inspects an Endpoint's traffic. One Router can serve several Endpoints. Each Endpoint binds to at most one Router.
 
-<strong>Why:</strong> Versioned protection is separate from traffic switching, enabling gradual release, rollback, and audit. Routes are first-match-wins with fallback last.
+<a id="router-routes-targets" />
+## Routes and Targets
 
-<strong>How:</strong> Save and preview a draft, publish an immutable Router Revision, then wait for Runners to apply the desired generation before calling it active.
+The Router checks Routes in order. The first matching Route selects one weighted Target. The final fallback Route matches without a condition.
 
-<strong>Example:</strong> One Route can send 90% of traffic to Guardrail v1 and 10% to v2 for a gradual rollout. The Selector and Route order still determine which Route matches.
+Each Target pins an exact released Guardrail Version. Weights within one Route total 100%. A 90%/10% split distributes matching logical calls between two Targets. It does not run both Guardrails on each call.
+
+Publishing a newer Guardrail Version does not update Router Targets. Change the Router draft to move traffic. [The routing guide](/document/operator/operator-routing) explains preview, approval and rollout.
 
 <a id="term-traffic-scope" />
+## Selector: the Route condition
 
-## Selector
+A Selector, also called Traffic Scope, combines supported request facts with AND/OR expressions. Available fields depend on the bound Endpoint protocols.
 
-Traffic scope · route condition
+For example, match authenticated `endpoint.id`, `protocol`, or an adapter-extracted model. Caller-supplied headers and claims are not trusted identity by default.
 
-An AND/OR route expression over trusted request facts.
-
-Selectors define how a Route matches. The fallback Route matches without a condition. The available fields depend on the protocols of the bound Endpoints. Untrusted headers can be spoofed.
-
-For example, choose a Route by the authenticated `endpoint.id` or by the protocol type `protocol`. If no condition matches, the final fallback Route applies.
+Input and Output retain the selected version when the protocol supplies a shared call ID. Scan requests are independent. See [call correlation](/document/developer/gateway-connect#gateway-call-correlation).
 
 <a id="state-router" />
 
@@ -30,7 +30,7 @@ For example, choose a Route by the authenticated `endpoint.id` or by the protoco
 
 <StateMachineDiagram kind="router" locale="en" />
 
-Router state is <strong>not stored in the Router Revision</strong>. The Controller derives it from activeRevision, desiredGeneration, the acknowledgments of the default-pool Runners and fresh heartbeats:
+The Controller calculates rollout state from the active revision, desired generation, default-pool Runner acknowledgments and heartbeats:
 
 - No publication: unpublished.
 - A publication or a rollback creates a revision and a generation: distributing.
@@ -43,7 +43,7 @@ A new publication clears the error and distributes again. Stale heartbeats, or a
 
 ### Router rollout states in detail
 
-These cards explain what each status means. They do not show the live system. The Controller derives the Router status from revisions, generations, Runner acknowledgments and heartbeats. The status is not a lifecycle enum in the RouterRevision protobuf.
+These cards explain status meanings. They do not display live system state.
 
 <StateCards>
 
@@ -63,7 +63,7 @@ The first publication creates a revision and desired generation, entering distri
 
 <StateDetail label="Next step">
 
-Finish Routes and Targets, then publish.
+Complete the Routes and Targets. Submit the change for approval.
 
 </StateDetail>
 
@@ -129,7 +129,7 @@ Publishing again clears the old error and retries distribution. Fresh convergenc
 
 <StateDetail label="Next step">
 
-Read rolloutError and the rejection reasons of the Runners. Correct the dependencies or the configuration, then publish again.
+Read `rolloutError` and Runner rejection reasons. Correct the dependencies or configuration. Submit the corrected change.
 
 </StateDetail>
 
@@ -137,4 +137,4 @@ Read rolloutError and the rejection reasons of the Runners. Correct the dependen
 
 </StateCards>
 
-> DesiredStateResult.accepted is true only after the entire generation is prewarmed and atomically applied. A Runner that rejects a generation retains its previously applied configuration. This acknowledgment differs from the publish API accepting a request.
+> A Runner confirms application after preparing and applying the entire generation. A rejected generation leaves the previously applied configuration in service. API acceptance alone does not establish rollout completion.

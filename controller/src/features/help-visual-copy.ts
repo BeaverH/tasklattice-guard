@@ -9,8 +9,8 @@ export function resourceMapCopy(locale: HelpVisualLocale) {
     ruleContract: zh ? "检查阶段 · 检测器 · 安全分级 · 命中后处理" : "Stage · detector · risk level · handling",
     testCases: zh ? "Test Case 验证行为" : "Test Cases verify behavior",
     caption: zh
-      ? "Policy 包含多条 Rule 和 Test Cases，每条 Rule 引用检测器并指定命中后处理；Guardrail 通过 Binding 固定多个 Policy Version。上下两排的 Guardrail Version 是同一个不可变版本。"
-      : "A Policy contains Rules and Test Cases; each Rule references a detector and declares post-match handling. A Guardrail pins multiple Policy Versions through Bindings. Guardrail Version is the same immutable version in both lanes.",
+      ? "Policy 包含 Rule 和 Test Case，每条 Rule 引用检测器并指定命中后处理。Guardrail 通过 Binding 固定 Policy Version。上下两排指向同一个 Guardrail Version。"
+      : "A Policy contains Rules and Test Cases. Each Rule references a detector and declares handling after a match. A Guardrail pins Policy Versions through Bindings. Both lanes refer to the same Guardrail Version.",
     lanes: [
       { title: zh ? "定义与发布" : "Define and publish", nodes: [
         { title: "Policy", detail: zh ? "可复用的检测能力" : "Reusable detection capability" },
@@ -36,7 +36,7 @@ export function stateLegendCopy(locale: HelpVisualLocale): { title: string; item
     items: [
       { tone: "neutral", label: zh ? "灰色：草稿／历史／已停用／尚未开始" : "Gray: draft, historical, disabled, or not started" },
       { tone: "change", label: zh ? "黄色：排队／验证／下发中" : "Amber: queued, validating, or distributing" },
-      { tone: "healthy", label: zh ? "绿色：验证通过／已就绪／保护中／已生效" : "Green: passed, ready, protected, or active" },
+      { tone: "healthy", label: zh ? "绿色：验证通过／已就绪／执行防护／已生效" : "Green: passed, ready, enforcing, or active" },
       { tone: "error", label: zh ? "红色：失败／离线／需处理" : "Red: failed, offline, or action required" },
     ],
   };
@@ -54,17 +54,17 @@ export function graph(kind: StateMachineKind, zh: boolean): Graph {
   switch (kind) {
     case "guardrail-readiness": return {
       title: label("Guardrail 防护状态", "Guardrail protection states"),
-      caption: label("后三种状态均满足就绪条件，可相互切换。删除最后一个合格版本或通过依据后，任一模式回到 Not ready；再次发布默认 Enforce。版本发布和测试流程不变。", "Enforce, Monitor and Bypass all imply readiness and can switch to one another. Losing the last qualifying release or its evidence returns any mode to Not ready; the next release defaults to Enforce. Publication and tests are unchanged."),
+      caption: label("后三种模式均要求就绪，可相互切换。失去最后的合格发布版本或依据后回到 Not ready，再次就绪时默认 Enforce。Default 可使用平台发布凭证，普通业务版本需要本环境测试依据。", "All three modes require readiness. Losing the last qualifying release or its evidence returns the resource to Not ready. The next release defaults to Enforce. Default can use platform-release provenance. Business versions need local test evidence."),
       height: 360,
       nodes: [node("Not ready", 40, 45, "neutral"), node("Enforce", 380, 45, "healthy"), node("Monitor", 220, 235, "change"), node("Bypass", 700, 235, "change")],
-      edges: [edge("M200 72 L380 72", 290, 52, "发布 + 通过依据", "Release + passing evidence"),
+      edges: [edge("M200 72 L380 72", 290, 52, "发布 + 匹配依据", "Release + matching evidence"),
         edge("M415 99 L330 235", 325, 165, "观察", "Monitor"), edge("M365 235 L450 99", 450, 175, "恢复防护", "Restore"),
         edge("M510 99 L750 235", 660, 146, "应急放行", "Bypass"), edge("M700 235 L480 99", 570, 190, "恢复防护", "Restore"),
         edge("M380 251 L700 251", 540, 237, "应急放行", "Bypass"), edge("M700 274 L380 274", 540, 302, "观察", "Monitor")],
     };
     case "guardrail-lifecycle": return {
       title: label("Guardrail 资源生命周期", "Guardrail resource lifecycle"),
-      caption: label("图中是资源存储状态，不替代就绪性检查。导入资源可由原归属来源的包确认恢复；本地创建资源目前不支持这种恢复。", "These are stored lifecycle values, not readiness checks. An imported identity can be restored by its owning source's package; locally created identities cannot currently be restored this way."),
+      caption: label("图中是保存的资源状态，不能代替就绪检查。原归属来源的包可恢复已导入身份，本地创建身份不支持这种恢复。", "These are stored lifecycle values. Check readiness separately. The owning source's package can restore an imported identity. This method cannot restore locally created identities."),
       height: 290,
       nodes: [node("draft", 50, 70, "neutral"), node("active", 370, 70, "healthy"), node("disabled", 690, 70, "neutral")],
       edges: [edge("M210 85 L370 85", 290, 62, "发布 / Release", "Publish / Release"),
@@ -82,10 +82,10 @@ export function graph(kind: StateMachineKind, zh: boolean): Graph {
     };
     case "guardrail-version": return {
       title: label("不可变版本的发布状态", "Immutable version release states"),
-      caption: label("图中 ready 是版本的 Released，不是资源就绪性。新导入版本为 pending；发布已测试草稿直接创建 ready。软删除资源也会把保留版本退回 pending。", "Here ready means version Released, not resource readiness. New imports start pending; publishing a tested draft creates ready directly. Resource soft deletion also resets retained versions to pending."),
+      caption: label("ready 表示版本 Released，不等于资源就绪。导入版本初始为 pending，发布已测草稿直接创建 ready。随包 Default 使用平台发布凭证。软删除资源会将保留版本退回 pending。", "Here ready means version Released. Check resource readiness separately. Imports start pending. Publishing a tested draft creates ready directly. Bundled Default uses platform-release provenance. Resource deletion resets retained versions to pending."),
       height: 260,
       nodes: [node("pending", 85, 103, "change"), node("ready", 660, 103, "healthy")],
-      edges: [edge("M245 130 L660 130", 452, 112, "本环境测试通过并发布", "Tested here and released"), edge("M660 157 Q450 260 245 157", 452, 224, "最后一份通过依据删除", "Final passing evidence deleted")],
+      edges: [edge("M245 130 L660 130", 452, 112, "本环境测试通过并发布", "Tested here and released"), edge("M660 157 Q450 260 245 157", 452, 224, "失去最后的发布依据", "Final release evidence removed")],
     };
     case "router": return {
       title: label("Router 发布与下发状态机", "Router publication and rollout state machine"),
@@ -96,7 +96,7 @@ export function graph(kind: StateMachineKind, zh: boolean): Graph {
     };
     case "endpoint": return {
       title: label("Endpoint 启停状态机", "Endpoint enablement state machine"),
-      caption: label("主动 disabled 可以恢复；软删除是独立覆盖条件。", "Intentional disabling is reversible; soft deletion is a separate overlay."),
+      caption: label("停用后可以重新启用，软删除是独立条件。", "A disabled Endpoint can be enabled again. Soft deletion is a separate condition."),
       height: 200,
       nodes: [node("active", 150, 75, "healthy"), node("disabled", 590, 75, "neutral")],
       edges: [edge("M310 88 Q450 25 590 88", 450, 48, "停用", "Disable"), edge("M590 116 Q450 180 310 116", 450, 166, "重新启用", "Re-enable")],
@@ -117,10 +117,10 @@ export function graph(kind: StateMachineKind, zh: boolean): Graph {
     };
     case "model-revision": return {
       title: label("模型配置 Revision 状态机", "Model configuration revision state machine"),
-      caption: label("应用会创建 activating 快照；替换已生效配置要创建新 revision。", "Applying creates an activating snapshot. Replacing an active configuration creates a new revision."),
+      caption: label("应用配置会创建 activating 快照，不强制要求先验证通过。替换活动配置会创建新 revision。", "Applying creates an activating snapshot. Administrators can also apply untested or failed assignments. Replacing active configuration creates a new revision."),
       height: 285,
       nodes: [node("draft", 10, 110, "neutral"), node("validated", 220, 110, "healthy"), node("activating", 440, 110, "change"), node("active", 715, 25, "healthy"), node("failed", 715, 205, "error")],
-      edges: [edge("M170 137 L220 137", 195, 118, "验证", "Validate"), edge("M380 137 L440 137", 410, 118, "应用", "Apply"), edge("M600 125 Q660 105 715 68", 665, 95, "收敛", "Converged"), edge("M600 152 Q660 185 715 232", 665, 195, "失败", "Failed"), edge("M220 164 Q195 235 170 164", 195, 220, "修改", "Edit")],
+      edges: [edge("M170 137 L220 137", 195, 118, "验证", "Validate"), edge("M380 137 L440 137", 410, 118, "应用", "Apply"), edge("M90 110 Q300 -20 520 110", 315, 45, "也可直接应用", "Direct application allowed"), edge("M600 125 Q660 105 715 68", 665, 95, "收敛", "Converged"), edge("M600 152 Q660 185 715 232", 665, 195, "失败", "Failed"), edge("M220 164 Q195 235 170 164", 195, 220, "修改", "Edit")],
     };
   }
 }

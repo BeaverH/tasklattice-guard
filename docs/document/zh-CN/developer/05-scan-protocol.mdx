@@ -1,60 +1,79 @@
 ---
 id: "scan-protocol"
 title: "Scan Endpoint 协议"
-summary: "F5 Backend V1 Scans 兼容入口：Bearer 认证、四个有效字段、四种 outcome、兼容占位和错误格式。"
+summary: "通过 F5 Backend V1 Scans 兼容接口检测 Input 或完整的 Output，说明认证、请求字段、防护模式、响应和错误处理。"
 order: 2
 ---
-本章定义 **Scan Endpoint**（`f5-scan`）在本系统中的实际契约，面向现有的 F5 Scan 脚本、Python requests 和数据集评测。
+Scan Endpoint（`f5-scan`）提供 F5 Backend V1 Scans 兼容接口。接入方提交文本，Guard 返回检测结果。接入方根据结果决定是否调用模型或交付文本。
 
-- 兼容范围是通过 `POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans` 的文本扫描。
-- 不包括 F5 的项目管理、历史查询、Scanner 配置 API 和 `/scans/raw`。
-- LiteLLM 的 `action`、Call ID 和 WebSocket 规则不适用于 Scan。
+此接口支持 **Input 和完整的 Output**。它不调用业务模型，也不从模型获取回答。流式 Output 检测见[网关集成](/document/developer/gateway-connect#gateway-stream-protocol)。
+
+兼容范围仅限文本扫描，不包括 F5 项目管理、历史查询、Scanner 配置 API 或 `/scans/raw`。
 
 <a id="scan-connection" />
-## 地址、认证与路由
+## 地址与认证
+
+接口地址为 `POST {endpoint}/backend/v1/scans`。`{endpoint}` 是包含 Endpoint ID 的基础地址，例如 `https://guard-runtime.example.com/runtime/v1/endpoints/your-endpoint-id`。
+
+请求必须带以下 Header：
+
+| Header | 必填／可选 | 值 |
+| --- | --- | --- |
+| `Authorization` | 必填 | `Bearer <Scan Endpoint 凭据>`。凭据必须属于路径指定的 Endpoint。 |
+| `Content-Type` | 必填 | `application/json`。允许附带 `charset=utf-8` 等参数。 |
+
+最小请求示例：
 
 ```http
-POST /runtime/v1/endpoints/{endpoint_id}/backend/v1/scans HTTP/1.1
-Authorization: Bearer <Endpoint 凭据>
+POST /runtime/v1/endpoints/your-endpoint-id/backend/v1/scans HTTP/1.1
+Host: guard-runtime.example.com
+Authorization: Bearer <Scan Endpoint 凭据>
 Content-Type: application/json
+
+{"input":"Text to inspect"}
 ```
 
-- `CALYPSOAI_URL` 是包含 Endpoint UUID 的基础地址，例如 `https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>`。将占位符替换为接入页提供的真实 ID。
-- `CALYPSOAI_TOKEN` 是创建 Scan Endpoint 时保存的完整凭据。
+本文的 HTTP 示例包含接入所需的 Header 和 JSON Body。空行分隔 Header 与 Body。域名、ID 和凭据均为示例值。示例省略 `Content-Length`、`Date` 等自动生成的 Header，以及额外的诊断 Header。
 
-路径中的 UUID 唯一指定 Endpoint；Bearer 凭据必须属于该 Endpoint，否则返回 `401`。该 Endpoint 已发布的 Router 再选择 Guardrail Version。根路径 `/backend/v1/scans` 不再提供接入。客户端应在 Endpoint 基础地址后拼接 `/backend/v1/scans`；使用 URL 拼接库时须保留 Endpoint 路径，不能重置到域名根路径。
+路径指定 Endpoint，Endpoint 已发布的 Router 再选择 Guardrail Version。凭据与路径不匹配时，Guard 返回 `401`。根路径 `/backend/v1/scans` 不提供接入。
+
+使用 URL 拼接库时，请保留 Endpoint 路径。以 `/` 开头的路径可能将基础地址重置到域名根路径。
+
+以下 cURL 命令使用现有 Scan 脚本常用的环境变量名。`CALYPSOAI_URL` 对应上面的 `{endpoint}`，`CALYPSOAI_TOKEN` 对应完整的 Endpoint 凭据。
 
 ```bash
-export CALYPSOAI_URL='https://guard-runtime.example.com/runtime/v1/endpoints/<endpoint_id>'
+export CALYPSOAI_URL='https://guard-runtime.example.com/runtime/v1/endpoints/your-endpoint-id'
 export CALYPSOAI_TOKEN='<Scan Endpoint 凭据>'
 curl -sS --fail-with-body -X POST "${CALYPSOAI_URL%/}/backend/v1/scans" \
   -H "Authorization: Bearer $CALYPSOAI_TOKEN" \
   -H 'Content-Type: application/json' \
-  --data '{"input":"Text to inspect","scanDirection":"request","flagOnly":false,"verbose":false}'
+  --data '{"input":"Text to inspect"}'
 ```
 
-Scan 没有 `/verify` 接口，也没有模型调用接口。要验证认证、路由和检测，请提交一条真实的扫描。
-
-- 输入扫描不会调用业务模型。
-- 输出扫描不会自动获取模型回答。
-
-<a id="scan-protection-modes" />
-## Guardrail 防护模式
-
-Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用下述结果和完整性校验；Monitor 执行检测，但即使命中或检测失败也返回 `cleared` 并保留原文；Bypass 不执行检测，直接返回 `cleared` 和原文。后两种模式即使 `verbose=true`，`scannerResults` 也为空；运行日志记录模式及 Monitor 的真实检测依据。此时 `cleared` 表示允许继续，不代表内容已通过安全检测。身份校验、UUID 匹配、Endpoint 状态、请求校验及路由仍然有效，客户端不能通过请求 JSON 覆盖防护模式。
+Scan Endpoint 不支持通过 `/verify` 验证连接。请提交一次真实扫描，验证认证、路由和检测。
 
 <a id="scan-request" />
-## 请求 JSON 与有效字段
+## 请求字段与示例
 
-最小合法请求：
+以下字段用于 `POST {endpoint}/backend/v1/scans` 的 JSON Body：
 
-```json
-{"input": "Text to inspect"}
-```
+| 字段 | 必填／可选 | JSON 数据类型 | 默认值 | 约束与作用 |
+| --- | --- | --- | --- | --- |
+| `input` | 必填 | string | 无 | 本次检测的文本。允许空字符串，不接受数组、对象或 `null`。 |
+| `scanDirection` | 可选 | string | `"request"` | `"request"` 检测 Input，`"response"` 检测完整的 Output。区分大小写。 |
+| `flagOnly` | 可选 | boolean | Endpoint 配置值，新建时为 `true` | `true` 将干预结果统一表示为 `flagged`。`false` 区分 `blocked` 与 `redacted`，部分结果仍为 `flagged`。 |
+| `verbose` | 可选 | boolean | `false` | Enforce 下，`true` 返回一条 Guardrail 聚合结果。Monitor 和 Bypass 始终返回空列表。 |
 
-明确指定全部有效字段的输入扫描：
+Guard 严格校验这四个字段的类型。`"false"`、`0` 和 `1` 不能代替布尔值。显式 `null` 不能代替省略字段。缺少 `input`、类型错误或枚举值错误均返回 `422`。
 
-```json
+输入扫描示例：
+
+```http
+POST /runtime/v1/endpoints/your-endpoint-id/backend/v1/scans HTTP/1.1
+Host: guard-runtime.example.com
+Authorization: Bearer <Scan Endpoint 凭据>
+Content-Type: application/json
+
 {
   "input": "Text to inspect",
   "scanDirection": "request",
@@ -63,9 +82,14 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-输出扫描将已经生成的完整回答放在同一个 `input` 字段中：
+输出扫描使用同一个接口。接入方将模型生成的完整回答放入 `input`，并将 `scanDirection` 设为 `"response"`：
 
-```json
+```http
+POST /runtime/v1/endpoints/your-endpoint-id/backend/v1/scans HTTP/1.1
+Host: guard-runtime.example.com
+Authorization: Bearer <Scan Endpoint 凭据>
+Content-Type: application/json
+
 {
   "input": "Here is the generated response.",
   "scanDirection": "response",
@@ -74,62 +98,102 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-| 字段 | 类型／默认值 | 约束与作用 |
-| --- | --- | --- |
-| `input` | 必填字符串 | 唯一要检测的文本。必须是字符串，不接受数组、对象或 `null`。schema 允许空字符串，但空扫描不能证明其他内容已通过。 |
-| `scanDirection` | `"request"`（默认）或 `"response"` | 选择 Input Rail 或 Output Rail。区分大小写。 |
-| `flagOnly` | 布尔值；省略时使用 Endpoint 默认值，初始为 `true` | `true` 把每次命中都表示为 `flagged`。`false` 区分 `blocked` 和 `redacted`。 |
-| `verbose` | 布尔值，默认 `false` | 是否返回一条 Guardrail 的聚合结果详情。 |
+每次请求都重新选择路由，并生成新的 Scan ID。Input 扫描与 Output 扫描互相独立，不共享会话或固定版本。重复提交会执行新的扫描，接口不保证去重或幂等。
 
-这四个字段严格校验类型：
+此接口不接收会话消息或参考资料上下文。需要关联 Input 与 Output，或提供检测上下文时，请使用[网关集成接口](/document/developer/gateway-connect)。
 
-- `"false"`、`0`、`1` 不能代替布尔值。
-- 显式传 `null` 不等于省略字段。
-- 未知的枚举值或错误的类型返回 `422`。
+<a id="scan-flag-only-default" />
+### flagOnly 默认值
 
-每次调用都重新解析当前路由，并返回新的 Scan ID。输入扫描和输出扫描不共享会话，也不共享固定的版本。重复提交会执行新的扫描。Scan 不保证去重或幂等。需要在一次模型调用中固定版本时，请使用 [LiteLLM Endpoint](/document/developer/gateway-connect)。
+具备 Endpoint 写权限的用户可在创建 Scan Endpoint 时设置“默认 flagOnly”，也可在 Endpoint 详情中修改。新建 Endpoint 的默认值为 `true`。配置修改在服务同步后生效，无须重新发布 Router。
 
-管理员可在创建 Scan Endpoint 时选择“默认 flagOnly”，也可在 Endpoint 详情中修改。新建和升级前已有的 Endpoint 均初始使用 `true`；设为 `false` 后，省略该参数的请求可以区分 `blocked` 与 `redacted`。优先级为 **请求显式值 → Endpoint 默认值**，显式 `null` 仍返回 `422`。修改通过配置分发在 Runner 同步后生效，无须重新发布 Router。
+请求显式传入的布尔值优先于 Endpoint 配置值。省略 `flagOnly` 才会使用 Endpoint 配置值。接入页提供的 cURL 示例省略该字段。
 
-控制面创建与更新 Endpoint 的字段名为 `scanFlagOnlyDefault`，仅适用于 `f5-scan`。例如，`PATCH /api/v1/endpoints/{id}` 的请求体 `{"scanFlagOnlyDefault":false}` 修改默认值。接入页的 cURL 示例省略 `flagOnly`，会使用该设置。
-
-`flagOnly` 只影响结果的表达方式，不关闭检测，也不是服务端的 Dry Run。观察模式由客户端自己实现：分别记录判定结果和实际交付。`dry_run` 和兼容占位字段都不能开启服务端 Dry Run。
+`flagOnly` 只改变 `outcome` 的表达方式，不改变检测或文本替换。它也不选择 Guardrail 防护模式。需要观察检测结果而不阻断时，请由具备 Guardrail 写入权限的用户将其设为 Monitor。
 
 <a id="scan-placeholders" />
-## 只接收但忽略的兼容字段
+### 接收但忽略的兼容字段
 
-| 字段 | 本系统中的作用 |
+| 字段 | 行为 |
 | --- | --- |
-| `project` | 不适用。不会选择项目、Endpoint 或 Guardrail。 |
-| `externalMetadata` | 忽略。不用于路由，也不保证在响应中回传。 |
-| `requestPromptId` | 忽略。不关联输入与输出，也不复用已有的 Scan。 |
-| `configOverrides` | 忽略。不覆盖 Scanner、Policy 或 Router 的配置。 |
-| `disabled`、`forceEnabled` | 忽略。不能禁用检测，也不能强制启用某个 Scanner。 |
+| `project` | 不选择项目、Endpoint 或 Guardrail。 |
+| `externalMetadata` | 不用于路由，也不在响应中回传。 |
+| `requestPromptId` | 不关联 Input 与 Output，也不复用已有的 Scan。 |
+| `configOverrides` | 不覆盖 Scanner、Policy 或 Router 配置。 |
+| `disabled`、`forceEnabled` | 不禁用检测，也不强制启用指定 Scanner。 |
 
-上述字段接受任意合法的 JSON 值，例如字符串、数组、对象或 `null`。未知的额外字段也会被忽略。这些字段仍计入请求体的大小。下面的请求与只发送 `{"input":"Text to inspect"}` 使用相同的扫描配置：
+这些兼容字段接受任意合法的 JSON 值，包括字符串、数组、对象和 `null`。Guard 也会忽略未知的额外字段，例如 `messages`、`guardrail_context`、`mode` 和 `dry_run`。它们不能提供上下文或改变防护模式，但仍计入请求体大小。
 
-```json
-{
-  "input": "Text to inspect",
-  "project": "compatibility-only",
-  "externalMetadata": {"dataset": "demo", "row": 1},
-  "requestPromptId": "ignored-reference",
-  "configOverrides": {},
-  "disabled": ["ignored-scanner"],
-  "forceEnabled": []
-}
-```
+接入方需自行保存数据集行号、预期标签与返回的 Scan ID 之间的对应关系。
 
-客户端必须自己保存数据集行号、预期标签与返回的 Scan ID 之间的对应关系。不要依赖被忽略的字段回传这些信息。
+<a id="scan-protection-modes" />
+## Guardrail 防护模式
+
+Scan 使用 Router 选中 Guardrail 的防护模式。接入方不能通过请求 JSON 覆盖该模式。
+
+| 模式 | 检测与处理 | 成功响应的 `outcome` | `scannerResults` |
+| --- | --- | --- | --- |
+| Enforce | 执行检测，返回实际的放行、标记、阻断或替换结果。 | 根据检测结果与 `flagOnly` 返回四种值之一。 | `verbose=true` 时返回一条聚合结果，否则为 `[]`。 |
+| Monitor | 执行检测，但命中、检测失败或检测器超时均不阻断，返回原文。 | `cleared` | 始终为 `[]`。 |
+| Bypass | 跳过检测，返回原文。 | `cleared` | 始终为 `[]`。 |
+
+在 Monitor 和 Bypass 下，`cleared` 不代表内容通过了安全检测。请通过运行日志查看防护模式和 Monitor 的检测结果。
+
+所有模式都要求有效凭据、启用的 Endpoint、合法请求和可用路由。这些条件失败时，Guard 仍返回错误。Monitor 只容许检测失败，不保证所有请求都返回 `200`。
 
 <a id="scan-response" />
-## 完整响应 JSON 与 outcome
+## 响应字段与处理动作
 
-扫描完成后返回 HTTP `200`，被 Policy 阻断时也是如此。以下示例中的 ID 仅作演示。实际结果取决于已发布的 Policy。
+成功扫描返回 HTTP `200`。`200` 表示请求处理成功，不表示内容允许交付。接入方必须读取 `result.outcome`。
 
-未命中的输入扫描：
+| 响应字段 | JSON 数据类型 | 说明 |
+| --- | --- | --- |
+| `id` | string（UUID） | 本次扫描的新 ID，与 `X-Request-ID` 相同。不用于关联 Input 与 Output。 |
+| `result.outcome` | string | `cleared`、`flagged`、`blocked` 或 `redacted`。处理方式见下表。 |
+| `redactedInput` | string | Guard 返回的文本。替换后为处理后的文本，未替换时可保留原文。阻断结果也可能包含原文。此字段不表示允许交付。 |
+| `result.response` | string 或 null | Input 扫描始终为 `null`。Output 扫描在 Guard 判定阻断时为 `null`，否则返回处理后的文本。 |
+| `result.scannerResults` | array | 仅在 Enforce 且 `verbose=true` 时包含一条聚合结果。其他情况均为 `[]`。不逐项列出 Rule 或 F5 Scanner。 |
+| `scanners` | null | 固定为 `null`，不提供 Scanner 配置。 |
 
-```json
+聚合结果中的 `outcome` 为 `passed` 或 `failed`。`passed` 表示无干预，`failed` 表示存在干预，后者不表示检测执行失败。
+
+`scannerId` 是 Guardrail ID。该 ID 不是有效 UUID 时，值为 `null`。`startedDate`、`completedDate` 和 `scanDirection` 记录本次扫描的时间与方向。
+
+其余详情字段固定为：`data.type="custom"`、`scannerVersionMeta=null`、`message=null` 和 `customConfig=false`。
+
+<a id="scan-decision-mapping" />
+### outcome 与 flagOnly
+
+下表适用于 **Enforce 下成功完成的扫描**。Input 和 Output 使用相同的规则。
+
+| 检测结果 | `flagOnly=true` | `flagOnly=false` | 接入方处理 |
+| --- | --- | --- | --- |
+| 检测通过，无干预 | `cleared` | `cleared` | 可继续当前业务流程。 |
+| 仍有干预标记，但未形成阻断或替换 | `flagged` | `flagged` | 按业务规则处理该标记，不按通过处理。 |
+| 阻断 | `flagged` | `blocked` | 停止当前阶段，不交付原文。 |
+| 替换文本 | `flagged` | `redacted` | 使用处理后的文本。 |
+
+接入方必须处理全部四种 `outcome`。`flagOnly=false` 仍可能返回 `flagged`。`flagOnly=true` 则不通过 `outcome` 区分阻断与替换。
+
+`flagOnly` 不会撤销文本替换。例如，替换结果在 `flagOnly=true` 时返回 `flagged`，但 `redactedInput` 仍包含处理后的文本。Output 判定阻断时，`result.response` 仍为 `null`。
+
+`redacted` 可以表示局部替换或整段替换。这是本系统的协议映射，不代表使用 F5 Policy 或提供相同的检测效果。
+
+Enforce 下，Guard 不会把检测失败或超时记为 `cleared`。缺少必要上下文、没有适用检测或无法完成所需检测时，Guard 返回错误。已确定阻断的扫描可以提前结束，不要求继续执行其余检测。
+
+<a id="scan-response-examples" />
+### 成功响应示例
+
+以下示例展示响应格式。实际结果由已发布的 Policy 和防护模式决定。
+
+Enforce 下，Input 扫描通过，且 `verbose=false`：
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: 11111111-1111-4111-8111-111111111111
+X-TaskLattice-Scan-Compatibility: v1
+
 {
   "id": "11111111-1111-4111-8111-111111111111",
   "result": {"outcome": "cleared", "response": null, "scannerResults": []},
@@ -138,9 +202,14 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-`flagOnly=true` 时，阻断类的命中表示为 `flagged`。`redactedInput` 中可能仍是原文：
+Enforce 下，Input 扫描判定阻断，且 `flagOnly=true`、`verbose=false`：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: 22222222-2222-4222-8222-222222222222
+X-TaskLattice-Scan-Compatibility: v1
+
 {
   "id": "22222222-2222-4222-8222-222222222222",
   "result": {"outcome": "flagged", "response": null, "scannerResults": []},
@@ -149,9 +218,14 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-同类阻断在 `flagOnly=false` 时明确返回 `blocked`：
+同样的阻断结果在 `flagOnly=false` 时，明确返回 `blocked`：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: 33333333-3333-4333-8333-333333333333
+X-TaskLattice-Scan-Compatibility: v1
+
 {
   "id": "33333333-3333-4333-8333-333333333333",
   "result": {"outcome": "blocked", "response": null, "scannerResults": []},
@@ -160,9 +234,14 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-输出扫描执行替换，且 `flagOnly=false`、`verbose=true`：
+Enforce 下，Output 扫描替换文本，且 `flagOnly=false`、`verbose=true`：
 
-```json
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: 44444444-4444-4444-8444-444444444444
+X-TaskLattice-Scan-Compatibility: v1
+
 {
   "id": "44444444-4444-4444-8444-444444444444",
   "result": {
@@ -187,60 +266,29 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-| `result.outcome` | 含义与调用方处理 |
-| --- | --- |
-| `cleared` | 所需检测已完成，没有发现需要干预的内容。可以按结果继续。 |
-| `flagged` | 检测到需要干预的内容。`flagOnly=true` 不区分阻断和替换。不能当作放行。 |
-| `blocked` | `flagOnly=false` 时的阻断。停止当前阶段，不交付原文。 |
-| `redacted` | `flagOnly=false` 时发生了实际替换。使用处理后的文本，不交付原文。 |
-
-| 返回字段 | 约束 |
-| --- | --- |
-| `id` | 每次扫描新生成的 UUID。它不是请求关联键，也不是模型调用 ID。 |
-| `redactedInput` | 实际处理后的字符串。没有替换时可能保留原文。**存在这个字段不等于允许交付。** |
-| `result.response` | 输入扫描始终为 `null`。输出扫描未被阻断时为处理后的文本，被阻断时为 `null`。即使有文本，也要先判断 outcome。 |
-| `result.scannerResults` | `verbose=false` 时为 `[]`。`verbose=true` 时恰好一条 Guardrail 聚合详情，不是逐条 Rule 或 F5 Scanner 的结果列表。 |
-| 详情的 `outcome` | `passed` 表示未命中。`failed` 表示命中了需要干预的内容，不表示服务执行故障。 |
-| 详情的 `scannerId` | Guardrail ID 是合法 UUID 时使用该 ID，否则为 `null`。它不是可配置的 F5 Scanner ID。 |
-| 详情的其他字段 | `data.type="custom"`。开始和完成时间来自实际检测。`scanDirection` 是本次扫描的方向。`scannerVersionMeta=null`、`message=null`、`customConfig=false` 是占位值。 |
-| `scanners` | 固定为 `null`。配置不适用。 |
-
-检测超时、缺少所需检测或执行出错，都不会变成 `cleared`。这些情况返回非 `2xx` 错误，而不是成功的 Scan 结果。
-
-<a id="scan-decision-mapping" />
-### 内部 decision 到 F5 outcome 的映射
-
-平台内部表示放行（pass）的 `decision` 值是 `allow`。Scan 适配器根据最终 decision、检测评估状态和 `flagOnly` 生成 `result.outcome`，输入与输出扫描使用同一套映射。省略 `flagOnly` 时使用 Endpoint 的默认值（初始为 `true`），显式请求值优先。下表适用于成功返回的扫描；“需要干预”表示至少一项检测的最终评估状态为 `intervene`。
-
-| `decision` | 检测评估条件 | `flagOnly=true` | `flagOnly=false` |
-| --- | --- | --- | --- |
-| `allow`（放行 / pass） | 无须干预 | `cleared` | `cleared` |
-| `allow`（放行 / pass） | 仍有评估需要干预 | `flagged` | `flagged` |
-| `block` | 无额外条件 | `flagged` | `blocked` |
-| `transform` | 无额外条件 | `flagged` | `redacted` |
-
-因此，`flagOnly=false` 仍可能返回 `flagged`，调用方必须处理全部四种 outcome。`flagOnly` 只改变对外的 outcome 标签，不关闭 Guardrail 的阻断或替换处理，也不把 `flagged` 变成放行。例如，`transform` 在 `flagOnly=true` 时返回 `flagged`，但 `redactedInput` 仍包含处理后的文本。
-
-`transform` 可以是局部替换，也可以是整段文本替换。映射为 `redacted` 是本平台的协议适配约定，不代表复用了 F5 的策略或具有相同的检测效果。
-
 <a id="scan-errors" />
-## 错误格式、响应头与限制
+## 错误响应与限制
 
 | HTTP 状态 | `detail.code` | 含义 |
 | --- | --- | --- |
-| `401` | `invalid_credential` | Bearer 缺失、无效、已撤销或 Endpoint 已停用 |
-| `403` | `adapter_mismatch` | 凭据有效，但所属 Endpoint 不支持 Scan |
-| `413` | `request_too_large` | 整个请求体超过限制 |
-| `415` | `unsupported_media_type` | 请求未使用 `application/json` |
-| `422` | 无。`detail` 是数组。 | 无效的 JSON、缺少字段、类型或枚举值错误。 |
-| `503` | `scan_unavailable` | 路由或运行时不可用 |
-| `503` | `scan_execution_failed` | 所需检测没有完成或执行失败。 |
-| `504` | `scan_timeout` | 扫描超时 |
-| `500` | `invalid_scan_result` / `scan_internal_error` | 无效内部结果或其他处理失败 |
+| `401` | `invalid_credential` | Bearer 凭据缺失、无效、已撤销，与路径不匹配，或 Endpoint 已停用。 |
+| `403` | `adapter_mismatch` | 凭据有效，但路径指定的 Endpoint 不支持 Scan。 |
+| `413` | `request_too_large` | 整个请求体超过大小限制。 |
+| `415` | `unsupported_media_type` | 请求未使用 `application/json`。 |
+| `422` | 无，`detail` 为数组 | JSON 无效、缺少字段，或字段类型、枚举值错误。 |
+| `503` | `scan_unavailable` | 路由或检测服务不可用。 |
+| `503` | `scan_execution_failed` | Enforce 下，所需检测未能完成或执行失败。 |
+| `504` | `scan_timeout` | 扫描处理超过执行时限。 |
+| `500` | `invalid_scan_result` / `scan_internal_error` | 检测结果无效，或出现其他处理错误。 |
 
-除 `422` 外，Scan 自身生成的错误格式如下：
+除 `422` 外，Scan 接口自身生成的错误使用以下格式：
 
-```json
+```http
+HTTP/1.1 504 Gateway Timeout
+Content-Type: application/json
+X-Request-ID: 66666666-6666-4666-8666-666666666666
+X-TaskLattice-Scan-Compatibility: v1
+
 {
   "detail": {
     "code": "scan_timeout",
@@ -250,9 +298,14 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-下面是缺少 `input` 时的 `422` 示例。这里的 `detail` 是数组，不能按上面的对象读取：
+缺少 `input` 时，`422` 响应的 `detail` 为数组：
 
-```json
+```http
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+X-Request-ID: 77777777-7777-4777-8777-777777777777
+X-TaskLattice-Scan-Compatibility: v1
+
 {
   "detail": [
     {"loc": ["body", "input"], "msg": "Field required", "type": "missing"}
@@ -260,12 +313,10 @@ Scan 同样遵循 Router 选中 Guardrail 的运行模式。Enforce 正常使用
 }
 ```
 
-Scan 处理器的所有响应都带 `X-Request-ID` 和 `X-TaskLattice-Scan-Compatibility: v1` 两个响应头。
+Scan 接口生成的所有响应均带 `X-Request-ID` 和 `X-TaskLattice-Scan-Compatibility: v1`。成功响应的 `id`、错误对象的 `requestId` 与 `X-Request-ID` 相同。`422` 响应不含 `requestId`，请使用 Header 关联。
 
-- 成功响应的 `id`、错误对象的 `requestId` 与 `X-Request-ID` 相同。`422` 用这个响应头关联。
-- `401` 还带 `WWW-Authenticate: Bearer`。
-- 代理生成的错误不一定采用这些格式。
+`401` 响应还带 `WWW-Authenticate: Bearer`。代理生成的错误可能使用其他格式或 Header。
 
-默认的请求体上限是 **1 MiB**，扫描执行超时是 **25 秒**。直接部署 Runner 时可通过 `GUARD_SCAN_MAX_BODY_BYTES` 和 `GUARD_SCAN_TIMEOUT_SECONDS` 配置。Helm chart 使用应用默认值，不提供对应配置项。
+默认请求体上限为 **1 MiB（1,048,576 字节）**，包含所有 JSON 字段。默认扫描执行时限为 **25 秒**，不包含上传请求体的时间。实际限制以部署配置为准。
 
-客户端应单独设置网络超时。执行失败不能记为“通过”，也不能记为 Policy 命中。重试会产生一次新的独立扫描。接入验收见 [Endpoint 接入指南](/document/developer/endpoint-setup#endpoint-verification)。
+接入方需另行设置网络超时。请将接口错误与 Policy 命中分别记录。重试会产生新的独立扫描。接入验收见 [Endpoint 接入指南](/document/developer/endpoint-setup#endpoint-verification)。

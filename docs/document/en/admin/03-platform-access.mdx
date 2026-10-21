@@ -4,44 +4,53 @@ title: "Accounts, credentials, and audit"
 summary: "Separate browser sessions, personal management Tokens, Endpoint credentials, and Runner credentials by purpose."
 order: 2
 ---
-Platform management controls both who can change configuration and how services authenticate. Do not reuse a credential across unrelated call paths.
+Account roles control the management workspace. Credentials authenticate separate call paths. Select the role and credential that match the task.
 
 <a id="admin-governance" />
+## Separate business and platform roles
 
-## Two account roles
+| Role | Main workspace | Authority |
+| --- | --- | --- |
+| User, `user` | Guardrail design, Integration and Runtime observability | Creates and manages business Guardrails, Policies, Routers and Endpoints. Inspects runtime logs and captured content. |
+| Administrator, `admin` | Platform configuration and Access & audit | Configures shared models, capability bindings and accounts. Reads activity audits. Maintains platform Default operations. |
 
-| Role | Available features |
-| --- | --- |
-| User (`user`) | Guardrails, Playground and Policy Library in Guardrail Design; Routers and Endpoints in Integration. Users can create, edit, test, publish and manage these business resources, and inspect runtime logs and captured request/response content. |
-| Administrator (`admin`) | Platform settings only: health, Runners, Providers, models, model pricing, Guardrail Catalog and versions. Administrators also manage accounts and inspect activity audit records. They cannot access tenant runtime logs or captured content, and they cannot configure Guardrails, Policies, Routers or Endpoints. |
+Administrators cannot mutate business resources or inspect tenant runtime logs. Business users cannot configure shared model services or read activity audits. Administrators retain read access to business metadata where management APIs permit it.
 
-Users see Guardrail Design, Integration and Runtime observability, and land on Guardrails. Runtime logs contain requests, responses, enforcement results and execution steps, and belong to the tenant workflow. Captured request and response bodies load on demand; existing capture levels, redaction and retention rules still apply. Activity audit records describe who changed configuration and belong to the platform. Users cannot access audit records through pages, APIs or personal Tokens.
+Roles apply across the shared workspace. They do not establish ownership isolation between business resources.
 
-Administrators land on Providers and see three platform groups:
+<a id="access-shared-operations" />
+### Shared operational access
 
-- Models & detection: Providers, Models (including pricing) and Guardrail Catalog, for shared model services and detector bindings.
-- Platform operations: Health, Runner and Version, for service health, Runner management and software versions.
-- Access & audit: Users & access and Audit log, for account authority and configuration activity review.
+Both roles can inspect health, Runner status and software versions. They can adjust Runner capacity targets and remove registrations that the runtime permits. Serving instances remain protected. Personal-token writes require `runners:write`.
 
-Administrators open operational pages directly from the Platform operations sidebar group. Users retain Settings in the sidebar footer and its Health, Runner and Version tabs. Both roles use the existing `/settings/*` paths. Users and administrators can edit Runner capacity targets and remove offline registrations or force-remove initializing or syncing registrations through the same confirmation flow. Serving Runners remain protected. These operations also require `runners:write` when using a personal Token. Platform Default testing, release, version deletion and baseline changes still require an administrator. Runtime observability includes Billing, where users select a Guardrail to inspect its model usage and estimated costs. Old Guardrail usage links redirect to Billing; the Guardrail list no longer includes a monthly cost column. Models retains its local model/pricing tabs. Both roles retain their account, password, personal Access Tokens and documentation. Direct access to the other role's workspace shows an access explanation, and corresponding APIs deny access.
+Users enter these pages through Settings. Administrators use the Platform operations sidebar. Both use the existing `/settings/*` paths.
 
-Design workflows read a reduced model-capability projection without Provider addresses, credential hints, control-plane model configuration or test bodies.
+Both roles retain account settings, password management, personal Access Tokens and documentation. Users inspect model usage through [Billing](/billing). Administrators manage model prices under [Models](/settings/models?tab=pricing).
 
-Roles apply to the shared workspace, without resource ownership isolation. Effective personal Token permissions are the intersection of the current account role and module grants. Changing roles immediately recalculates existing Token authority. Users may grant read-only runtime access, including on-demand captured content, but cannot grant audit access. Administrators can inspect activity audits and cannot access tenant runtime logs. Existing Router separation of submitter and reviewer remains enforced.
+Design workflows receive a reduced capability projection. It excludes Provider addresses, credential hints, control-plane model configuration and test bodies.
+
+<a id="access-token-authority" />
+### Personal-token authority
+
+Effective authority is the intersection of the current account role and selected module grants. Write includes read. A role change recalculates existing token authority on subsequent requests.
+
+A user can grant read access to runtime records and captured content. An administrator can grant audit access. Neither token can exceed its owning account's role. Router approval also requires an actor different from the submitter.
 
 <a id="credential-types" />
+## Select the credential for the call path
 
-## Four identities
-
-| Identity or credential | Used for | Not used for |
+| Credential | Purpose | Boundary |
 | --- | --- | --- |
-| Browser session | Signing in to the management console and acting with current account permissions | Application runtime checks |
-| Personal Access Token | Automating Controller management APIs within role, module permission, and expiry limits | Replacing Endpoint credentials |
-| Endpoint credential | Calling Runner check APIs from an application or AI Gateway, isolated by Endpoint | Signing in or issuing personal Tokens |
-| Runner control credential | Controlled Controller-to-Runner connection and configuration distribution | Business application requests |
+| Browser session | Console operations with current account permissions. | Not a runtime inspection credential. |
+| Personal Access Token | Automated management API calls within role, module and expiry limits. | Cannot issue other personal tokens. |
+| Endpoint credential | Application or gateway inspection calls for one Endpoint. | Cannot sign in to the console or modify platform configuration. |
+| Runner control credential | Controller–Runner control connection and configuration distribution. | Not for business inspection requests. |
 
 <a id="platform-audit" />
+## Review access and activity
 
-## Manage and verify
+Administrators assign roles under [accounts and access](/access). Each account manages its own [Access Tokens](/account/access-tokens).
 
-Assign responsibilities in [accounts and permissions](/access), and review personal Token expiry and revocation. An Endpoint credential shows only once, when you create it. Give it to the associated application or gateway, and rotate it when necessary. Use the [audit log](/audit-log) for configuration changes and [runtime logs](/logs) for request decisions and findings. Audit records, Runner health, and business Decisions answer separate questions.
+Endpoint credentials appear in full only at issuance. Business users supply them to the associated application and rotate them as necessary.
+
+Administrators review configuration activity in [Audit log](/audit-log). Users inspect request Decisions and findings in [Runtime logs](/logs). Health and rollout status remain separate from either record type.

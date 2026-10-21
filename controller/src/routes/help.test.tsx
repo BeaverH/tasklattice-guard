@@ -93,6 +93,42 @@ describe("document page navigation", () => {
     expect(router.state.location.href).toBe(`${policyPath}#term-rule-implementation`);
   });
 
+  it("expands the current chapter and lets readers browse another chapter without navigating", async () => {
+    const gatewayPath = "/document/developer/gateway-connect";
+    const { container, router, history } = await mount(`${gatewayPath}#gateway-request-fields`);
+    const outline = within(container.querySelectorAll("aside")[1]);
+    await waitFor(() => expect(outline.getByRole("button", { name: "Collapse section: Non-streaming inspection: input and complete output" }).getAttribute("aria-expanded")).toBe("true"));
+    expect(outline.getByRole("link", { name: "Request fields" }).getAttribute("aria-current")).toBe("location");
+    expect(outline.queryByRole("link", { name: "Messages sent to Guard: start, delta and end" })).toBeNull();
+
+    fireEvent.click(outline.getByRole("button", { name: "Expand section: Streaming inspection: output only" }));
+    expect(router.state.location.href).toBe(`${gatewayPath}#gateway-request-fields`);
+    expect(outline.queryByRole("link", { name: "Request fields" })).toBeNull();
+    fireEvent.click(outline.getByRole("link", { name: "Messages sent to Guard: start, delta and end" }));
+    await waitFor(() => expect(document.activeElement?.id).toBe("gateway-stream-request"));
+    expect(router.state.location.href).toBe(`${gatewayPath}#gateway-stream-request`);
+
+    await act(async () => { history.back(); });
+    await waitFor(() => expect(outline.getByRole("link", { name: "Request fields" }).getAttribute("aria-current")).toBe("location"));
+    expect(outline.queryByRole("link", { name: "Messages sent to Guard: start, delta and end" })).toBeNull();
+  });
+
+  it("keeps complete chapter names and opens nested sections from a direct link", async () => {
+    const { container } = await mount("/document/developer/gateway-connect#gateway-grounding-context");
+    const outline = within(container.querySelectorAll("aside")[1]);
+    const chapterName = "Non-streaming inspection: input and complete output";
+    expect(outline.getByRole("link", { name: chapterName }).getAttribute("href")).toBe("/document/developer/gateway-connect#gateway-checks");
+    await waitFor(() => expect(outline.getByRole("link", { name: "Supply a query and reference sources for answer verification" }).getAttribute("aria-current")).toBe("location"));
+    const collapse = outline.getByRole("button", { name: `Collapse section: ${chapterName}` });
+    const target = document.getElementById(collapse.getAttribute("aria-controls")!);
+    expect(target?.hidden).toBe(false);
+    fireEvent.click(collapse);
+    expect(target?.hidden).toBe(true);
+    expect(document.activeElement?.id).toBe("gateway-grounding-context");
+    fireEvent.click(outline.getByRole("button", { name: `Expand section: ${chapterName}` }));
+    expect(target?.hidden).toBe(false);
+  });
+
   it("does not let another article's fragment select the current article", async () => {
     const { router } = await mount(`${startPath}#term-rule-implementation`);
     await screen.findByRole("heading", { level: 1, name: getHelpContent("en").documents[0].title });
