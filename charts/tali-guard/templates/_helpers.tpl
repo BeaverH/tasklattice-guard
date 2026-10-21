@@ -255,9 +255,6 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- if lt (int .Values.runner.default.replicaCount) 1 }}
 {{- fail "runner.default.replicaCount must be at least 1; GuardRails 0 is the mandatory baseline Runner pool" }}
 {{- end }}
-{{- if .Values.database.url -}}
-{{- fail "inline database configuration is no longer supported; use database.existingSecret" -}}
-{{- end -}}
 {{- if and .Values.postgresql.enabled .Values.database.existingSecret -}}
 {{- fail "postgresql.enabled cannot be combined with database.existingSecret" -}}
 {{- end -}}
@@ -282,19 +279,13 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- if and .Values.security.bootstrapUser.enabled .Values.security.bootstrapUser.email (eq (lower .Values.security.bootstrapUser.email) (lower .Values.security.bootstrapAdmin.email)) -}}
 {{- fail "bootstrapAdmin and bootstrapUser must have different email addresses" -}}
 {{- end -}}
-{{- if or .Values.controller.auth.allowLocalDefaultCredentials .Values.security.bootstrapAdmin.localDefault (and .Values.security.bootstrapUser.enabled .Values.security.bootstrapUser.localDefault) -}}
+{{- if or .Values.security.bootstrapAdmin.localDefault (and .Values.security.bootstrapUser.enabled .Values.security.bootstrapUser.localDefault) -}}
 {{- range (include "tali-guard.publicUrls" . | fromJsonArray) -}}
 {{- if not (regexMatch "^http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?/?$" .) -}}
-{{- fail "allowLocalDefaultCredentials requires loopback Controller publicUrl entries" -}}
+{{- fail "bootstrap account localDefault requires loopback Controller publicUrl entries" -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- if or .Values.security.artifactSigning.privateKey .Values.security.artifactSigning.publicKey -}}
-{{- fail "inline signing keys are no longer supported; use existingSecret" -}}
-{{- end -}}
-{{- if and .Values.security.controlTls.enabled .Values.security.controlTls.existingSecret .Values.security.controlTls.autoGenerate }}
-{{- fail "controlTls existingSecret cannot be combined with autoGenerate=true" }}
-{{- end }}
 {{- if and .Values.security.controlTls.enabled (not (or .Values.security.controlTls.existingSecret .Values.security.controlTls.autoGenerate)) }}
 {{- fail "configure controlTls existingSecret or set autoGenerate=true for in-cluster initialization" }}
 {{- end }}
@@ -331,5 +322,4 @@ data:
   CONTROLLER_RUNTIME_PUBLIC_URL: {{ include "tali-guard.runtimePublicUrl" . | quote }}
   BETTER_AUTH_TRUSTED_ORIGINS: {{ include "tali-guard.trustedOrigins" . | fromJsonArray | join "," | quote }}
   CONTROLLER_MIN_LOGIN_LENGTH: {{ .Values.controller.auth.minLoginLength | quote }}
-  CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS: {{ .Values.controller.auth.allowLocalDefaultCredentials | quote }}
 {{- end }}

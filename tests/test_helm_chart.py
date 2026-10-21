@@ -149,7 +149,6 @@ def test_controller_and_runner_have_distinct_images_ports_and_responsibilities()
     )
     assert controller_env["CONTROLLER_RUNTIME_PUBLIC_URL"]["value"] == ""
     assert controller_env["CONTROLLER_MIN_LOGIN_LENGTH"]["value"] == "12"
-    assert controller_env["CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS"]["value"] == "false"
     assert "GUARD_CONTROLLER_TARGET" in runner_env
     assert runner_env["GUARD_URL"]["value"] == "http://contract-tali-guard-controller:8080"
     assert "GUARD_ACCESS_TOKEN" not in runner_env
@@ -319,36 +318,38 @@ def test_chart_renders_without_model_configuration_sections():
     assert_settings_managed_models(render_dev())
 
 
-def test_legacy_model_values_do_not_override_settings_or_mount_credentials():
-    documents = render(
-        "--set", "controlPlaneAgent.provider.baseUrl=http://legacy.invalid/v1",
-        "--set", "controlPlaneAgent.provider.model=legacy-chat",
-        "--set-string", "controlPlaneAgent.provider.apiKey=unused-key",
-        "--set-json", 'models.runtimes=[{"id":"legacy","base_url":"http://legacy.invalid/v1","model":"legacy"}]',
-        "--set", "models.credentials.existingSecret=legacy-provider-keys",
-        "--set-string", "models.credentials.values.LEGACY_KEY=unused-key",
-        "--set-json", 'evaluators.bindings=[{"id":"legacy","model_ref":"missing"}]',
-        "--set", "evaluators.automatedReasoning.endpointUrl=http://legacy.invalid/reasoning",
-        "--set-string", "evaluators.automatedReasoning.apiKey=unused-key",
-        "--set", "runner.pools[0].name=gpu",
-        "--set", "runner.pools[0].replicaCount=1",
-        "--set", "runner.pools[0].maxConcurrency=128",
-        "--set", "runner.pools[0].resources.requests.cpu=1",
-        "--set", "runner.pools[0].resources.requests.memory=2Gi",
-        "--set", "runner.pools[0].resources.limits.memory=8Gi",
-    )
-    assert_settings_managed_models(documents)
-    assert len([
-        item for item in documents
-        if item.get("kind") == "StatefulSet"
-        and item["metadata"]["labels"]["app.kubernetes.io/component"] == "runner"
-    ]) == 2
+@pytest.mark.parametrize("setting,unknown_key", [
+    ("controlPlaneAgent.provider.model=unused", "controlPlaneAgent"),
+    ("models.credentials.existingSecret=unused", "models"),
+    ("evaluators.automatedReasoning.endpointUrl=http://unused.invalid", "evaluators"),
+    ("controller.promotion.export.existingSecret=unused", "export"),
+    ("controller.promotion.trust.existingConfigMap=unused", "trust"),
+    ("database.url=", "url"),
+    ("security.artifactSigning.privateKey=", "privateKey"),
+    ("security.artifactSigning.publicKey=", "publicKey"),
+    ("observability.slo.runtimeP90Seconds=1", "runtimeP90Seconds"),
+    ("controller.replicaCount=2", "replicaCount"),
+    ("controller.service.httpPort=8888", "httpPort"),
+    ("controller.service.grpcPort=9999", "grpcPort"),
+    ("runner.service.port=8881", "port"),
+    ("postgresql.service.port=5544", "service"),
+    ("redis.service.port=6380", "service"),
+    ("serviceAccount.automount=true", "automount"),
+    ("runner.scan.maxBodyBytes=65536", "scan"),
+    ("runner.scan.timeoutSeconds=15", "scan"),
+    ("controller.auth.allowLocalDefaultCredentials=true", "allowLocalDefaultCredentials"),
+    ("unknownOption=true", "unknownOption"),
+    ("runner.default.maxConcurency=128", "maxConcurency"),
+])
+def test_removed_and_unknown_options_fail_with_the_offending_key(setting, unknown_key):
+    error = render_error("--set", setting)
+    assert "additional" in error.lower()
+    assert unknown_key in error
 
 
 def test_endpoint_tracks_runner_service_namespace_and_port():
     documents = render(
         "--namespace", "guard-system",
-        "--set", "runner.service.port=8091",
     )
     controller = next(
         item for item in documents
@@ -488,16 +489,8 @@ def test_shared_host_virtualservice_example_matches_rendered_services(tmp_path):
         assert destination["port"]["number"] in {port["port"] for port in service["spec"]["ports"]}
 
 
-def test_removed_replica_and_port_settings_cannot_change_internal_wiring():
-    documents = render_dev(
-        "--set", "controller.replicaCount=2",
-        "--set", "serviceAccount.automount=true",
-        "--set", "controller.service.httpPort=8888",
-        "--set", "controller.service.grpcPort=9999",
-        "--set", "runner.service.port=8881",
-        "--set", "postgresql.service.port=5544",
-        "--set", "redis.service.port=6380",
-    )
+def test_internal_wiring_uses_fixed_ports_and_controller_replica_count():
+    documents = render_dev()
     for item in documents:
         if item["kind"] in {"Deployment", "StatefulSet"}:
             assert item["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
@@ -557,9 +550,8 @@ def test_endpoint_ingress_routes_ui_and_runtime():
         assert ui["backend"]["service"] == {"name": "contract-tali-guard-controller", "port": {"name": "http"}}
 
 
-def test_adapter_limits_use_application_defaults_even_with_legacy_chart_values():
+def test_adapter_limits_use_application_defaults():
     documents = render()
-    assert documents == render("--set", "runner.scan.maxBodyBytes=65536", "--set", "runner.scan.timeoutSeconds=15")
     runtime = next(item for item in documents if item["kind"] == "StatefulSet" and item["metadata"]["name"].endswith("-runner"))
     env = {item["name"] for item in runtime["spec"]["template"]["spec"]["containers"][0]["env"]}
     assert "GUARD_SCAN_MAX_BODY_BYTES" not in env
@@ -596,6 +588,44 @@ def test_advanced_partial_overrides_keep_runtime_defaults():
         for endpoint in monitor["spec"]["endpoints"]:
             assert endpoint["interval"] == "30s"
             assert endpoint["scrapeTimeout"] == "10s"
+
+
+def test_schema_accepts_explicit_internal_defaults(tmp_path):
+    defaults = load_values(CHART / "files" / "runtime-defaults.yaml")
+    defaults["security"] = load_values(CHART / "files" / "security-defaults.yaml")
+    overrides = tmp_path / "explicit-defaults.yaml"
+    overrides.write_text(yaml.safe_dump(defaults))
+    assert render("--values", str(overrides), *REQUIRED) == render()
+
+
+def test_schema_preserves_kubernetes_overrides_and_custom_secret_keys(tmp_path):
+    overrides = tmp_path / "kubernetes-overrides.yaml"
+    overrides.write_text(yaml.safe_dump({
+        "imagePullSecrets": [{"name": "registry-login"}],
+        "serviceAccount": {"annotations": {"example.com/identity": "guard"}},
+        "controller": {"resources": {"limits": {"ephemeral-storage": "1Gi"}}},
+        "runner": {"state": {"sizeLimit": "3Gi"}},
+        "podSecurityContext": {"supplementalGroups": [10001]},
+        "securityContext": {"runAsGroup": 10001},
+        "ingress": {"enabled": True, "annotations": {"example.com/ingress": "guard"},
+                    "tls": [{"secretName": "public-tls", "hosts": ["guard.example.com"]}]},
+        "security": {"controlSecret": {"runnerTokenKey": "custom-runner-token"},
+                     "artifactSigning": {"privateKeyKey": "signing-key", "publicKeyKey": "verify-key"}},
+    }))
+    documents = render("--values", str(overrides))
+    pod = _controller(documents)
+    assert pod["imagePullSecrets"] == [{"name": "registry-login"}]
+    assert pod["securityContext"]["supplementalGroups"] == [10001]
+    container = pod["containers"][0]
+    assert container["resources"]["limits"]["ephemeral-storage"] == "1Gi"
+    assert container["securityContext"]["runAsGroup"] == 10001
+    env = resolved_environment(documents, container)
+    assert env["CONTROLLER_RUNNER_TOKEN"]["valueFrom"]["secretKeyRef"]["key"] == "custom-runner-token"
+    ingress = next(doc for doc in documents if doc["kind"] == "Ingress")
+    assert ingress["spec"]["tls"] == [{"secretName": "public-tls", "hosts": ["guard.example.com"]}]
+    assert ingress["metadata"]["annotations"]["example.com/ingress"] == "guard"
+    account = next(doc for doc in documents if doc["kind"] == "ServiceAccount" and not doc["metadata"].get("annotations", {}).get("helm.sh/hook"))
+    assert account["metadata"]["annotations"]["example.com/identity"] == "guard"
 
 
 def test_explicitly_disabling_all_tls_initialization_requires_an_external_secret():
@@ -636,7 +666,6 @@ def test_development_values_are_self_contained_and_keep_two_app_components():
         "http://tali-guard-runtime.tali.svc.cluster.local:8091"
     )
     assert controller_env["CONTROLLER_MIN_LOGIN_LENGTH"]["value"] == "12"
-    assert controller_env["CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS"]["value"] == "false"
     assert controller_pod["initContainers"][0]["name"] == "wait-for-postgresql"
     services = {item["metadata"]["name"]: item for item in documents if item.get("kind") == "Service"}
     controller_service = services["tali-guard-controller"]
@@ -1173,7 +1202,6 @@ def test_chart_sources_do_not_bundle_private_key_material():
 
 def test_external_secrets_render_references_without_private_keys():
     documents = render(
-        "--set", "database.url=",
         "--set", "database.existingSecret=database",
         "--set", "security.controlSecret.existingSecret=control",
         "--set", "security.metrics.existingSecret=metrics",
@@ -1261,7 +1289,7 @@ def test_mtls_is_initialized_by_the_same_job_without_rendering_private_keys():
     for item in documents:
         if item.get("kind") in {"Deployment", "StatefulSet"} and item["metadata"]["labels"]["app.kubernetes.io/component"] in {"controller", "runner"}:
             assert any(volume["name"] == "control-tls" for volume in item["spec"]["template"]["spec"]["volumes"])
-    external = render_dev("--set", "security.controlTls.enabled=true", "--set", "security.controlTls.existingSecret=external-tls")
+    external = render_dev("--set", "security.controlTls.enabled=true", "--set", "security.controlTls.existingSecret=external-tls", "--set", "security.controlTls.autoGenerate=true")
     job = next(item for item in external if item["kind"] == "Job")
     env = {entry["name"]: entry.get("value") for entry in job["spec"]["template"]["spec"]["containers"][0]["env"]}
     assert all(spec["kind"] != "mtls" for spec in json.loads(env["BOOTSTRAP_SECRETS"]))
@@ -1336,9 +1364,8 @@ def test_promotion_defaults_mount_no_promotion_material_and_switch_no_feature():
     assert not {"package-signing", "package-trust", "baseline-package"} & {volume["name"] for volume in spec["volumes"]}
 
 
-def test_legacy_trust_is_ignored_and_optional_baseline_is_mounted_read_only():
+def test_optional_baseline_is_mounted_read_only():
     spec = _controller(render(
-        "--set", "controller.promotion.trust.existingConfigMap=guard-package-trust",
         "--set", "controller.promotion.baselinePackage.existingConfigMap=guard-baseline",
     ))
     container = spec["containers"][0]
@@ -1353,22 +1380,6 @@ def test_legacy_trust_is_ignored_and_optional_baseline_is_mounted_read_only():
     assert volumes["baseline-package"]["configMap"]["name"] == "guard-baseline"
 
 
-def test_legacy_inline_trust_sources_are_ignored():
-    sources = [{"id": "bank-uat", "name": "Bank UAT", "keys": [{"id": "uat-2026", "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nkey\n-----END PUBLIC KEY-----\n"}],
-                "reservedGuardrailIds": ["guardrail-default"]}]
-    documents = render("--set-json", f"controller.promotion.trust.sources={json.dumps(sources)}")
-    assert not any(doc["kind"] == "ConfigMap" and doc["metadata"]["name"].endswith("-package-trust") for doc in documents)
-    spec = _controller(documents)
-    environment = {entry["name"]: entry.get("value") for entry in spec["containers"][0]["env"]}
-    assert "CONTROLLER_PACKAGE_TRUST_PATH" not in environment
-    volumes = {volume["name"]: volume for volume in spec["volumes"]}
-    assert "package-trust" not in volumes
-    deployment = next(doc for doc in documents if doc["kind"] == "Deployment" and doc["metadata"]["name"].endswith("controller"))
-    assert "checksum/package-trust" not in deployment["spec"]["template"]["metadata"]["annotations"]
-    # Stale values never impose requirements on ordinary file import/export.
-    render("--set-json", 'controller.promotion.trust.sources=[{"id":"bank-uat"}]')
-
-
 def test_development_uat_keeps_local_service_names_and_needs_no_package_configuration():
     documents = render_dev()
     environment = {entry["name"] for entry in _controller(documents)["containers"][0]["env"]}
@@ -1378,19 +1389,6 @@ def test_development_uat_keeps_local_service_names_and_needs_no_package_configur
     assert services["tali-guard-runtime-public"]["spec"]["ports"][0]["port"] == 38082
     assert controller_config(documents)["data"]["CONTROLLER_RUNTIME_PUBLIC_URL"] == "http://localhost:38082"
     assert controller_config(documents)["data"]["CONTROLLER_RUNTIME_SERVICE_URL"] == "http://tali-guard-runtime.tali.svc.cluster.local:8091"
-
-
-def test_legacy_package_export_keys_and_source_identity_are_ignored():
-    spec = _controller(render(
-        "--set", "controller.promotion.export.existingSecret=guard-package-signing",
-        "--set", "controller.promotion.export.sourceId=bank-uat",
-        "--set", "controller.promotion.export.keyId=uat-2026",
-    ))
-    environment = {entry["name"]: entry.get("value") for entry in spec["containers"][0]["env"]}
-    assert not any(name.startswith("CONTROLLER_PACKAGE_") for name in environment)
-    assert "package-signing" not in {volume["name"] for volume in spec["volumes"]}
-    assert "package-signing" not in {mount["name"] for mount in spec["containers"][0]["volumeMounts"]}
-    render("--set", "controller.promotion.export.existingSecret=guard-package-signing")
 
 
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "[::1]"])

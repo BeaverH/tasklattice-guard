@@ -105,7 +105,19 @@ def test_disabling_the_mock_without_an_upstream_fails_rendering():
         capture_output=True, text=True,
     )
     assert result.returncode != 0
-    assert "model.upstream" in result.stderr
+    assert "model.upstream.existingSecret" in result.stderr
+
+
+def test_default_bootstrap_uses_a_release_with_cluster_initialization_tools():
+    output = subprocess.run(
+        ["helm", "template", "tali-litellm-dev", str(CHART)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    docs = [item for item in yaml.safe_load_all(output) if item]
+    container = find(docs, "Job")["spec"]["template"]["spec"]["containers"][0]
+    assert container["image"] == "ghcr.io/tasklattice/tali-guard-controller:0.3.9"
+    assert container["imagePullPolicy"] == "IfNotPresent"
+    assert container["command"] == ["node", "/opt/tasklattice/guard-controller/scripts/runtime/bootstrap-secrets.mjs"]
 
 
 def test_all_gateway_credentials_are_initialized_in_cluster():

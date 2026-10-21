@@ -70,7 +70,7 @@ Scan 与 LiteLLM 共用 `/runtime/v1/endpoints/{endpoint_id}` 基础路径。`CA
 
 占位字段在有效字段校验前剔除，不调用 F5 的 UUID、数组元素或配置 Schema 校验器。例如 `disabled: "anything"`、`project: 123` 都可以接受。有效字段仍严格校验，例如 `flagOnly: "false"` 不等于 `false`。
 
-“忽略”指不影响业务行为；整个请求仍须是合法 JSON 对象，并受统一的请求体大小限制。第一版默认上限为 1 MiB，可通过 `GUARD_SCAN_MAX_BODY_BYTES`（Helm：`runner.scan.maxBodyBytes`）调整，超出返回 `413`。不额外强制非空文本：`input: ""` 是合法字符串，但仍走正常执行与覆盖检查，不能直接返回 `cleared`。
+“忽略”指不影响业务行为；整个请求仍须是合法 JSON 对象，并受统一的请求体大小限制。第一版默认上限为 1 MiB，超出返回 `413`。直接部署 Runner 时可通过 `GUARD_SCAN_MAX_BODY_BYTES` 调整；Helm 使用应用默认值，不提供对应配置项。不额外强制非空文本：`input: ""` 是合法字符串，但仍走正常执行与覆盖检查，不能直接返回 `cleared`。
 
 ### 3.2 最小请求
 
@@ -393,7 +393,7 @@ HTTP 响应增加 `X-TaskLattice-Scan-Compatibility: v1` 和 `X-Request-ID: <sca
 }
 ```
 
-服务端 deadline 默认 25 秒，可通过 `GUARD_SCAN_TIMEOUT_SECONDS`（Helm：`runner.scan.timeoutSeconds`）调整。公开脚本单次调用设置了 30 秒超时，联调时应使服务端和入口代理留出返回错误的时间，例如服务端设为 25 秒；这是部署建议，不是 F5 时延承诺。客户端重试视为新的 Scan，可能再次计费并重新路由，不提供隐含的幂等或去重语义。
+服务端 deadline 默认 25 秒。直接部署 Runner 时可通过 `GUARD_SCAN_TIMEOUT_SECONDS` 调整；Helm 使用应用默认值，不提供对应配置项。公开脚本单次调用设置了 30 秒超时，联调时应使服务端和入口代理留出返回错误的时间，例如服务端设为 25 秒；这是部署建议，不是 F5 时延承诺。客户端重试视为新的 Scan，可能再次计费并重新路由，不提供隐含的幂等或去重语义。
 
 ## 7. 日志、产品配置与改动位置
 

@@ -266,6 +266,6 @@ Every response from the Scan handler has the headers `X-Request-ID` and `X-TaskL
 - A `401` also has `WWW-Authenticate: Bearer`.
 - Errors that a proxy generates do not necessarily use these shapes.
 
-The defaults are **1 MiB** for the request body and **25 seconds** for the scan execution. Configure them with `GUARD_SCAN_MAX_BODY_BYTES` and `GUARD_SCAN_TIMEOUT_SECONDS`, or with the Helm values `runner.scan.maxBodyBytes` and `runner.scan.timeoutSeconds`.
+The defaults are **1 MiB** for the request body and **25 seconds** for the scan execution. Direct Runner deployments can configure them with `GUARD_SCAN_MAX_BODY_BYTES` and `GUARD_SCAN_TIMEOUT_SECONDS`. The Helm chart uses the application defaults and does not expose these settings.
 
 Configure a separate network timeout in the client. Do not count an execution failure as a pass or as a Policy detection. A retry creates another independent scan. See the [Endpoint integration checks](/document/developer/endpoint-setup#endpoint-verification).

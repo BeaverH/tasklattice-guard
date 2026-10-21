@@ -217,7 +217,6 @@ Default objectives are configured under `observability.slo`:
 
 ```yaml
 availabilityTarget: 0.999
-runtimeP90Seconds: 1.0
 runtimeP95Seconds: 2.5
 runtimeP99Seconds: 5.0
 completeCoverageTarget: 1.0

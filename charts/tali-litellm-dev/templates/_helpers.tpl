@@ -63,7 +63,7 @@ app.kubernetes.io/component: {{ .component }}
 {{/* LiteLLM proxy configuration. Shape follows tests/fixtures/business-replay/litellm.yaml. */}}
 {{- define "tali-litellm-dev.litellmConfig" -}}
 {{- if and (not (include "tali-litellm-dev.upstreamConfigured" .)) (not .Values.model.mock.enabled) -}}
-{{- fail "Set model.upstream.apiBase, apiKey and model, or keep model.mock.enabled=true" -}}
+{{- fail "Set model.upstream.apiBase, model.upstream.existingSecret and model.upstream.model, or keep model.mock.enabled=true" -}}
 {{- end -}}
 model_list:
   - model_name: {{ .Values.model.name | quote }}

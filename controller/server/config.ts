@@ -134,10 +134,6 @@ const environmentSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_TRUSTED_ORIGINS: z.string().default("http://localhost:8080,http://localhost:8092"),
   BETTER_AUTH_MIN_PASSWORD_LENGTH: z.coerce.number().int().min(5).max(128).default(12),
-  CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   CONTROLLER_BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD: z.string().min(1).optional(),
   CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH: z.string().regex(bootstrapPasswordHashPattern, "Expected a Better Auth scrypt password hash.").optional(),
@@ -170,13 +166,6 @@ const environmentSchema = z.object({
   if (value.CONTROLLER_GRPC_TRANSPORT === "plaintext" && tlsPaths.some(Boolean)) {
     context.addIssue({ code: "custom", message: "Plaintext gRPC cannot be combined with TLS certificate paths." });
   }
-  const publicHostname = new URL(value.CONTROLLER_PUBLIC_URL).hostname;
-  const isLoopback = ["localhost", "127.0.0.1", "::1"].includes(publicHostname);
-  const isLocalDefault = value.CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS
-    && isLoopback
-    && value.CONTROLLER_BOOTSTRAP_ADMIN_EMAIL === "admin@tasklattice.local"
-    && value.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD === "admin";
-
   if (value.NODE_ENV === "production" && !value.CONTROLLER_METRICS_TOKEN) {
     context.addIssue({
       code: "custom",
@@ -185,13 +174,6 @@ const environmentSchema = z.object({
     });
   }
 
-  if (value.CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS && !isLoopback) {
-    context.addIssue({
-      code: "custom",
-      path: ["CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS"],
-      message: "Local default credentials may only be enabled for a loopback Controller URL.",
-    });
-  }
   if (Boolean(value.CONTROLLER_BOOTSTRAP_ADMIN_EMAIL) !== Boolean(value.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD || value.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH)) {
     context.addIssue({
       code: "custom",
@@ -204,7 +186,6 @@ const environmentSchema = z.object({
   if (
     value.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD
     && value.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD.length < value.BETTER_AUTH_MIN_PASSWORD_LENGTH
-    && !isLocalDefault
   ) {
     context.addIssue({
       code: "custom",
@@ -300,7 +281,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     betterAuthSecret: parsed.BETTER_AUTH_SECRET,
     trustedOrigins: parsed.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean),
     minPasswordLength: parsed.BETTER_AUTH_MIN_PASSWORD_LENGTH,
-    allowLocalDefaultCredentials: parsed.CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS,
     bootstrapAdmin: parsed.CONTROLLER_BOOTSTRAP_ADMIN_EMAIL && (parsed.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD || parsed.CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD_HASH)
       ? {
           email: parsed.CONTROLLER_BOOTSTRAP_ADMIN_EMAIL,

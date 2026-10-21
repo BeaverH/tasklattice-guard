@@ -155,10 +155,15 @@ security. Internal defaults load automatically. Use `values-dev-uat.yaml` as the
 only development override. There are no separate advanced, debug or migration
 profiles; copy just the settings your environment needs from `values.yaml`.
 
+Unknown or removed chart options fail Helm schema validation with the offending
+field name. Remove stale keys from custom values instead of relying on them
+being silently ignored. Kubernetes resource and security-context objects remain
+pass-through settings; label and annotation maps accept custom string values.
+
 The chart owns deployment, service exposure, infrastructure dependencies and
 platform observability. Adapter behavior uses application defaults. The old
-`runner.scan.maxBodyBytes` and `runner.scan.timeoutSeconds` values are ignored
-and should be removed from environment overrides; the chart no longer injects
+`runner.scan.maxBodyBytes` and `runner.scan.timeoutSeconds` values are rejected
+and must be removed from custom values; the chart no longer injects
 Scan environment variables. Runner currently defaults to a 1 MiB request body
 and a 25-second Scan timeout. UI controls for those limits are separate work.
 
@@ -207,7 +212,7 @@ explicit `controller.image.tag` / `runner.image.tag` still take precedence.
 Controller replicas are fixed at one. Internal ports are fixed at 8080/9090
 (Controller), 8091 (Runner), 5432 (bundled PostgreSQL), and 6379 (bundled Redis).
 The old `controller.replicaCount`, internal `service.*Port` / `service.port`,
-and `serviceAccount.automount` values are ignored and should be removed from
+and `serviceAccount.automount` values are rejected and must be removed from
 custom values. External database/Redis URLs and local public Service ports
 remain configurable. Ordinary Pods do not mount service-account tokens; the
 credential initialization Job uses its own dedicated ServiceAccount.
@@ -376,9 +381,9 @@ Catalog** and persisted in the Controller database:
 Helm configures deployment infrastructure: images, resources, networking,
 databases, and platform Secrets. It does not configure model endpoints,
 model credentials, or evaluator bindings. The removed `controlPlaneAgent`,
-`models`, and `evaluators` values are no longer read; remove them from private
-values files as well. Legacy values retained by a previous Helm release are
-ignored and do not override Settings. Existing model configurations saved in
+`models`, and `evaluators` values are rejected; remove them from private
+values files and do not reuse stale values from a previous Helm release.
+Existing model configurations saved in
 the Controller database are preserved across Helm upgrades.
 
 Install with a private environment values file containing the actual public
@@ -408,7 +413,7 @@ source IDs, trusted-source ConfigMaps or environment checks. Export immutable
 versions, then choose the `.guardrail.zip` file in **Import Guardrail package**.
 Identical versions are skipped; conflicting immutable content is rejected.
 Old `controller.promotion.export` and `controller.promotion.trust` values are
-ignored and no longer mounted into the Controller.
+rejected; remove them from custom values. They are not mounted into the Controller.
 
 Development uses only `values-dev-uat.yaml`; there is no separate migration
 target profile or pair-deployment command. Import/export works between any
@@ -654,6 +659,6 @@ installations must run the bootstrap hook before pruning their legacy Secrets.
 
 Remove legacy inline credential fields from environment files when upgrading.
 Use current complete Values with `--reset-values` rather than retaining removed
-fields through `--reuse-values`. The schema rejects obsolete account/database
-inputs. Rebuild and publish the Controller image before using this chart; its
+fields through `--reuse-values`. The schema rejects removed or unknown chart
+options. Rebuild and publish the Controller image before using this chart; its
 initialization protocol and mounted-account support must match the templates.

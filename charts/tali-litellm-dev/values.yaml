@@ -94,7 +94,7 @@ imagePullSecrets: []
 bootstrap:
   image:
     repository: ghcr.io/tasklattice/tali-guard-controller
-    tag: "0.2.0"
+    tag: "0.3.9"
     pullPolicy: IfNotPresent
 podSecurityContext:
   runAsNonRoot: true

@@ -228,7 +228,6 @@ normalize_local_env() {
   write_env_value "CONTROLLER_PUBLIC_URL" "http://localhost:${CONTROLLER_HTTP_PORT}"
   write_env_value "CONTROLLER_RUNTIME_SERVICE_URL" "http://localhost:${RUNNER_HTTP_PORT}"
   write_env_value "BETTER_AUTH_TRUSTED_ORIGINS" "http://localhost:${CONTROLLER_HTTP_PORT},http://localhost:${UI_HTTP_PORT}"
-  write_env_value "CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS" "false"
   write_env_value "CONTROLLER_BOOTSTRAP_ADMIN_EMAIL" "admin@tasklattice.local"
   # Reuse the reviewed local bootstrap hash; avoid maintaining a second password.
   local bootstrap_hash

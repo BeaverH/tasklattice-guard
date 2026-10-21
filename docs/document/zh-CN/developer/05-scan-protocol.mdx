@@ -266,6 +266,6 @@ Scan 处理器的所有响应都带 `X-Request-ID` 和 `X-TaskLattice-Scan-Compa
 - `401` 还带 `WWW-Authenticate: Bearer`。
 - 代理生成的错误不一定采用这些格式。
 
-默认的请求体上限是 **1 MiB**，扫描执行超时是 **25 秒**。分别通过 `GUARD_SCAN_MAX_BODY_BYTES` 和 `GUARD_SCAN_TIMEOUT_SECONDS` 配置，对应的 Helm 值是 `runner.scan.maxBodyBytes` 和 `runner.scan.timeoutSeconds`。
+默认的请求体上限是 **1 MiB**，扫描执行超时是 **25 秒**。直接部署 Runner 时可通过 `GUARD_SCAN_MAX_BODY_BYTES` 和 `GUARD_SCAN_TIMEOUT_SECONDS` 配置。Helm chart 使用应用默认值，不提供对应配置项。
 
 客户端应单独设置网络超时。执行失败不能记为“通过”，也不能记为 Policy 命中。重试会产生一次新的独立扫描。接入验收见 [Endpoint 接入指南](/document/developer/endpoint-setup#endpoint-verification)。

@@ -6,7 +6,6 @@ controller:
     - https://guard.example.com
   auth:
     minLoginLength: 12
-    allowLocalDefaultCredentials: false
   service:
     type: ClusterIP
     public:
@@ -36,7 +35,6 @@ securityContext:
 observability:
   slo:
     availabilityTarget: 0.999
-    runtimeP90Seconds: 1.0
     runtimeP95Seconds: 2.5
     runtimeP99Seconds: 5.0
     completeCoverageTarget: 1.0

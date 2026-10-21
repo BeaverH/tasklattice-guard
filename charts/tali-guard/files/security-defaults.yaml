@@ -33,8 +33,6 @@ runtimeLogs:
   encryptionKeyKey: encryption-key
 artifactSigning:
   existingSecret: ''
-  privateKey: ''
-  publicKey: ''
   privateKeyKey: private-key.pem
   publicKeyKey: public-key.pem
 controlTls:

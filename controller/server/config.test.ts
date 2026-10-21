@@ -15,7 +15,6 @@ describe("Controller config", () => {
   it("keeps the production password minimum at 12 by default", () => {
     expect(loadConfig(requiredEnvironment)).toMatchObject({
       minPasswordLength: 12,
-      allowLocalDefaultCredentials: false,
       metricsToken: null,
     });
   });
@@ -37,30 +36,12 @@ describe("Controller config", () => {
     );
   });
 
-  it("allows only the established admin/admin exception in the local development profile", () => {
-    expect(loadConfig({
+  it.each(["admin@tasklattice.local", "another-admin@tasklattice.local"])("rejects short bootstrap passwords for %s on localhost", (email) => {
+    expect(() => loadConfig({
       ...requiredEnvironment,
       NODE_ENV: "development",
       CONTROLLER_PUBLIC_URL: "http://localhost:38081",
-      CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS: "true",
-      CONTROLLER_BOOTSTRAP_ADMIN_EMAIL: "admin@tasklattice.local",
-      CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD: "admin",
-    })).toMatchObject({
-      minPasswordLength: 12,
-      allowLocalDefaultCredentials: true,
-      bootstrapAdmin: {
-        email: "admin@tasklattice.local",
-        password: "admin",
-      },
-    });
-  });
-
-  it("rejects any other short bootstrap password even when the local exception is enabled", () => {
-    expect(() => loadConfig({
-      ...requiredEnvironment,
-      CONTROLLER_PUBLIC_URL: "http://127.0.0.1:38081",
-      CONTROLLER_ALLOW_LOCAL_DEFAULT_CREDENTIALS: "true",
-      CONTROLLER_BOOTSTRAP_ADMIN_EMAIL: "another-admin@tasklattice.local",
+      CONTROLLER_BOOTSTRAP_ADMIN_EMAIL: email,
       CONTROLLER_BOOTSTRAP_ADMIN_PASSWORD: "admin",
     })).toThrow(/at least 12 characters/);
   });
