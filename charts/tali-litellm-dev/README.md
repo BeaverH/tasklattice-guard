@@ -35,7 +35,7 @@ streaming is expected to fail.
 ## What the wiring script does
 
 `scripts/litellm-dev-wire.mjs` signs in to the Controller with the development
-administrator, then idempotently:
+authoring account, then idempotently:
 
 1. checks that the Default Guardrail has a published artifact;
 2. finds or creates Endpoint `litellm-dev` (adapter `litellm-generic-guardrail`) and
@@ -50,9 +50,12 @@ administrator, then idempotently:
 `http://tali-guard-runtime.<namespace>.svc.cluster.local:8091/runtime/v1/endpoints/<id>`.
 
 Environment overrides: `GUARD_DEV_CONTROLLER_URL` (default `http://localhost:38081`),
-`GUARD_DEV_RUNTIME_URL` (default `http://localhost:38082`), `GUARD_DEV_USER_EMAIL` /
-`GUARD_DEV_USER_PASSWORD` for the wiring CLI authoring account (development defaults), `HELM_NAMESPACE`, `HELM_CONTEXT`,
+`GUARD_DEV_RUNTIME_URL` (default `http://localhost:38082`), `GUARD_DEV_USER_EMAIL`,
+`HELM_NAMESPACE`, `HELM_CONTEXT`,
 `LITELLM_SKIP_SMOKE=1`.
+
+For authoring account credentials, see the overrides in
+[`scripts/litellm-dev-wire.mjs`](../../scripts/litellm-dev-wire.mjs).
 
 ## Ports
 
