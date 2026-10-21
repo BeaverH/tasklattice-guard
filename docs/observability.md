@@ -254,37 +254,21 @@ required rather than inferred. Disable the preset after the investigation to
 remove the full-sampling overhead; explicitly enabled individual observability
 components remain active. The preset never changes GuardRail runtime logging
 or content-capture settings. The example Tempo/Pyroscope addresses and
-`release: monitoring` selectors are intended for the repository's local stack;
-override them when production uses another namespace or Helm release name.
+`release: monitoring` selectors are illustrative; replace them with the addresses
+and selectors of your monitoring stack. Guard does not install that stack.
 
 The chart creates authenticated Controller and Runner ServiceMonitors, a
 PrometheusRule, and a sidecar-discoverable dashboard ConfigMap. It retains a
 dedicated metrics Bearer token. Set `security.metrics.existingSecret` when the
 platform owns rotation and roll workloads after rotating an injected token.
 
-For standalone Grafana, supply `PROMETHEUS_URL` and mount:
-
-| Repository path | Grafana path |
-| --- | --- |
-| `observability/grafana/provisioning/datasources` | `/etc/grafana/provisioning/datasources` |
-| `observability/grafana/provisioning/dashboards` | `/etc/grafana/provisioning/dashboards` |
-| `charts/tali-guard/grafana/dashboards/tasklattice-guard-overview.json` | `/var/lib/grafana/dashboards/tasklattice-guard/tasklattice-guard-overview.json` |
-| `charts/tali-guard/grafana/dashboards/tasklattice-guard-troubleshooting.json` | `/var/lib/grafana/dashboards/tasklattice-guard/tasklattice-guard-troubleshooting.json` |
-
-The metrics datasource UID is `tasklattice-prometheus`. Troubleshooting also
-provisions `tasklattice-tempo` and `tasklattice-pyroscope`.
-
-The local kube-prometheus-stack values enable anonymous Editor access for the
-port-forwarded development environment only. Editor is required for Grafana
-Explore, which renders a selected Tempo trace and its related profile. Do not
-use this anonymous role on an internet-facing Grafana:
-
-```bash
-helm upgrade monitoring prometheus-community/kube-prometheus-stack \
-  --namespace monitoring \
-  --reuse-values \
-  --values observability/grafana/kube-prometheus-stack-values-local.yaml
-```
+For standalone Grafana, configure a Prometheus datasource with UID
+`tasklattice-prometheus` pointing at your Prometheus server, then import the
+[Overview](../charts/tali-guard/grafana/dashboards/tasklattice-guard-overview.json)
+and [Troubleshooting](../charts/tali-guard/grafana/dashboards/tasklattice-guard-troubleshooting.json)
+dashboards. To use the trace and profile panels, also configure Tempo and
+Pyroscope datasources with UIDs `tasklattice-tempo` and `tasklattice-pyroscope`.
+Deploy and manage these monitoring services separately from Guard.
 
 ## Cardinality budget
 

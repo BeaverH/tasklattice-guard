@@ -69,7 +69,7 @@ decisions and adds control convergence, artifact delivery, WAL/outbox age, and
 evidence freshness. Production defaults create ServiceMonitors,
 PrometheusRules, and the Grafana dashboard ConfigMap; the Debug profile adds
 100% tracing and continuous profiling. See
-[observability/README.md](../observability/README.md)
+[observability guide](observability.md)
 for installation, metric semantics, alert budgets, and the unavoidable upstream
 bypass-denominator boundary.
 

@@ -10,6 +10,7 @@ tests
 .env
 data
 output
+.local-archives
 web/node_modules
 web/dist
 **/dist

@@ -544,9 +544,9 @@ Roll Controller and Runner Pods after rotating that external token because it
 is injected through environment variables.
 The dashboard datasource UID is `tasklattice-prometheus`; change the Grafana
 datasource UID during import only when the installation cannot provision that
-stable UID. Full metric semantics, standalone Grafana provisioning paths, and
-the product label-cardinality budget and upstream bypass boundary are in the repository's
-`observability/README.md`.
+stable UID. Full metric semantics, standalone Grafana setup, and the product
+label-cardinality budget and upstream bypass boundary are in the repository's
+[observability guide](../../docs/observability.md).
 
 ## In-cluster account initialization
 

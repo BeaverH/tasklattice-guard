@@ -414,7 +414,7 @@ Kubernetes/Helm or an external autoscaler.
 
 Metrics distinguish policy decisions from technical failures and expose control
 convergence and telemetry freshness. See the
-[observability contract](../observability/README.md) for metrics and alerts.
+[observability contract](observability.md) for metrics and alerts.
 
 Architecture acceptance covers chart topology/Redis/mTLS constraints, independent
 component builds, signed artifact verification and atomic activation, direct
