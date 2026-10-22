@@ -17,6 +17,9 @@ spec:
     metadata:
       annotations:
         checksum/controller-config: {{ include "tali-guard.controllerConfig" . | sha256sum }}
+      {{- if .Values.postgresql.enabled }}
+        tasklattice.io/database-revision: {{ .Release.Revision | quote }}
+      {{- end }}
       {{- with .Values.rolloutRevision }}
         tasklattice.io/rollout-revision: {{ . | quote }}
       {{- end }}

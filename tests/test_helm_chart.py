@@ -1432,6 +1432,28 @@ def test_database_workload_uses_the_initialized_secret_and_job_runs_before_workl
     assert job["spec"]["activeDeadlineSeconds"] == 120
 
 
+def test_bundled_database_synchronizes_before_serving_using_existing_images():
+    documents = render_dev("--set", "controller.image.repository=registry.example.test/controller", "--set", "controller.image.tag=sync-test")
+    postgres = next(doc for doc in documents if doc["kind"] == "StatefulSet" and doc["metadata"]["name"].endswith("-postgresql"))
+    pod = postgres["spec"]["template"]["spec"]
+    prepare, synchronize = pod["initContainers"]
+    serving = pod["containers"][0]
+    assert prepare["image"] == "registry.example.test/controller:sync-test"
+    assert prepare["imagePullPolicy"] == "Never"
+    assert prepare["command"] == ["cp", "/opt/tasklattice/guard-controller/scripts/runtime/sync-postgresql.sh", "/opt/tasklattice/postgresql/sync.sh"]
+    assert synchronize["command"] == ["bash", "/opt/tasklattice/postgresql/sync.sh"]
+    assert synchronize["image"] == serving["image"]
+    assert synchronize["env"] == serving["env"]
+    assert synchronize["envFrom"] == serving["envFrom"]
+    assert next(mount for mount in synchronize["volumeMounts"] if mount["name"] == "data") == next(mount for mount in serving["volumeMounts"] if mount["name"] == "data")
+    assert pod["automountServiceAccountToken"] is False
+    controller = next(doc for doc in documents if doc["kind"] == "Deployment" and doc["metadata"]["name"].endswith("-controller"))
+    for workload in (postgres, controller):
+        assert workload["spec"]["template"]["metadata"]["annotations"]["tasklattice.io/database-revision"] == "1"
+    external = next(doc for doc in render() if doc["kind"] == "Deployment" and doc["metadata"]["name"].endswith("-controller"))
+    assert "tasklattice.io/database-revision" not in external["spec"]["template"]["metadata"]["annotations"]
+
+
 def test_local_account_defaults_cannot_be_used_with_an_external_public_url():
     result = subprocess.run([
         "helm", "template", "tali-guard", str(CHART), "-f", str(DEV_VALUES),

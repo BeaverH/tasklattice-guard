@@ -663,9 +663,20 @@ database logins are preserved. Do not change the release name, namespace, databa
 identity or field-name overrides during this migration. External Secrets are
 referenced as supplied and are not copied or modified.
 
-Back up persistent database data and credentials together. Deleting a managed
-Secret while retaining its database volume requires restoring the original login;
-creating another random login cannot update an initialized database. Old GitOps
+The bundled PostgreSQL uses its managed Secret as the source of truth for the
+configured database account. Before serving, an init container synchronizes that
+account through a private local connection, preserving existing database data.
+The serving database keeps its normal authentication configuration. Startup fails
+if synchronization cannot complete; it never recreates a missing database role.
+This uses the existing Controller and PostgreSQL images, with no extra image.
+
+If the managed database Secret is deleted, rerun initialization and restart both
+PostgreSQL and Controller to load the recreated credentials. Helm upgrades restart
+both automatically when the bundled database is enabled. Repeating initialization
+alone reuses an existing Secret. External databases are never modified.
+
+Back up persistent data and all Secrets together. Other lost signing or encryption
+keys cannot be recovered by synchronizing the database account. Old GitOps
 installations must run the bootstrap hook before pruning their legacy Secrets.
 
 Remove legacy inline credential fields from environment files when upgrading.
