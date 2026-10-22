@@ -155,15 +155,24 @@ security. Internal defaults load automatically. Use `values-dev-uat.yaml` as the
 only development override. There are no separate advanced, debug or migration
 profiles; copy just the settings your environment needs from `values.yaml`.
 
-Unknown or removed chart options fail Helm schema validation with the offending
-field name. Remove stale keys from custom values instead of relying on them
-being silently ignored. Kubernetes resource and security-context objects remain
-pass-through settings; label and annotation maps accept custom string values.
+This chart does not ship a `values.schema.json` file. Helm does not perform
+JSON schema checks on Values, so internal deployment platforms can inject
+metadata such as `global`, `labels` or `commonLabels` at any level.
+Unknown or removed options are ignored by the chart; accepting a value does not
+make it a supported setting. Extra metadata reaches Kubernetes resources only
+when a chart template or the platform's rendering pipeline applies it.
+Kubernetes resource and security-context objects remain pass-through settings.
+Kubernetes and the application validate their own configuration when deployed.
+
+Template checks cover deployment dependencies and conflicts: at least one
+default Runner, database and account initialization, required Secrets and TLS,
+shared Redis for multiple replicas, and destinations for enabled telemetry.
+ServiceMonitor labels also preserve chart-owned resource identity.
 
 The chart owns deployment, service exposure, infrastructure dependencies and
 platform observability. Adapter behavior uses application defaults. The old
-`runner.scan.maxBodyBytes` and `runner.scan.timeoutSeconds` values are rejected
-and must be removed from custom values; the chart no longer injects
+`runner.scan.maxBodyBytes` and `runner.scan.timeoutSeconds` values have no effect
+and should be removed from custom values; the chart no longer injects
 Scan environment variables. Runner currently defaults to a 1 MiB request body
 and a 25-second Scan timeout. UI controls for those limits are separate work.
 
@@ -477,8 +486,8 @@ when `observability.performanceDebug.enabled` forces ServiceMonitors on.
 
 All label values must be strings. Quote numeric or boolean-looking YAML values
 (for example, `build: "123"` and `enabled: "true"`), and use `--set-string` for
-CLI overrides. Helm schema validation rejects non-string values.
-Helm's standard `null` override removes a label before schema validation; for
+CLI overrides. Kubernetes requires string values for resource labels.
+Helm's standard `null` override removes a label before rendering; for
 example, `--set observability.serviceMonitor.labels.team=null` removes `team`
 inherited from a values file.
 
@@ -661,6 +670,7 @@ installations must run the bootstrap hook before pruning their legacy Secrets.
 
 Remove legacy inline credential fields from environment files when upgrading.
 Use current complete Values with `--reset-values` rather than retaining removed
-fields through `--reuse-values`. The schema rejects removed or unknown chart
-options. Rebuild and publish the Controller image before using this chart; its
-initialization protocol and mounted-account support must match the templates.
+fields through `--reuse-values`. Removed chart options are ignored and no longer
+configure the application. Rebuild and publish the Controller image before using
+this chart; its initialization protocol and mounted-account support must match
+the templates.

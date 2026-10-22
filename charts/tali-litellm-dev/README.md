@@ -7,6 +7,11 @@ adapter, including protected WebSocket output streaming, against a locally
 deployed `tali-guard` release. It is **not** part of the product chart and is
 never installed by `npm run helm:deploy:dev`.
 
+Like `tali-guard`, this chart does not ship a `values.schema.json` file.
+Platform-injected Values are accepted; unused settings are ignored. Labels reach
+resources only when a template or the platform's rendering pipeline applies them.
+The template still requires either the mock model or a complete upstream setup.
+
 ## Commands
 
 | Command | Effect |

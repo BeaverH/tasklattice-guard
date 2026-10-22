@@ -136,7 +136,18 @@ def test_all_gateway_credentials_are_initialized_in_cluster():
 
 
 @pytest.mark.parametrize("field", ["masterKey", "saltKey", "ui.password", "postgresql.password", "model.upstream.apiKey"])
-def test_gateway_rejects_inline_credential_values(field):
-    result = subprocess.run(["helm", "template", "test", str(CHART), "--set", f"{field}=unsupported"], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "additional" in result.stderr.lower()
+def test_gateway_ignores_inline_credential_values(field):
+    assert render("--set", f"{field}=unsupported") == render()
+
+
+def test_platform_metadata_does_not_block_gateway_rendering(tmp_path):
+    labels = {"company.example/team": "platform"}
+    overrides = tmp_path / "platform-values.yaml"
+    overrides.write_text(yaml.safe_dump({
+        "global": {"labels": labels, "deploymentId": 123},
+        "commonLabels": labels,
+        "ui": {"labels": labels},
+        "postgresql": {"labels": labels},
+        "model": {"upstream": {"labels": labels}},
+    }))
+    assert render("--values", str(overrides)) == render()

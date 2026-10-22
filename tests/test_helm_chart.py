@@ -97,12 +97,6 @@ def test_normal_security_configuration_needs_no_generated_credential_details():
                     assert all(key["key"] != "ca.key" for key in volume["secret"]["items"])
 
 
-@pytest.mark.parametrize("setting", ["controlTls.enabled", "bootstrapAdmin.name"])
-def test_required_public_security_defaults_cannot_be_deleted(setting):
-    error = render_error("--set", f"security.{setting}=null")
-    assert setting.split(".")[-1] in error
-
-
 def test_minimum_install_has_controller_and_two_stable_guardrails_zero_runners():
     documents = render()
     deployments = [item for item in documents if item.get("kind") == "Deployment"]
@@ -341,10 +335,8 @@ def test_chart_renders_without_model_configuration_sections():
     ("unknownOption=true", "unknownOption"),
     ("runner.default.maxConcurency=128", "maxConcurency"),
 ])
-def test_removed_and_unknown_options_fail_with_the_offending_key(setting, unknown_key):
-    error = render_error("--set", setting)
-    assert "additional" in error.lower()
-    assert unknown_key in error
+def test_removed_and_unknown_options_do_not_change_rendered_resources(setting, unknown_key):
+    assert render("--set", setting) == render(), unknown_key
 
 
 def test_endpoint_tracks_runner_service_namespace_and_port():
@@ -372,7 +364,7 @@ def test_guardrails_zero_cannot_drop_below_one_replica():
     )
 
     assert result.returncode != 0
-    assert "GuardRails 0" in result.stderr or "minimum: got 0, want 1" in result.stderr
+    assert "GuardRails 0" in result.stderr
 
 
 def test_runtime_public_url_changes_advertising_and_controller_rollout_only():
@@ -388,11 +380,6 @@ def test_runtime_public_url_changes_advertising_and_controller_rollout_only():
     env = resolved_environment(documents, after["spec"]["template"]["spec"]["containers"][0])
     assert env["CONTROLLER_RUNTIME_PUBLIC_URL"]["value"] == config["CONTROLLER_RUNTIME_PUBLIC_URL"]
     assert [doc for doc in baseline if doc["kind"] in {"Service", "StatefulSet"}] == [doc for doc in documents if doc["kind"] in {"Service", "StatefulSet"}]
-
-
-def test_runtime_public_url_rejects_invalid_base_addresses():
-    for value in ("guard.test", "https://", "ftp://guard.test", "https://user:password@guard.test", "https://guard.test?key=secret", "https://guard.test/#fragment"):
-        assert "publicUrl" in render_error("--set-string", f"runner.publicUrl={value}")
 
 
 @pytest.mark.parametrize(("public_url", "origin"), [
@@ -437,11 +424,6 @@ def test_shared_public_url_is_trusted_with_extra_origins_and_separate_runtime_do
     assert config["CONTROLLER_PUBLIC_URL"] == "https://guard-uat.example.com:8443"
     assert config["CONTROLLER_RUNTIME_PUBLIC_URL"] == "https://runtime.example.com:9443/base"
     assert config["BETTER_AUTH_TRUSTED_ORIGINS"] == "https://guard-uat.example.com:8443,https://old-ui.example.com"
-
-
-@pytest.mark.parametrize("public_url", ["guard.test", "ftp://guard.test", "https://", "https://user:password@guard.test", "https://guard.test/app", "https://guard.test?query=1", "https://guard.test/#fragment", "https://guard.test other"])
-def test_shared_public_url_rejects_non_origin_values(public_url):
-    assert "publicUrl" in render_error("--set-string", f"publicUrl={public_url}")
 
 
 def test_shared_host_virtualservice_example_matches_rendered_services(tmp_path):
@@ -558,11 +540,6 @@ def test_adapter_limits_use_application_defaults():
     assert "GUARD_SCAN_TIMEOUT_SECONDS" not in env
 
 
-def test_public_url_array_rejects_empty_and_invalid_entries():
-    for value in ([], ["https://valid.test", ""], ["https://valid.test", "ftp://invalid.test"], ["https://valid.test", 42]):
-        assert "publicUrl" in render_error("--set-json", "controller.publicUrl=" + json.dumps(value))
-
-
 def test_image_versions_follow_chart_with_explicit_overrides():
     version = str(load_values(CHART / "Chart.yaml")["appVersion"])
     documents = render()
@@ -590,7 +567,7 @@ def test_advanced_partial_overrides_keep_runtime_defaults():
             assert endpoint["scrapeTimeout"] == "10s"
 
 
-def test_schema_accepts_explicit_internal_defaults(tmp_path):
+def test_explicit_internal_defaults_preserve_rendered_resources(tmp_path):
     defaults = load_values(CHART / "files" / "runtime-defaults.yaml")
     defaults["security"] = load_values(CHART / "files" / "security-defaults.yaml")
     overrides = tmp_path / "explicit-defaults.yaml"
@@ -598,7 +575,27 @@ def test_schema_accepts_explicit_internal_defaults(tmp_path):
     assert render("--values", str(overrides), *REQUIRED) == render()
 
 
-def test_schema_preserves_kubernetes_overrides_and_custom_secret_keys(tmp_path):
+def test_platform_metadata_at_root_and_nested_values_does_not_block_rendering(tmp_path):
+    labels = {"company.example/team": "platform", "company.example/cost-center": "0123"}
+    overrides = tmp_path / "platform-values.yaml"
+    overrides.write_text(yaml.safe_dump({
+        "global": {"labels": labels, "deploymentId": 123, "managed": True},
+        "labels": labels,
+        "commonLabels": labels,
+        "controller": {"labels": labels, "image": {"metadata": {"source": "internal"}}},
+        "runner": {"default": {"labels": labels}, "pools": [{
+            "name": "extra", "replicaCount": 1, "maxConcurrency": 32, "resources": {}, "labels": labels,
+        }]},
+        "security": {"bootstrapAdmin": {"metadata": {"owner": "platform"}}},
+        "observability": {"serviceMonitor": {"metadata": {"labels": labels}}},
+    }))
+    pool = [{"name": "extra", "replicaCount": 1, "maxConcurrency": 32, "resources": {}}]
+    # The platform owns injection into rendered metadata. Extra Values must
+    # neither block rendering nor change chart-owned selectors or settings.
+    assert render("--values", str(overrides)) == render("--set-json", "runner.pools=" + json.dumps(pool))
+
+
+def test_kubernetes_overrides_and_custom_secret_keys_are_preserved(tmp_path):
     overrides = tmp_path / "kubernetes-overrides.yaml"
     overrides.write_text(yaml.safe_dump({
         "imagePullSecrets": [{"name": "registry-login"}],
@@ -855,24 +852,6 @@ def test_service_monitor_labels_only_extend_both_resource_metadata(tmp_path, ser
         }
         # Resource labels must not leak into selectors, target labels or endpoints.
         assert monitor["spec"] == original["spec"]
-
-
-@pytest.mark.parametrize("value", [
-    pytest.param(123, id="integer"),
-    pytest.param(1.5, id="number"),
-    pytest.param(True, id="true"),
-    pytest.param(False, id="false"),
-    pytest.param(["platform"], id="array"),
-    pytest.param({"name": "platform"}, id="object"),
-])
-def test_service_monitor_label_values_must_be_strings(value):
-    error = render_error(
-        "--set-json", "observability.serviceMonitor.labels=" + json.dumps({"team": value}),
-    )
-
-    # Helm versions report schema locations as dotted paths or JSON pointers.
-    assert "observability.serviceMonitor.labels.team" in error.replace("/", ".")
-    assert "string" in error
 
 
 def test_service_monitor_null_label_override_removes_label(tmp_path):
@@ -1238,9 +1217,9 @@ def test_bootstrap_accounts_are_mounted_without_protocol_environment_names():
 
 
 @pytest.mark.parametrize("field", ["password", "passwordHash"])
-def test_bootstrap_rejects_inline_login_material(field):
-    error = render_error("--set", f"security.bootstrapAdmin.{field}=unsupported")
-    assert "additional" in error.lower()
+def test_bootstrap_ignores_inline_login_material(field):
+    assert render_dev("--set", f"security.bootstrapAdmin.{field}=unsupported",
+                      "--set", f"security.bootstrapUser.{field}=unsupported") == render_dev()
 
 
 def test_plaintext_bootstrap_renders_no_private_keys_or_random_secret_material():
@@ -1364,10 +1343,10 @@ def test_promotion_defaults_mount_no_promotion_material_and_switch_no_feature():
     assert not {"package-signing", "package-trust", "baseline-package"} & {volume["name"] for volume in spec["volumes"]}
 
 
-def test_removed_startup_baseline_configuration_is_rejected():
-    assert "promotion" in render_error(
+def test_removed_startup_baseline_configuration_has_no_effect():
+    assert render(
         "--set", "controller.promotion.baselinePackage.existingConfigMap=guard-baseline",
-    )
+    ) == render()
 
 
 def test_development_uat_keeps_local_service_names_and_needs_no_package_configuration():
@@ -1423,7 +1402,6 @@ def test_optional_bootstrap_user_is_disabled_in_production_and_supports_existing
 
 @pytest.mark.parametrize("settings,error", [
     ([], "configure bootstrapUser"),
-    (["--set", "security.bootstrapUser.email=user@example.test", "--set", "security.bootstrapUser.password=short"], "additional"),
     (["--set", "security.bootstrapUser.email=user@example.test", "--set", "security.bootstrapUser.existingSecret=existing"], "cannot be combined"),
     (["--set", "security.bootstrapUser.email=same@example.test", "--set", "security.bootstrapAdmin.existingSecret=", "--set", "security.bootstrapAdmin.email=SAME@example.test"], "different email"),
 ])
