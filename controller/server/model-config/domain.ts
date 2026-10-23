@@ -7,6 +7,7 @@ import {
   type CapabilityBindingId,
   controlPlaneProfileRefs,
   isDataPlaneProviderKindAllowed,
+  isTypeSafeProfile,
 } from "../../shared/guardrail-catalog.js";
 
 export const modelProviderKinds = [
@@ -27,6 +28,7 @@ export const modelProfiles = [
   "tali.nemotron-safety-guard-v3.v1",
   "tali.nemoguard-topic-control.v1",
   "tali.typesafe-jev-topic.v1",
+  "tali.typesafe-jev.v1",
   "tali.openai-compatible-jailbreak.v1",
   "tali.openai-compatible-pii.v1",
   "tali.nemoguard-jailbreak-detect.v1",
@@ -128,6 +130,7 @@ export const profileContracts: Record<ModelProfile, readonly string[]> = {
     "tali.guard.topic-control.semantic.v1",
   ],
   "tali.typesafe-jev-topic.v1": ["tali.guard.topic-control.semantic.v1"],
+  "tali.typesafe-jev.v1": ["tali.guard.topic-control.semantic.v1", "tali.guard.jailbreak.v1", "tali.guard.content-safety.v1"],
   "tali.openai-compatible-pii.v1": ["tali.guard.pii.semantic.v1"],
   "tali.openai-compatible-jailbreak.v1": ["tali.guard.jailbreak.v1"],
   "tali.nemoguard-jailbreak-detect.v1": ["tali.guard.jailbreak.v1"],
@@ -147,6 +150,7 @@ export const profileTransports: Record<ModelProfile, ModelTransport> = {
   "tali.nemotron-safety-guard-v3.v1": "openai_chat",
   "tali.nemoguard-topic-control.v1": "openai_chat",
   "tali.typesafe-jev-topic.v1": "typesafe_systemone",
+  "tali.typesafe-jev.v1": "typesafe_systemone",
   "tali.openai-compatible-jailbreak.v1": "openai_chat",
   "tali.openai-compatible-pii.v1": "openai_chat",
   "tali.nemoguard-jailbreak-detect.v1": "nemoguard_jailbreak_detect",
@@ -209,8 +213,8 @@ export function assignmentTargetAcceptsModel(
 }
 
 export function providerAcceptsProfile(providerKind: ModelProviderKind, profile: ModelProfile): boolean {
-  if (providerKind === "typesafe" || profile === "tali.typesafe-jev-topic.v1") {
-    return providerKind === "typesafe" && profile === "tali.typesafe-jev-topic.v1";
+  if (providerKind === "typesafe" || isTypeSafeProfile(profile)) {
+    return providerKind === "typesafe" && isTypeSafeProfile(profile);
   }
   return isDataPlaneProviderKindAllowed(providerKind) || profile === "generic-chat";
 }

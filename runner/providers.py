@@ -13,7 +13,10 @@ from runner.toolkit.nemo.actions.topic import ChatTopicEvaluator, TopicJudgeActi
 from runner.toolkit.nemo.actions.grounding import GroundingActionProvider
 from runner.toolkit.nemo.actions.automated_reasoning import HTTPAutomatedReasoningProvider, ReasoningActionProvider
 from runner.toolkit.nemo.evaluators.pii import PiiEvaluator
-from runner.toolkit.nemo.evaluators.jev_topic import JEV_TOPIC_PROFILE, JevTopicEvaluator
+from runner.toolkit.nemo.evaluators.jev import JEV_PROFILE, JEV_PROFILES, JEV_TOPIC_PROFILE
+from runner.toolkit.nemo.evaluators.jev_topic import JevTopicEvaluator
+from runner.toolkit.nemo.evaluators.jev_jailbreak import JevJailbreakEvaluator
+from runner.toolkit.nemo.evaluators.jev_content_safety import JevContentSafetyEvaluator
 from runner.toolkit.evaluation.contracts import (
     CONTRACT_PII_EXACT,
     MODEL_SAFETY_CONTRACT_BY_CAPABILITY,
@@ -97,11 +100,17 @@ def dynamic_runtime_action_providers(
 
     source_profiles = {item.id: item.profile_ref for item in configuration.runtimes}
     for binding in configuration.bindings:
-        if JEV_TOPIC_PROFILE in {binding.profile_ref, source_profiles.get(binding.model_ref)}:
-            if (binding.profile_ref != JEV_TOPIC_PROFILE or source_profiles.get(binding.model_ref) != JEV_TOPIC_PROFILE
-                or binding.binding_id != "topic_control.input" or binding.capability_ref != "topic_control"
-                or _rail_name(binding.rail_type) != "input" or set(binding.contract_refs) != set(JevTopicEvaluator.contracts)):
-                raise ValueError("Jev supports only the input Topic Control semantic contract with a matching runtime profile.")
+        if JEV_PROFILES.intersection({binding.profile_ref, source_profiles.get(binding.model_ref)}):
+            allowed = {"topic_control": JevTopicEvaluator.contracts}
+            if binding.profile_ref == JEV_PROFILE:
+                allowed["jailbreak"] = JevJailbreakEvaluator.contracts
+                allowed["content_safety"] = JevContentSafetyEvaluator.contracts
+            if (binding.profile_ref not in JEV_PROFILES or source_profiles.get(binding.model_ref) != binding.profile_ref
+                or binding.capability_ref not in allowed or binding.binding_id != f"{binding.capability_ref}.input"
+                or _rail_name(binding.rail_type) != "input"
+                or tuple(binding.contract_refs) != tuple(allowed.get(binding.capability_ref, ()))):
+                scope = "input Topic Control" if binding.profile_ref == JEV_TOPIC_PROFILE else "input Topic Control, Jailbreak detection or Content Safety"
+                raise ValueError(f"Jev supports only {scope} with matching capability, contract and runtime profile.")
     runtimes = {
         item.id: ModelRuntimeConfig(
             id=item.id,
@@ -121,7 +130,7 @@ def dynamic_runtime_action_providers(
     binding_sources = [
         item
         for item in configuration.bindings
-        if item.capability_ref in {"content_safety", "jailbreak", "pii_semantic"}
+        if item.capability_ref in {"content_safety", "jailbreak", "pii_semantic"} and item.profile_ref not in JEV_PROFILES
     ]
     evaluator_bindings = tuple(
         EvaluatorBindingConfig(
@@ -153,6 +162,17 @@ def dynamic_runtime_action_providers(
         for capability in ("pii", "content_safety", "jailbreak")
         if capability in safety_evaluator.capabilities
     )
+    for capability, evaluator_type in (("jailbreak", JevJailbreakEvaluator), ("content_safety", JevContentSafetyEvaluator)):
+        binding = bindings.get(f"{capability}.input")
+        if binding is None or binding.profile_ref != JEV_PROFILE:
+            continue
+        runtime = _assigned_runtime(binding.model_ref, runtimes)
+        evaluator = evaluator_type(
+            base_url=runtime.base_url, model=runtime.model, api_key=runtime.api_key or "",
+            provider_id=runtime.id, timeout_seconds=runtime.timeout_seconds,
+            skip_tls_verify=runtime.skip_tls_verify, transport=transport,
+        )
+        routes.append(EvaluationRoute(capability, next(iter(evaluator.contracts)), evaluator))
     providers: list[ActionProvider] = [
         *local_providers,
         EvaluationActionProvider(tuple(routes)),
@@ -166,11 +186,11 @@ def dynamic_runtime_action_providers(
             or _rail_name(topic.rail_type) != "input"
             or tuple(topic.contract_refs) != ("tali.guard.topic-control.semantic.v1",)):
             raise ValueError("Topic Control binding must match its runtime, capability, contract and Rail.")
-        if topic.profile_ref == JEV_TOPIC_PROFILE:
+        if topic.profile_ref in JEV_PROFILES:
             evaluator = JevTopicEvaluator(
                 base_url=runtime.base_url, model=runtime.model, api_key=runtime.api_key or "",
                 provider_id=runtime.id, timeout_seconds=runtime.timeout_seconds,
-                skip_tls_verify=runtime.skip_tls_verify, transport=transport,
+                skip_tls_verify=runtime.skip_tls_verify, transport=transport, profile_ref=topic.profile_ref,
             )
         else:
             if topic.profile_ref not in {"tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1"}:

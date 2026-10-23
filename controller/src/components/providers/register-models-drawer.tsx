@@ -287,7 +287,7 @@ export function RegisterModelsDrawer({ providers, registeredModels, initialProvi
 
 function selection(id: string, kind?: ModelProviderKind): ProviderModelSelection {
   const name = displayNameForModel(id).slice(0, 120);
-  return { name: name.length >= 2 ? name : `Model ${id}`, model: id, profile: kind === "typesafe" ? "tali.typesafe-jev-topic.v1" : suggestedProfile(id), timeoutSeconds: 20, maxTokens: 512 };
+  return { name: name.length >= 2 ? name : `Model ${id}`, model: id, profile: kind === "typesafe" ? "tali.typesafe-jev.v1" : suggestedProfile(id), timeoutSeconds: 20, maxTokens: 512 };
 }
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return <div className="space-y-2"><Label htmlFor={id}>{label}</Label>{children}</div>;

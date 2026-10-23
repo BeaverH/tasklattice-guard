@@ -541,6 +541,10 @@ class NemotronSafetyGuardV3Adapter:
             raise TypeError("Nemotron Safety Guard v3 response must be a JSON object.")
         label = "User Safety" if scope == "input" else "Response Safety"
         verdict = str(decoded.get(label, "")).strip().casefold()
+        # Hosted v3 sometimes echoes the schema's "safe or unsafe rating"
+        # wording. Accept only these complete, unambiguous aliases; substring
+        # matching could incorrectly allow "not safe" or "safe or unsafe".
+        verdict = {"safe rating": "safe", "unsafe rating": "unsafe"}.get(verdict, verdict)
         if verdict not in {"safe", "unsafe"}:
             raise ValueError(f"Nemotron Safety Guard v3 returned an invalid {label} value.")
         raw_categories = decoded.get("Safety Categories", "")

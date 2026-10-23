@@ -4768,7 +4768,8 @@
               "tali.openai-compatible-pii.v1",
               "tali.qwen3guard.v1",
               "tali.taxonomy-judge.v1",
-              "tali.typesafe-jev-topic.v1"
+              "tali.typesafe-jev-topic.v1",
+              "tali.typesafe-jev.v1"
             ],
             "type": "string"
           },
@@ -16410,6 +16411,7 @@
                     "tali.nemotron-safety-guard-v3.v1",
                     "tali.nemoguard-topic-control.v1",
                     "tali.typesafe-jev-topic.v1",
+                    "tali.typesafe-jev.v1",
                     "tali.openai-compatible-jailbreak.v1",
                     "tali.openai-compatible-pii.v1",
                     "tali.nemoguard-jailbreak-detect.v1",
@@ -16542,7 +16544,8 @@
               "tali.openai-compatible-pii.v1",
               "tali.qwen3guard.v1",
               "tali.taxonomy-judge.v1",
-              "tali.typesafe-jev-topic.v1"
+              "tali.typesafe-jev-topic.v1",
+              "tali.typesafe-jev.v1"
             ],
             "type": "string"
           },
@@ -16718,6 +16721,7 @@
               "tali.nemotron-safety-guard-v3.v1",
               "tali.nemoguard-topic-control.v1",
               "tali.typesafe-jev-topic.v1",
+              "tali.typesafe-jev.v1",
               "tali.openai-compatible-jailbreak.v1",
               "tali.openai-compatible-pii.v1",
               "tali.nemoguard-jailbreak-detect.v1",
@@ -21716,6 +21720,7 @@
               "tali.nemotron-safety-guard-v3.v1",
               "tali.nemoguard-topic-control.v1",
               "tali.typesafe-jev-topic.v1",
+              "tali.typesafe-jev.v1",
               "tali.openai-compatible-jailbreak.v1",
               "tali.openai-compatible-pii.v1",
               "tali.nemoguard-jailbreak-detect.v1",

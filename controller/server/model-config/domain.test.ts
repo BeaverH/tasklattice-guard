@@ -15,6 +15,20 @@ import {
 } from "./domain.js";
 
 describe("Guardrail Catalog capability binding profiles", () => {
+  it("supports independent JEV input detectors without extending output or the legacy topic-only contract", () => {
+    const profile = "tali.typesafe-jev.v1";
+    expect(profileTransports[profile]).toBe("typesafe_systemone");
+    for (const [target, contract] of [["topic_control.input", "tali.guard.topic-control.semantic.v1"], ["jailbreak.input", "tali.guard.jailbreak.v1"], ["content_safety.input", "tali.guard.content-safety.v1"]] as const) {
+      expect(assignmentTargetAcceptsModel(target, profile, "typesafe")).toBe(true);
+      expect(capabilityBindingContracts(target, profile)).toEqual([contract]);
+    }
+    for (const target of ["control_plane", "content_safety.output", "pii_semantic.input"] as const) {
+      expect(assignmentTargetAcceptsModel(target, profile, "typesafe")).toBe(false);
+    }
+    expect(providerAcceptsProfile("custom-openai-compatible", profile)).toBe(false);
+    expect(providerAcceptsProfile("openai", profile)).toBe(false);
+    expect(assignmentTargetAcceptsModel("jailbreak.input", "tali.typesafe-jev-topic.v1", "typesafe")).toBe(false);
+  });
   it("restricts Jev to native TypeSafe input Topic Control and preserves existing choices", () => {
     const profile = "tali.typesafe-jev-topic.v1";
     expect(profileTransports[profile]).toBe("typesafe_systemone");

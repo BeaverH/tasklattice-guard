@@ -1128,7 +1128,7 @@ export class ModelConfigurationService {
         z.object({ model: z.string().trim().min(1), answers: z.object({
           greeting: z.object({ type: z.literal("noul"), noul: z.number().min(0).max(1) }),
         }).strict() }).parse(await response.json());
-        return probe(true, `${model.model} returned a valid Noul response. Validate Topic Control behavior in Guardrail Catalog.`, started);
+        return probe(true, `${model.model} returned a valid Noul response. Validate each selected input detector in Guardrail Catalog.`, started);
       } catch (error) {
         return probe(false, probeError("TypeSafe model call failed", error), started);
       }
@@ -1383,7 +1383,7 @@ export function probeRequest(model: Pick<ModelRow, "model" | "profile" | "maxTok
 }
 
 function probeMessages(profile: ModelProfile, jailbreakInput: string): Array<{ role: "system" | "user"; content: string }> {
-  if (profile === "tali.typesafe-jev-topic.v1") throw new Error("Jev uses the System One API.");
+  if (profile === "tali.typesafe-jev-topic.v1" || profile === "tali.typesafe-jev.v1") throw new Error("Jev uses the System One API.");
   if (profile === jailbreakDetectProfile) throw new Error("JailbreakDetect uses the classification API, not Chat Completions.");
   if (profile === "tali.nemotron-safety-guard-v3.v1") {
     return [{ role: "user", content: [
@@ -1441,7 +1441,7 @@ function probeMessages(profile: ModelProfile, jailbreakInput: string): Array<{ r
 }
 
 export function validateProbeContent(profile: ModelProfile, content: string): void {
-  if (profile === "tali.typesafe-jev-topic.v1") throw new Error("Jev requires typed Noul answers.");
+  if (profile === "tali.typesafe-jev-topic.v1" || profile === "tali.typesafe-jev.v1") throw new Error("Jev requires typed Noul answers.");
   if (!content) throw new Error("Model returned empty content.");
   if (profile === "tali.qwen3guard.v1" && !/Safety\s*:\s*(Safe|Unsafe|Controversial)/i.test(content)) {
     throw new Error("Qwen3Guard response did not contain a Safety label.");

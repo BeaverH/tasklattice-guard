@@ -115,7 +115,7 @@ describe("Relay-style Provider registration", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
-  it("registers a pinned Jev version directly through System One without fetching the catalog", async () => {
+  it.each(["tali.typesafe-jev-topic.v1", "tali.typesafe-jev.v1"] as const)("registers a pinned Jev version with %s through System One without fetching the catalog", async profile => {
     const { service, fetcher } = setup();
     fetcher.mockImplementation(async (_url, init) => {
       const request = JSON.parse(String(init?.body));
@@ -123,7 +123,7 @@ describe("Relay-style Provider registration", () => {
     });
     const result = await service.registerProviderModels({
       connection: { ...connection, kind: "typesafe", baseUrl: "https://api.typesafe.ai/v1" },
-      models: [{ ...model("jev-1.13.0"), profile: "tali.typesafe-jev-topic.v1" }],
+      models: [{ ...model("jev-1.13.0"), profile }],
     }, "admin");
     expect(result.models[0]).toMatchObject({ model: "jev-1.13.0", connectionStatus: "validated", status: "pending" });
     expect(fetcher).toHaveBeenCalledOnce();

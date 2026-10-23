@@ -131,7 +131,7 @@ describe("Relay registration workflow", () => {
     await screen.findByText("Registration complete");
     expect(registerProviderModels).toHaveBeenCalledWith({
       connection: { name: "TypeSafe AI", kind: "typesafe", baseUrl: "https://api.typesafe.ai/v1", apiKey: "test-key" },
-      models: [expect.objectContaining({ model: "jev-1.13.0", profile: "tali.typesafe-jev-topic.v1" })],
+      models: [expect.objectContaining({ model: "jev-1.13.0", profile: "tali.typesafe-jev.v1" })],
     });
   });
 
@@ -151,9 +151,9 @@ describe("Relay registration workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Register 3 models" }));
     await screen.findByText("Registration complete");
     expect(vi.mocked(registerProviderModels).mock.calls[0]?.[0].models).toEqual([
-      expect.objectContaining({ model: "jev-1.13.0", profile: "tali.typesafe-jev-topic.v1" }),
-      expect.objectContaining({ model: "jev-custom", profile: "tali.typesafe-jev-topic.v1" }),
-      expect.objectContaining({ model: "chat", profile: "tali.typesafe-jev-topic.v1" }),
+      expect.objectContaining({ model: "jev-1.13.0", profile: "tali.typesafe-jev.v1" }),
+      expect.objectContaining({ model: "jev-custom", profile: "tali.typesafe-jev.v1" }),
+      expect.objectContaining({ model: "chat", profile: "tali.typesafe-jev.v1" }),
     ]);
   });
 
@@ -172,7 +172,7 @@ describe("Relay registration workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Register 1 model" }));
     await screen.findByText("Registration complete");
     expect(registerProviderModels).toHaveBeenCalledWith(expect.objectContaining({
-      models: [expect.objectContaining({ model: "jev-latest", profile: "tali.typesafe-jev-topic.v1" })],
+      models: [expect.objectContaining({ model: "jev-latest", profile: "tali.typesafe-jev.v1" })],
     }));
   });
 
@@ -186,7 +186,7 @@ describe("Relay registration workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Register 1 model" }));
     await screen.findByText("Registration complete");
     expect(discoverModelProvider).not.toHaveBeenCalled();
-    expect(createModelDefinition).toHaveBeenCalledWith(expect.objectContaining({ model: "jev-latest", profile: "tali.typesafe-jev-topic.v1" }));
+    expect(createModelDefinition).toHaveBeenCalledWith(expect.objectContaining({ model: "jev-latest", profile: "tali.typesafe-jev.v1" }));
   });
 
   it("retains a registered model whose call failed and retries it without registering twice", async () => {

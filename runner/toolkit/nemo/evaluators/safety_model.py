@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import replace
+import time
 
 from ...runtime.contracts import ProviderEvidence, RiskFinding
 from ...safety.mappings import ProviderCategoryMapping, provider_mapping
 from ...safety.providers import NativeSafetyAssessment, SafetyModelProvider
 from ...safety.taxonomy import taxonomy, taxonomy_for_evaluator
 from ..actions.model_call import ModelCallTracker, observe_model_call
+from ..actions.model_retry import with_connection_retry
 from .contracts import (
     EvaluationRequest,
     EvaluationResult,
@@ -205,6 +207,9 @@ class SafetyModelEvaluator:
     ) -> NativeSafetyAssessment | None:
         tracker: ModelCallTracker | None = None
         try:
+            deadline = min(request.deadline, time.monotonic() + provider.config.timeout_seconds)
+            if deadline <= time.monotonic():
+                raise TimeoutError("Evaluation deadline exceeded")
             with observe_model_call(
                 request,
                 provider=provider.config.id,
@@ -216,10 +221,10 @@ class SafetyModelEvaluator:
                 profile_ref=provider.config.profile_ref or None,
                 runtime_ref=provider.config.runtime_ref or None,
             ) as tracker:
-                result = await provider.assess(
-                    messages,
-                    scope=request.rail_type,
-                    candidate_taxonomy_ids=candidates,
+                result = await with_connection_retry(
+                    lambda: provider.assess(messages, scope=request.rail_type,
+                                            candidate_taxonomy_ids=candidates),
+                    deadline=deadline, call=tracker,
                 )
                 if result.verdict not in {"safe", "unsafe", "uncertain", "controversial"}:
                     raise ValueError("Safety Provider returned an invalid classification.")

@@ -50,20 +50,24 @@ export const modelCapabilityIds = [
 export type ModelCapabilityId = (typeof modelCapabilityIds)[number];
 
 export const controlPlaneProfileRefs = ["generic-chat"] as const;
+export const typeSafeProfileRefs = ["tali.typesafe-jev.v1", "tali.typesafe-jev-topic.v1"] as const;
+export const isTypeSafeProfile = (profile: string): profile is typeof typeSafeProfileRefs[number] => (typeSafeProfileRefs as readonly string[]).includes(profile);
 
 export const capabilityProfileRefs = {
   content_safety: [
+    "tali.typesafe-jev.v1",
     "tali.qwen3guard.v1",
     "tali.llama-guard-3.v1",
     "tali.nemotron-content-safety.v1",
     "tali.nemotron-safety-guard-v3.v1",
   ],
   jailbreak: [
+    "tali.typesafe-jev.v1",
     "tali.qwen3guard.v1",
     "tali.openai-compatible-jailbreak.v1",
     "tali.nemoguard-jailbreak-detect.v1",
   ],
-  topic_control: ["tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1", "tali.typesafe-jev-topic.v1"],
+  topic_control: ["tali.taxonomy-judge.v1", "tali.nemoguard-topic-control.v1", ...typeSafeProfileRefs],
   pii_semantic: ["tali.openai-compatible-pii.v1", "tali.qwen3guard.v1"],
   contextual_grounding: ["tali.grounding-judge.v1"],
   automated_reasoning: ["tali.automated-reasoning.v1"],
@@ -78,13 +82,15 @@ export const capabilityProfilePreference = {
     "tali.nemotron-content-safety.v1",
     "tali.llama-guard-3.v1",
     "tali.qwen3guard.v1",
+    "tali.typesafe-jev.v1",
   ],
   jailbreak: [
+    "tali.typesafe-jev.v1",
     "tali.nemoguard-jailbreak-detect.v1",
     "tali.openai-compatible-jailbreak.v1",
     "tali.qwen3guard.v1",
   ],
-  topic_control: ["tali.nemoguard-topic-control.v1", "tali.taxonomy-judge.v1", "tali.typesafe-jev-topic.v1"],
+  topic_control: ["tali.nemoguard-topic-control.v1", "tali.taxonomy-judge.v1", ...typeSafeProfileRefs],
   pii_semantic: ["tali.openai-compatible-pii.v1", "tali.qwen3guard.v1"],
   contextual_grounding: ["tali.grounding-judge.v1"],
   automated_reasoning: ["tali.automated-reasoning.v1"],
@@ -127,7 +133,8 @@ export const capabilityBindingDefinitions = [
   binding({
     id: "content_safety.output", categoryId: "content_safety", capabilityRef: "content_safety", railType: "output",
     implementationRef: "tali.runtime.safety-model.v1", contractRefs: ["tali.guard.content-safety.v1"],
-    profileRefs: capabilityProfileRefs.content_safety, profilePreference: capabilityProfilePreference.content_safety,
+    profileRefs: capabilityProfileRefs.content_safety.filter(profile => profile !== "tali.typesafe-jev.v1"),
+    profilePreference: capabilityProfilePreference.content_safety.filter(profile => profile !== "tali.typesafe-jev.v1"),
   }),
   binding({
     id: "jailbreak.input", categoryId: "jailbreak_protection", capabilityRef: "jailbreak", railType: "input",
