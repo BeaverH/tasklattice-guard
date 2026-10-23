@@ -26,9 +26,10 @@ def fixed_backoff(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def capture_model_logs(caplog):
-    # Earlier network fixtures may configure Uvicorn not to propagate to root.
-    # Capture the actual model logger independently of that process-wide state.
+    # Network fixtures set Uvicorn's parent logger to ERROR and stop root
+    # propagation. Set both capture level and handler for this test's logger.
     logger = logging.getLogger('uvicorn.error.tasklattice.model')
+    caplog.set_level(logging.WARNING, logger=logger.name)
     logger.addHandler(caplog.handler)
     try:
         yield
