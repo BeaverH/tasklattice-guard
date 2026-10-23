@@ -52,6 +52,7 @@ class EvaluationRequest:
 
 ModelCallResult = Literal[
     "success",
+    "cancelled",
     "timeout",
     "rate_limited",
     "client_error",

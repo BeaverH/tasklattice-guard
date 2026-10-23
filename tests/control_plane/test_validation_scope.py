@@ -41,8 +41,8 @@ async def test_opt_in_models_local_test_scope_preserves_publication_models():
         test_model_rules=False, test_cases=[validation_test_to_proto(c) for c in data["cases"]])
     outcome = await DefaultRunnerValidator(compiler, providers).run(request)
     assert outcome.status == "passed"
-    assert outcome.metrics["executed"] == outcome.metrics["passed"] == 608
-    assert outcome.metrics["total"] == 611
+    assert outcome.metrics["executed"] == outcome.metrics["passed"] == len(data["cases"]) - 3
+    assert outcome.metrics["total"] == len(data["cases"])
     assert outcome.metrics["skipped"] == 3
     assert model.calls == outcome.test_scope["modelInvocations"] == 0
     assert outcome.test_scope["fullArtifactLoaded"]

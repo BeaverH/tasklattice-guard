@@ -14,6 +14,8 @@ from runner.toolkit.policy_library.package import load_package
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / 'tests/fixtures'
+REPAIR_AUDIT = json.loads((FIXTURES / 'policy-rule-repairs.json').read_text())
+REPAIRS = REPAIR_AUDIT['rules']
 
 
 def signature(rule: dict) -> str:
@@ -36,6 +38,15 @@ def test_every_previous_rule_retains_its_detector_handling_risk_and_stages():
         if old.get('profile'):
             continue  # General-topic examples are audited against the optional Topic Control preset below.
         rule = next(r for r in current[old['policy']]['rules'] if r['id'] == old['rule'])
+        repair = REPAIRS.get(f"{old['policy']}/{old['rule']}")
+        if repair:
+            assert current[old['policy']]['metadata']['version'] == repair['version']
+            assert signature(rule) == repair['sha256']
+            # Keep the historical migration oracle intact. A reviewed behavior
+            # repair is versioned, never a rewrite of its original contract.
+            historical = load_package(ROOT / 'policies/history' / old['policy'] / repair['previousVersion'])
+            rule = next(r for r in historical.definition.model_dump(mode='json', exclude_none=True)['rules'] if r['id'] == old['rule'])
+            assert signature(rule) == repair['previousSha256']
         if old.get('keyword_superset'):
             proof = before['keyword_supersets'][old['sha256']]
             contract = deepcopy({k: v for k, v in rule.items() if k not in ('id', 'name', 'description', 'runtime_adapter', 'stages')})
@@ -53,13 +64,26 @@ def test_every_previous_rule_retains_its_detector_handling_risk_and_stages():
 
 def test_local_rules_have_one_canonical_owner():
     owners = {}
+    aliases = {(item['policy'], frozenset(item['rules'])): item
+               for item in REPAIR_AUDIT['samePolicyAliases']}
+    seen_aliases = set()
     for pid, policy in catalog().items():
         for rule in policy['rules']:
             if not rule['detector']['ref'].startswith(('text/', 'code/')) or policy['parameters']:
                 continue
             key = signature(rule)
-            assert key not in owners, ((pid, rule['id']), owners.get(key))
+            if key in owners:
+                owner, original = owners[key]
+                alias_key = (pid, frozenset((original, rule['id'])))
+                # Versioned repairs may converge two established IDs within
+                # one Policy. Only explicitly audited aliases are permitted.
+                assert owner == pid and alias_key in aliases, ((pid, rule['id']), owners[key])
+                alias = aliases[alias_key]
+                assert alias['version'] == policy['metadata']['version']
+                assert alias['sha256'] == key
+                seen_aliases.add(alias_key)
             owners[key] = (pid, rule['id'])
+    assert seen_aliases == aliases.keys()
 
 
 def test_default_preserves_order_actions_and_models_with_new_rules_opt_in():
@@ -94,7 +118,8 @@ def test_default_preserves_order_actions_and_models_with_new_rules_opt_in():
             for rid in binding['ruleOrder']:
                 rule = by_id[rid]
                 if phase in rule['stages']:
-                    actual.append((signature(rule), binding['ruleActions'].get(rid)))
+                    repair = REPAIRS.get(f"{binding['policyId']}/{rid}")
+                    actual.append((repair['previousSha256'] if repair else signature(rule), binding['ruleActions'].get(rid)))
         assert actual == expected
     assert draft['outputDelivery'] == 'full_buffered'
     assert [b['policyId'] for b in draft['policyBindings']][:2] == [

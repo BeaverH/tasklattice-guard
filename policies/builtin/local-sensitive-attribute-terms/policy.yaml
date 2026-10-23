@@ -6,7 +6,7 @@ metadata:
   description: Redact configured demographic and protected-attribute words, including benign mentions. This
     optional vocabulary filter does not detect discrimination, infer a person's attributes or determine legality.
   source: built_in
-  version: 4.0.0
+  version: 4.1.0
   tags:
   - namespace: protection
     value: privacy
@@ -46,3 +46,6 @@ rules:
 - rules/protected-class-information--public_assistance.yaml
 tests:
 - tests/acceptance.yaml
+- tests/regression-4.1.0.yaml
+documents:
+- docs/changes-4.1.0.md

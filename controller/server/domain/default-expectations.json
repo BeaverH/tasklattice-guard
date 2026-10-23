@@ -1,7 +1,7 @@
 {
   "local-content-safety": {
     "filter-denied-insults/accept/denied_insults": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "Default records insults findings without intervening: broad word co-occurrence also matches benign Agent instructions. Other Policies continue to enforce their own actions.",
       "expectedDecision": "allow",
       "expectedOutputContent": "Please review this request: idiot.",
@@ -13,7 +13,7 @@
       ]
     },
     "filter-denied-insults/accept/denied_insults/output": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "Default records insults findings without intervening: broad word co-occurrence also matches benign Agent instructions. Other Policies continue to enforce their own actions.",
       "expectedDecision": "allow",
       "expectedOutputContent": "Please review this request: idiot.",
@@ -25,7 +25,7 @@
       ]
     },
     "filter-harmful-violence/accept/harmful_violence": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",
@@ -37,19 +37,7 @@
       ]
     },
     "filter-harmful-self-harm/accept/harmful_self_harm": {
-      "sourcePolicyVersion": "4.0.0",
-      "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
-      "expectedDecision": "block",
-      "expectedOutputContent": "",
-      "expectedMatches": [
-        {
-          "policyId": "local-content-safety",
-          "ruleId": "category/harm_toxic_abuse"
-        }
-      ]
-    },
-    "filter-harmful-child-safety/accept/harmful_child_safety": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",
@@ -61,7 +49,7 @@
       ]
     },
     "filter-bias-sexual-orientation/accept/bias_sexual_orientation": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",
@@ -71,6 +59,78 @@
           "ruleId": "category/harm_toxic_abuse"
         }
       ]
+    },
+    "regression/benign-context-10/input": {
+      "sourcePolicyVersion": "4.1.0",
+      "expectedDecision": "transform",
+      "expectedOutputContent": "Review a website with inclusive attire for [gender_sexual_orientation_REDACTED].",
+      "expectedMatches": [
+        {
+          "policyId": "local-sensitive-attribute-terms",
+          "ruleId": "pattern/gender_sexual_orientation"
+        }
+      ],
+      "reason": "Local content safety permits this benign reference. Default separately applies its configured sensitive-attribute vocabulary redaction; preserve that explicit transformation rather than treating the mention as discrimination."
+    },
+    "regression/benign-context-10/output": {
+      "sourcePolicyVersion": "4.1.0",
+      "expectedDecision": "transform",
+      "expectedOutputContent": "Review a website with inclusive attire for [gender_sexual_orientation_REDACTED].",
+      "expectedMatches": [
+        {
+          "policyId": "local-sensitive-attribute-terms",
+          "ruleId": "pattern/gender_sexual_orientation"
+        }
+      ],
+      "reason": "Local content safety permits this benign reference. Default separately applies its configured sensitive-attribute vocabulary redaction; preserve that explicit transformation rather than treating the mention as discrimination."
+    },
+    "regression/benign-context-11/input": {
+      "sourcePolicyVersion": "4.1.0",
+      "expectedDecision": "transform",
+      "expectedOutputContent": "Write about a young [gender_sexual_orientation_REDACTED] learning to paint.",
+      "expectedMatches": [
+        {
+          "policyId": "local-sensitive-attribute-terms",
+          "ruleId": "pattern/gender_sexual_orientation"
+        }
+      ],
+      "reason": "Local content safety permits this benign reference. Default separately applies its configured sensitive-attribute vocabulary redaction; preserve that explicit transformation rather than treating the mention as discrimination."
+    },
+    "regression/benign-context-11/output": {
+      "sourcePolicyVersion": "4.1.0",
+      "expectedDecision": "transform",
+      "expectedOutputContent": "Write about a young [gender_sexual_orientation_REDACTED] learning to paint.",
+      "expectedMatches": [
+        {
+          "policyId": "local-sensitive-attribute-terms",
+          "ruleId": "pattern/gender_sexual_orientation"
+        }
+      ],
+      "reason": "Local content safety permits this benign reference. Default separately applies its configured sensitive-attribute vocabulary redaction; preserve that explicit transformation rather than treating the mention as discrimination."
+    },
+    "regression/benign-context-13/input": {
+      "sourcePolicyVersion": "4.1.0",
+      "expectedDecision": "transform",
+      "expectedOutputContent": "A [gender_sexual_orientation_REDACTED] uses an inferior camera to photograph a bird.",
+      "expectedMatches": [
+        {
+          "policyId": "local-sensitive-attribute-terms",
+          "ruleId": "pattern/gender_sexual_orientation"
+        }
+      ],
+      "reason": "Local content safety permits this benign reference. Default separately applies its configured sensitive-attribute vocabulary redaction; preserve that explicit transformation rather than treating the mention as discrimination."
+    },
+    "regression/benign-context-13/output": {
+      "sourcePolicyVersion": "4.1.0",
+      "expectedDecision": "transform",
+      "expectedOutputContent": "A [gender_sexual_orientation_REDACTED] uses an inferior camera to photograph a bird.",
+      "expectedMatches": [
+        {
+          "policyId": "local-sensitive-attribute-terms",
+          "ruleId": "pattern/gender_sexual_orientation"
+        }
+      ],
+      "reason": "Local content safety permits this benign reference. Default separately applies its configured sensitive-attribute vocabulary redaction; preserve that explicit transformation rather than treating the mention as discrimination."
     }
   },
   "local-injection-protection": {
@@ -1321,7 +1381,7 @@
   },
   "local-sensitive-attribute-terms": {
     "accept/religion/input": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",
@@ -1333,7 +1393,7 @@
       ]
     },
     "accept/religion/output": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",
@@ -1345,7 +1405,7 @@
       ]
     },
     "pattern-matching/accept/religion": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",
@@ -1357,7 +1417,7 @@
       ]
     },
     "pattern-matching/accept/religion/output": {
-      "sourcePolicyVersion": "4.0.0",
+      "sourcePolicyVersion": "4.1.0",
       "reason": "The earlier configured Policy rejects and terminates the chain. Assert its Policy/Rule; later Rules must not execute.",
       "expectedDecision": "block",
       "expectedOutputContent": "",

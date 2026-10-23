@@ -44,7 +44,7 @@ describe("Policy catalog", () => {
     }
     for (const id of ["local-payment-data", "local-contact-data", "local-passports", "local-government-identifiers"]) {
       const policy = catalog.get(id)!;
-      expect(policy.version).toBe("4.0.0");
+      expect(policy.version).toBe(id === "local-contact-data" ? "4.3.0" : "4.0.0");
       expect(policy.published_versions?.map(version => version.version)).toContain("2.0.0");
     }
   });

@@ -286,6 +286,9 @@ def validate_detector_parameters(rule: RuleDefinition, detector: dict, params: d
     if not isinstance(options, dict):
         raise ValueError("Detector options must be an object")
     kind = detector["adapter"]["detector"]
+    if kind == "regex":
+        from ..policy_runtime.detectors import validate_regex_options
+        validate_regex_options(params.get("expression", ""), options)
     if kind == "conditions":
         validate_conditions(options)
     elif kind == "keyword" and options:

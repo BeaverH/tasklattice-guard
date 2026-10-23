@@ -83,3 +83,28 @@ describe("model Policy parameter instantiation", () => {
     expect(() => compiler.compile(definition)).toThrow("single number parameter");
   });
 });
+
+describe("scoped Jailbreak uncertainty handling", () => {
+  function jailbreak() {
+    const definition = compiler.shipped("builtin-jailbreak")!;
+    definition.metadata.id = "explicit-jailbreak-enforcement";
+    definition.parameters = [parameter("on_unknown", "text", false, "block")];
+    definition.rules[0]!.detector.parameters.on_unknown = "{{on_unknown}}";
+    return definition;
+  }
+  it("pins default block or explicit allow in each Guardrail without changing matched actions", () => {
+    const definition = jailbreak();
+    const strict = plan(definition, {}), observe = plan(definition, { on_unknown: "allow" });
+    expect(stepValues(strict)[0]).toMatchObject({ on_unknown: "block" });
+    expect(stepValues(observe)[0]).toMatchObject({ on_unknown: "allow" });
+    expect((observe.steps as Array<{on_unsafe:string}>)[0]!.on_unsafe).toBe("block");
+    expect(() => plan(definition, { on_unknown: "ignore" })).toThrow("on_unknown must be allow or block");
+    expect(stepValues(plan(compiler.shipped("builtin-jailbreak")!, {}))[0]!.on_unknown).toBeUndefined();
+  });
+  it("rejects invalid literals and unsupported detector scopes", () => {
+    const definition = jailbreak();definition.rules[0]!.detector.parameters.on_unknown = "ignore";
+    expect(() => compiler.compile(definition)).toThrow("on_unknown must be allow or block");
+    const other = compiler.shipped("builtin-content-safety")!;other.rules[0]!.detector.parameters.on_unknown = "allow";
+    expect(() => compiler.compile(other)).toThrow("supported only by the jailbreak classifier");
+  });
+});

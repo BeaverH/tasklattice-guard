@@ -59,18 +59,23 @@ def default_local_baseline() -> dict:
             plan: planToWire(plan), testCases: cases.map(validationTestToWire),
         }});
         const previous = JSON.parse(fs.readFileSync('../tests/fixtures/default-capability-consolidation.json','utf8'));
+        const historicalPolicies = policies.map(p => ['local-content-safety', 'local-sensitive-attribute-terms', 'local-credentials', 'local-contact-data'].includes(p.id)
+          ? p.published_versions.find(v => v.version === '4.0.0') : p);
+        const historicalDraft = defaultGuardrailDraft(historicalPolicies);
+        const historicalPlan = buildGuardrailPlan({guardrailId: DEFAULT_GUARDRAIL_ID,
+          guardrailVersion: '20260904-010000.001Z', draft: historicalDraft, policies: historicalPolicies});
         const contracts = JSON.parse(fs.readFileSync('../tests/fixtures/policy-capability-contracts.json','utf8')).rules;
         const mapped = (pid,rid) => contracts.find(r=>r.source_policy===pid&&r.source_rule===rid);
         const frozenCases = previous.cases.filter(c=>!['builtin-jailbreak','builtin-content-safety'].includes(c.sourcePolicyId)).map(c=>{
           const first=contracts.find(r=>r.source_policy===c.sourcePolicyId);
           const remap=m=>({policyId:mapped(m.policyId,m.ruleId).policy,ruleId:mapped(m.policyId,m.ruleId).rule});
-          const version=policies.find(p=>p.id===first.policy).version;
+          const version=historicalPolicies.find(p=>p.id===first.policy).version;
           return {...c,policyId:first.policy,sourcePolicyId:first.policy,sourcePolicyVersion:version,
             coveredRuleIds:c.coveredRuleIds.map(r=>mapped(c.sourcePolicyId,r).rule),
             ...(c.expectationOverride?{expectationOverride:{...c.expectationOverride,sourcePolicyVersion:version,expectedMatches:c.expectationOverride.expectedMatches.map(remap)}}:{})};
         });
         const frozenBinary=connect.responseSerialize({validationRequest:{runId:'before-consolidation',guardrailId:DEFAULT_GUARDRAIL_ID,
-          candidateVersion:"20260904-010000.001Z",sourceDraftRevision:1,runtimeProfile:'auto',plan:planToWire(plan),testCases:frozenCases.map(validationTestToWire)}});
+          candidateVersion:"20260904-010000.001Z",sourceDraftRevision:1,runtimeProfile:'auto',plan:planToWire(historicalPlan),testCases:frozenCases.map(validationTestToWire)}});
         console.log(JSON.stringify({plan, cases, wireRequest: binary.toString('base64'), frozenWireRequest:frozenBinary.toString('base64')}));
     """
     result = subprocess.run(
@@ -177,7 +182,7 @@ async def test_default_local_components_compile_and_run_without_models(
             assert decision.usage.model_invocations == 0
             assert [step.policy_id for step in decision.trace if step.kind == "action" and step.policy_id is not None] == [
                 binding["policy_id"] for binding in default_local_plan["policy_bindings"] if phase in binding["enabled_rails"]
-            ]
+            ] + ["local-content-safety"]  # Its Allow observation is a separate final stage.
     finally:
         await previews.shutdown()
 
@@ -258,8 +263,12 @@ async def test_default_records_insults_and_still_enforces_later_policies(default
             )
             assert result.decision == expected, result.reason
             observed = [f for f in result.findings if f.policy_id == "local-content-safety"]
-            assert observed and all(f.recommended_action == "allow" for f in observed)
-            assert observed[0].rule_id == "category/denied_insults"
+            if expected == "block":
+                # Block short-circuits before the final Allow observation stage.
+                assert not observed
+            else:
+                assert observed and all(f.recommended_action == "allow" for f in observed)
+                assert observed[0].rule_id == "category/denied_insults"
             if expected == "allow":
                 assert result.action == "allow" and result.texts == ()
             elif expected == "block":
@@ -282,7 +291,7 @@ async def test_default_local_components_pass_reviewed_composition_cases(default_
     ).validate(envelope.validation_request)
     conflicts = [item for item in results if not item["passed"]]
     assert status == "passed", conflicts
-    assert metrics["total"] == len(cases) == 608
+    assert metrics["total"] == len(cases) == 748
     assert metrics.get("skipped", 0) == 0
     assert metrics["passed"] == metrics["total"]
     assert not conflicts

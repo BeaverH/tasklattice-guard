@@ -47,14 +47,17 @@ describe("Default Guardrail capability composition", () => {
     expect(policies).toEqual(original);
   });
 
-  it("preserves every pre-change local Rule, order, action, parameter and test expectation", () => {
-    const before = JSON.parse(readFileSync(resolve("../tests/fixtures/default-local-contract.json"), "utf8"));
-    const draft = defaultGuardrailDraft(policies);
-    const cases = applyValidationOverrides(generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, policies), draft);
+  it("pins the reviewed 4.1.0 policy repairs and composition expectations", () => {
+    const before = JSON.parse(readFileSync(resolve("../tests/fixtures/default-policy-repair-4.1.0.json"), "utf8"));
+    // This fixture predates the credential format repair; preserve its frozen 4.0.0 identity.
+    const historical = policies.map(p => ["local-credentials", "local-contact-data"].includes(p.id)
+      ? p.published_versions!.find(v => v.version === "4.0.0")! : p);
+    const draft = defaultGuardrailDraft(historical);
+    const cases = applyValidationOverrides(generatedTestCases(DEFAULT_GUARDRAIL_ID, draft, historical), draft);
     const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
     expect(hash(draft)).toBe(before.draftSha256);
     expect(hash(cases)).toBe(before.casesSha256);
-    expect(cases).toHaveLength(608);
+    expect(cases).toHaveLength(678);
     for (const id of ["builtin-jailbreak", "builtin-content-safety"]) {
       expect(policies.find(policy => policy.id === id)?.protection.execution).toBe("model");
     }

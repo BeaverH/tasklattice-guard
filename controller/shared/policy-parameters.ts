@@ -17,6 +17,9 @@ export function modelParameterFields(rule: DefinitionRule): ModelParameterField[
     { key: "allowed_topics", name: "allowed_topics", kind: "textarea", default: null, required: false },
     { key: "restricted_topics", name: "denied_topics", kind: "textarea", default: null, required: false },
   ];
+  if (rule.detector.ref === "model/classifier" && rule.detector.parameters.profile === "jailbreak-classification") return [
+    { key: "on_unknown", name: "on_unknown", kind: "text", default: "block", required: false },
+  ];
   if (rule.detector.ref === "model/grounding") return ["grounding_threshold", "relevance_threshold"].map(key => ({ key, name: key, kind: "number", default: "0.7", required: true }));
   if (rule.detector.ref === "service/formal-verification") return [
     { key: "policy_id", name: "formal_policy_id", kind: "text", default: null, required: true },
@@ -34,6 +37,11 @@ export function modelParameterDeclarationIssues(definition: PolicyDefinition): s
   for (const rule of definition.rules) {
     if (!rule.detector.ref.startsWith("model/") && !rule.detector.ref.startsWith("service/")) continue;
     const fields = modelParameterFields(rule);
+    if (rule.detector.parameters.on_unknown !== undefined) {
+      const value = rule.detector.parameters.on_unknown;
+      if (!fields.some(field => field.key === "on_unknown")) issues.push(`Rule ${rule.name || rule.id}: on_unknown is supported only by the jailbreak classifier.`);
+      else if (!parameterReferences(value).length && !["allow", "block"].includes(String(value))) issues.push(`Rule ${rule.name || rule.id}: on_unknown must be allow or block.`);
+    }
     for (const [key, value] of Object.entries(rule.detector.parameters)) {
       if (typeof value !== "string") continue;
       const refs = parameterReferences(value);
@@ -94,6 +102,9 @@ export function policyBindingParameterIssues(definition: PolicyDefinition, value
     for (const field of modelParameterFields(rule)) {
       const value = params[field.key] ?? field.default;
       if (field.kind === "number" && (value == null || !String(value).trim() || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 1)) issues.push(`Rule ${rule.name || rule.id}: ${field.key} must be between 0 and 1.`);
+    }
+    if (modelParameterFields(rule).some(field => field.key === "on_unknown") && !["allow", "block"].includes(String(params.on_unknown ?? "block"))) {
+      issues.push(`Rule ${rule.name || rule.id}: on_unknown must be allow or block.`);
     }
     if (rule.detector.parameters.profile === "topic-classification") {
       const mode = params.topic_mode ?? "permissive";

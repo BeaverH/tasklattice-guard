@@ -18,8 +18,9 @@ Jailbreak profile; the baseline does not hard-code a vendor or credentials. The 
 credentials, payment data, tax/health/government identifiers, contact and
 network data, harmful phrases, and prompt/code injection. Selected Rules retain their matching behavior,
 actions, Rail scope, and inherited test cases; Default owns their composition
-order and reviewed test expectations. Local indirect-injection and memory-poisoning
-checks run first; `builtin-jailbreak` and `builtin-content-safety` follow on Input.
+order and reviewed test expectations. On newly compiled versions, local Block
+checks run first; independent `builtin-jailbreak` and `builtin-content-safety`
+checks can run together on Input.
 Content safety also runs on Output. Models see the
 original content before local redaction. A blocking verdict stops the chain.
 Missing required bindings reject runtime preparation; an unavailable or malformed
@@ -109,14 +110,22 @@ Policy does not currently hot-update existing Guardrails.
 
 ## Policy and Rule execution order
 
-Guardrails execute Policy bindings in list order. A binding's optional `ruleOrder`
-lists stable Rule IDs to execute first; unlisted Rules retain their pinned template
-order afterward. Duplicate/unknown IDs are rejected. `enabledRuleIds` controls
-membership independently. Redaction changes the text seen by subsequent Rules;
-rejection stops subsequent execution. Rule action overrides take precedence over
-Policy overrides, then the template action. Compilation preserves that order
-across local, model-backed, and programmable Policies instead of sorting actions
-by severity or running independent copies of the original text in parallel.
+Newly compiled Guardrails prioritize effective Block actions, then serial
+Transform actions, then Allow observations. Effective handling resolves Rule
+overrides before Policy overrides and template actions. Mixed-action local
+Policies are split into execution groups without changing their resource identity.
+
+A binding's optional `ruleOrder` remains the stable tie-breaker within each
+action group; unlisted Rules retain template order. `enabledRuleIds` controls
+membership independently. Independent read-only model checks share the same
+input and can run concurrently. Any Block stops later execution and cancels
+pending siblings. Allow never exempts a request from another required check.
+Transform checks run serially, each consuming the preceding output.
+
+Trigger prerequisites remain ordered, and arbitrary authored Colang flows form
+a conservative barrier. Existing published artifacts retain their original
+execution order until a new version is published. See
+[composition semantics, PII conflicts and validation limits](policy-composition.md).
 
 ## Validation and composition expectations
 

@@ -179,7 +179,9 @@ def _default_plan() -> dict[str, object]:
       import {defaultGuardrailDraft} from './server/domain/defaults.ts';
       import {buildGuardrailPlan} from './server/domain/guardrail-plan.ts';
       import {PolicyCatalog} from './server/policy-catalog/catalog.ts';
-      const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list();
+      const policies = PolicyCatalog.load('../runner/toolkit/policy_library/assets').list().map(policy =>
+        ['local-content-safety', 'local-sensitive-attribute-terms', 'local-credentials'].includes(policy.id)
+          ? policy.published_versions.find(version => version.version === '4.0.0') : policy);
       const fullDraft = defaultGuardrailDraft(policies);
       const draft = {...fullDraft, policyBindings: fullDraft.policyBindings.filter(binding =>
         policies.find(policy => policy.id === binding.policyId).protection.execution === 'local')};

@@ -4,6 +4,7 @@ import type { ProgrammablePolicySnapshot } from "../policy-studio/model.js";
 import { flowRuleId } from "../policy-studio/model.js";
 import { PHRASE_PARAMETER, PHRASE_POLICY_ID, parsePhraseEntries } from "../../shared/phrase-policy.js";
 import { materializePolicyRules } from "./policy-rules.js";
+import { scheduleChecks } from "./execution-plan.js";
 import { frozenBuiltInDefinition, planPolicyVersion } from "./policy-node.js";
 import { isSplitTopicPolicy, TOPIC_ALLOW_RULE, TOPIC_DENY_RULE, topicMissingParameters, topicPolicyValues } from "../../shared/topic-policy.js";
 import {
@@ -212,7 +213,7 @@ export function buildGuardrailPlan(input: {
           const authoredRule = catalogPolicy.definition.rules.find(r => r.id === rule.id)!;
           const params = resolveModelRuleParameters(catalogPolicy.definition, authoredRule, binding.parameterValues);
           const authoredParameters: Array<[string, string]> = [["declarative_rule", "true"], ["rule_id", rule.id]];
-          for (const key of ["topic_mode", "allowed_topics", "restricted_topics", "grounding_threshold", "relevance_threshold", "policy_snapshot_id"]) {
+          for (const key of ["topic_mode", "allowed_topics", "restricted_topics", "grounding_threshold", "relevance_threshold", "policy_snapshot_id", "on_unknown"]) {
             if (params[key] !== undefined) authoredParameters.push([key, String(params[key])]);
           }
           if (rule.detector.ref === "service/formal-verification" && params.policy_id && params.policy_version) {
@@ -259,7 +260,20 @@ export function buildGuardrailPlan(input: {
   const steps: PlanStep[] = [];
   const modules: Array<Record<string, unknown>> = [];
   const previousModule: Partial<Record<"input" | "output", string>> = {};
-  for (const { capability: definition, binding, policy, authoredRule, authoredParameters } of resolved) {
+  const hasCustomFlows = programmable.some(({ policy }) => policy.source !== "built_in");
+  const executable = resolved.flatMap(item => {
+    // A custom flow is an ordering barrier for the whole plan, including
+    // mixed-action Rules inside an older catalog Policy.
+    if (hasCustomFlows || !item.policy || item.authoredRule) return [{ ...item, actionGroup: "" }];
+    const actions = new Map<EnforcementAction, string[]>();
+    for (const rule of item.policy.rules.filter(r => item.binding.enabledRuleIds.includes(r.id))) {
+      const action = item.binding.ruleActions[rule.id] ?? item.binding.action ?? rule.effect as EnforcementAction;
+      actions.set(action, [...actions.get(action) ?? [], rule.id]);
+    }
+    return [...actions].map(([action, ids]) => ({ ...item, actionGroup: actions.size > 1 ? `:${action}` : "",
+      binding: { ...item.binding, action, enabledRuleIds: ids, ruleOrder: (item.binding.ruleOrder ?? []).filter(id => ids.includes(id)) } }));
+  });
+  for (const { capability: definition, binding, policy, authoredRule, authoredParameters, actionGroup } of executable) {
     // Never coalesce separate Policies by capability: a later Policy must see
     // the content produced by every earlier Policy, even across module types.
     const declarative = policy ? [{ binding, policy }] : [];
@@ -282,7 +296,7 @@ export function buildGuardrailPlan(input: {
       ["policy_version", binding.policyVersion],
       ...(authoredParameters ?? parametersFor(definition.capability, binding, draft, declarative)),
     ];
-    const suffix = authoredRule ? `:${authoredRule.id}` : "";
+    const suffix = authoredRule ? `:${authoredRule.id}` : actionGroup;
     const prefix = `${definition.capability}:${binding.policyId}${suffix}`;
     const policySteps: PlanStep[] = [];
     const values = topicPolicyValues(binding.parameterValues);
@@ -335,6 +349,7 @@ export function buildGuardrailPlan(input: {
       previousModule[phase] = id;
     }
   }
+  scheduleChecks(steps, modules, hasCustomFlows, draft.outputDelivery === "full_buffered");
   const reasoningPolicies = bindings.flatMap((binding) => binding.reasoningPolicy ? [{
     id: `automated-reasoning:${binding.reasoningPolicy.policyId}:${binding.reasoningPolicy.policyVersion}`,
     policy_id: binding.reasoningPolicy.policyId,
@@ -344,7 +359,7 @@ export function buildGuardrailPlan(input: {
   return {
     guardrail_id: input.guardrailId,
     guardrail_version: input.guardrailVersion,
-    compiler_version: "tasklattice-controller-plan-v14-policy-rule-boundaries",
+    compiler_version: "tasklattice-controller-plan-v15-staged-checks",
     topic_control_mode: draft.topicControlMode ?? "strict",
     safety_level: draft.safetyLevel,
     output_delivery: draft.outputDelivery,
