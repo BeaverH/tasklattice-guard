@@ -202,6 +202,7 @@ def _phrase_plan() -> dict[str, object]:
       const phrase_entries = JSON.stringify([
         {id:'mask', phrase:'internal-name', action:'transform', replacement:'public-name'},
         {id:'block-original', phrase:'internal-name', action:'block'},
+        {id:'mask-alias', phrase:'internal-alias', action:'transform', replacement:'public-name'},
         {id:'block', phrase:'confidential', action:'block'},
         {id:'mask-zh', phrase:'内部代号', action:'transform', replacement:'公开名称'},
       ]);
