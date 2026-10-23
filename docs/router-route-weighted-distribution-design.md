@@ -539,3 +539,33 @@ The focused tests are [shared routing](../controller/shared/traffic-routing.test
 - Keep Router creation atomicity separate from idempotency. A creation retry contract remains unimplemented.
 
 These are explicit boundaries of the calibrated design. They do not require changing implementation as part of this documentation update.
+
+### Large plans in shared call contexts
+
+Each Redis context pins the full execution plan, so traffic rate × 300-second
+TTL × serialized plan size can exceed Redis memory even at low concurrency.
+`GUARD_RUNNER_CALL_CONTEXT_COMPRESS_PLANS=true` losslessly compresses large plans
+inside the existing JSON context envelope. The atomic NX claim, expiry,
+outcome escalation and first-completion semantics remain unchanged. It does
+not shorten TTL, evict active calls, bypass checks or alter model bindings.
+
+Roll out compression-capable readers to every Runner sharing the Redis store
+before enabling compressed writes. The flag defaults to false for mixed-version
+rollouts; capable readers accept both formats regardless of the flag. To roll
+back to an older binary, first disable compressed writes everywhere and wait at
+least one full context TTL. Do not delete active pins to accelerate rollback.
+Invalid, unsupported or oversized compressed payloads fail closed; they do not
+fall back to a newer route. Compressed plans have a 64 MiB decode limit; larger
+plans remain in the legacy representation at write time.
+
+### Capacity fallback exception
+
+The Helm deployment enables explicit Redis capacity fallback while retaining a
+300-second TTL. On allocation rejection, current-content checks continue and
+shared state updates are skipped. Existing pins are read where available. A
+missing context may be independently routed only while Redis reports exhausted
+memory. That request exposes `context:redis-capacity` in trace/evidence; it does
+not claim cross-call version consistency or historical context completeness.
+Normal expiry, connection failures and invalid stored plans retain their prior
+error behavior. See [Redis capacity operations](../charts/tali-guard/README.md#redis-capacity-and-context-degradation)
+for memory limits, rollout and alerts.

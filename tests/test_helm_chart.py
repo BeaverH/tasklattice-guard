@@ -20,6 +20,30 @@ REQUIRED = (
 )
 
 
+def test_context_capacity_defaults_are_persisted_in_all_runner_pools():
+    docs = render_dev("--set", "runner.pools[0].name=batch", "--set", "runner.pools[0].replicaCount=1")
+    redis = next(d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"].endswith("-redis"))
+    container = redis["spec"]["template"]["spec"]["containers"][0]
+    assert container["args"][-4:] == ["--maxmemory", "4gb", "--maxmemory-policy", "noeviction"]
+    assert container["resources"]["limits"]["memory"] == "6Gi"
+    runners = [d for d in docs if d["kind"] == "StatefulSet" and "runner" in d["metadata"]["name"]]
+    assert len(runners) == 2
+    for runner in runners:
+        env = {v["name"]: v.get("value") for v in runner["spec"]["template"]["spec"]["containers"][0]["env"]}
+        assert env["GUARD_RUNNER_CALL_CONTEXT_TTL_SECONDS"] == "300"
+        assert env["GUARD_RUNNER_CALL_CONTEXT_COMPRESS_PLANS"] == "true"
+        assert env["GUARD_RUNNER_CALL_CONTEXT_CAPACITY_FALLBACK"] == "true"
+
+
+def test_context_capacity_alerts_are_release_scoped():
+    docs = render()
+    rule = next(d for d in docs if d["kind"] == "PrometheusRule")
+    group = next(g for g in rule["spec"]["groups"] if g["name"] == "tasklattice-guard.context-capacity")
+    assert len(group["rules"]) == 5
+    assert all('namespace="default"' in r["expr"] and 'app_kubernetes_io_instance="contract"' in r["expr"] for r in group["rules"])
+    assert next(r for r in group["rules"] if r["alert"] == "TaskLatticeGuardContextCapacityDegraded")["for"] == "0m"
+
+
 def render(*values: str) -> list[dict]:
     output = subprocess.run(
         ["helm", "template", "contract", str(CHART), *REQUIRED, *values],

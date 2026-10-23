@@ -685,3 +685,69 @@ fields through `--reuse-values`. Removed chart options are ignored and no longer
 configure the application. Rebuild and publish the Controller image before using
 this chart; its initialization protocol and mounted-account support must match
 the templates.
+
+## Redis capacity and context degradation
+
+Bundled Redis now starts with `redis.maxmemory: 4gb` (4 GiB),
+`redis.maxmemoryPolicy: noeviction`, and a 6 GiB container memory limit. Redis
+memory accounting is not identical to container RSS; the remaining headroom
+covers allocator overhead and transient operations. A memory limit reduces OOM
+risk but is not a guarantee against an unusually large allocation.
+
+All Runner pools receive these settings:
+
+```yaml
+runner:
+  callContext:
+    ttlSeconds: 300
+    compressPlans: true
+    capacityFallback: true
+redis:
+  maxmemory: 4gb
+  maxmemoryPolicy: noeviction
+  resources:
+    limits:
+      memory: 6Gi
+```
+
+An external Redis must be configured separately with an appropriate memory
+budget and `noeviction`; Helm does not change managed Redis configuration.
+Compression requires every shared-context reader to support the new encoding.
+For an upgrade from an older binary, deploy compatible readers with
+`compressPlans: false` first, then enable writes. TTL is not refreshed by
+outcome/completion updates.
+
+With capacity fallback enabled, Redis allocation errors stop context writes and
+history buffering for the current request. Existing readable context remains
+usable. If context is missing and Redis reports exhausted memory, the request
+is checked independently against the currently published route and current
+supplied content. This includes correlated output: it can no longer claim the
+original input's version pin, history, cumulative outcome, or completion
+idempotency. No local unbounded replacement cache is created. Detection is not
+bypassed; connection/authentication errors, corrupt plans, and normal context
+expiration still fail normally. A missing context after capacity recovers is
+not automatically treated as a capacity failure.
+
+Responses requested with `x-guard-evidence: evaluations-v1` include
+`context.status: degraded`, `reason: redis_capacity`, and `historyAvailable`.
+Controller traces contain `context:redis-capacity`. Debug body-correlation
+failures preserve the current audit event and set `callCaptureIncomplete` and
+`callCaptureUnavailableReason: redis_capacity`.
+
+The authenticated Runner `/metrics` endpoint exposes shared Redis used/max
+memory and availability, plus `guard_runner_context_degraded_total` by operation.
+Redis credentials need `INFO memory` permission; no keys or contents enter these
+metrics. The existing ServiceMonitor scrapes them. Helm's PrometheusRule adds:
+
+- memory above 80% for 5 minutes (warning);
+- memory above 95% for 1 minute (critical);
+- context allocation/history degradation within 5 minutes (warning);
+- capacity metrics unavailable for 1 minute (critical);
+- no configured memory limit for 5 minutes (warning).
+
+Enable `observability.serviceMonitor.enabled` and
+`observability.prometheusRule.enabled` when Prometheus Operator is installed.
+The self-contained development preset keeps them disabled. Alertmanager
+notification destinations remain an environment-level configuration. Recovery
+requires both memory headroom and successful new context writes; reducing TTL
+or evicting active assignments is not a recovery procedure.

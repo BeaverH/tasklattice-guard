@@ -214,6 +214,9 @@ def register_scan(api, *, max_body_bytes: int, timeout_seconds: float) -> None:
                             "scanOutcome": result.result.outcome if result is not None else None})
                 response = JSONResponse(result.model_dump(mode="json"), headers=response_headers)
                 api._path_response_headers(response, decision)
+                if request.headers.get("x-guard-evidence") == "evaluations-v1":
+                    from .evaluation_evidence import RESPONSE_HEADER, evaluation_evidence
+                    response.headers[RESPONSE_HEADER] = evaluation_evidence(decision)
                 return response
         except Exception as error:
             if isinstance(error, ScanFailure):

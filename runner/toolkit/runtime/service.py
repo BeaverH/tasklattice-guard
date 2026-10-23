@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -24,6 +25,7 @@ from .contracts import (
     PlanResolution,
     PlanResolver,
     RuntimeCoverage,
+    RuntimeTraceStep,
 )
 
 
@@ -42,6 +44,7 @@ class GuardrailRuntimeService:
         self.routing_event_sink = None
 
     def _resolve_call(self, request, *, require_existing=False, allow_new_output=False):
+        self._begin_context_request()
         stored = self._contexts.get(request.call_id)
         composed = getattr(self._resolver, "composed_endpoint", lambda _: False)(request.context.endpoint_id)
         if stored is not None:
@@ -49,7 +52,7 @@ class GuardrailRuntimeService:
                 from runner.routing import RoutingError
                 raise RoutingError("call_endpoint_mismatch")
             return stored.resolution, stored
-        if require_existing or (composed and request.phase == "output" and request.call_id and not allow_new_output):
+        if not self._context_degraded() and (require_existing or (composed and request.phase == "output" and request.call_id and not allow_new_output)):
             from runner.routing import RoutingError
             raise RoutingError("call_context_expired: correlated output cannot be reassigned")
         resolution = self._resolver.resolve(replace(request.context, call_id=request.call_id))
@@ -59,7 +62,23 @@ class GuardrailRuntimeService:
         if stored.resolution.endpoint_id != request.context.endpoint_id:
             from runner.routing import RoutingError
             raise RoutingError("call_endpoint_mismatch")
-        return stored.resolution, stored
+        return self._context_evidence(stored.resolution), stored
+
+    def _begin_context_request(self):
+        getattr(self._contexts, "begin_request", lambda: None)()
+
+    def _context_degraded(self):
+        return getattr(self._contexts, "degraded_reason", lambda: None)()
+
+    def _context_evidence(self, item):
+        if not self._context_degraded() or any(s.id == "context:redis-capacity" for s in item.trace):
+            return item
+        return replace(item, trace=(*item.trace, RuntimeTraceStep(
+            id="context:redis-capacity", kind="context", name="Context capacity fallback", status="degraded",
+            detail="Redis capacity exhausted. Current-content detection continues without shared context writes; history is used only when already available.",
+            evidence=json.dumps({"reason": "redis_capacity", "updatesPersisted": False,
+                "historyAvailable": getattr(self._contexts, "context_history_available", lambda: False)()}),
+        )))
 
     async def publish_assignment(self, resolution, call_id):
         if resolution.route_assignment and self.routing_event_sink:
@@ -108,7 +127,7 @@ class GuardrailRuntimeService:
         outcome = self._contexts.record_outcome(request.call_id, outcome)
         if outcome in {"error", "block"} or (request.phase == "output" and request.context.value("field", "routing.stream") != "true"):
             await self.complete_call(resolution, request.call_id, outcome)
-        return decision
+        return self._context_evidence(decision)
 
     async def stream_output(self, request, source, *, ready, emit, observe, allow_new_output=False):
         """Pin once for the lifetime of one connection; NeMo owns incremental checks."""
@@ -144,7 +163,7 @@ class GuardrailRuntimeService:
             self._contexts.record_outcome(request.call_id,
                 "error" if decision.usage and decision.usage.fail_closed
                 else "intervene" if decision.decision == "transform" else decision.decision)
-            await observe(decision)
+            await observe(self._context_evidence(decision))
 
         async def prepared(contract):
             await ready(contract, resolution)
@@ -219,6 +238,7 @@ class GuardrailRuntimeService:
         *,
         on_resolved: Callable[[PlanResolution], None] | None = None,
     ) -> ProtectionDecision:
+        self._begin_context_request()
         stored = self._contexts.get(request.call_id)
         resolver = getattr(self._resolver, "resolve_guardrail", None)
         if resolver is None:
@@ -234,7 +254,7 @@ class GuardrailRuntimeService:
             resolution = resolver(guardrail_id, version)
         if on_resolved is not None:
             on_resolved(resolution)
-        return await self._evaluate_resolved(request, resolution, stored)
+        return self._context_evidence(await self._evaluate_resolved(request, resolution, stored))
 
     async def _evaluate_resolved(self, request, resolution, stored) -> ProtectionDecision:
         incoming_blocks = request.content_blocks or text_blocks(

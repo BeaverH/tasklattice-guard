@@ -45,9 +45,13 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
     watchdog = EventLoopWatchdog(metrics.registry, runner_id=configured.runner_id)
     engine = NeMoRuntime(registry, model_call_observer=metrics)
     contexts = (
-        RedisCallContextStore(configured.call_context_redis_url)
+        RedisCallContextStore(configured.call_context_redis_url,
+                              ttl_seconds=configured.call_context_ttl_seconds,
+                              compress_plans=configured.call_context_compress_plans,
+                              capacity_fallback=configured.call_context_capacity_fallback,
+                              metrics_registry=metrics.registry)
         if configured.call_context_redis_url
-        else CallContextStore()
+        else CallContextStore(ttl_seconds=configured.call_context_ttl_seconds)
     )
     runtime = GuardrailRuntimeService(engine, store, contexts=contexts)
     metrics.set_admission_load_provider(registry.admission_load)
@@ -86,7 +90,10 @@ def create_app(settings: RunnerSettings | None = None) -> FastAPI:
         telemetry=telemetry,
     )
     metrics.set_control_state(synchronized=control.synchronized)
-    log_capture = RuntimeLogCapture(configured.call_context_redis_url)
+    log_capture = RuntimeLogCapture(configured.call_context_redis_url,
+        ttl_seconds=configured.call_context_ttl_seconds,
+        on_capacity=(lambda: contexts.capacity.observe("log_capture"))
+        if isinstance(contexts, RedisCallContextStore) else None)
     runtime_api = RunnerAPI(
         runtime,
         store,

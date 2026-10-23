@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .evaluation_evidence import execution_status
+
 import hmac
 import base64
 import json
@@ -15,6 +17,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from opentelemetry import trace
+from redis.exceptions import OutOfMemoryError
 
 from runner.toolkit.runtime.contracts import GuardContentBlock, ProtectionDecision, ProtectionRequest, RequestContext
 from runner.toolkit.runtime.content_views import text_blocks
@@ -305,6 +308,9 @@ class RunnerAPI:
                     self._metrics.observe_route("litellm", phase, route_matched)
                     observation.complete(decision)
                     self._path_response_headers(response, decision)
+                    if request.headers.get("x-guard-evidence") == "evaluations-v1":
+                        from .evaluation_evidence import RESPONSE_HEADER, evaluation_evidence
+                        response.headers[RESPONSE_HEADER] = evaluation_evidence(decision)
                     return _litellm_response(decision)
                 except RoutingError as error:
                     observation.fail("runtime", error.reason)
@@ -524,9 +530,12 @@ class RunnerAPI:
         capture_level = self._store.logging_level(guardrail_id)
         capture_key = self._runtime_log_capture.key(endpoint_id, guardrail_id, protocol, call_id) if call_id else None
         capture_failed = False
+        capture_capacity = False
         if capture_key:
             try:
                 capture_level = await self._runtime_log_capture.level(capture_key, capture_level)
+            except OutOfMemoryError:
+                capture_failed = capture_capacity = True
             except Exception:
                 capture_failed = True
                 logging.getLogger(__name__).exception("Runtime log correlation unavailable; preserving audit metadata.")
@@ -581,6 +590,8 @@ class RunnerAPI:
             try:
                 runtime_log_captured, pending, incomplete = await self._runtime_log_capture.record(
                     capture_key, capture_level, candidate, runtime_log_captured)
+            except OutOfMemoryError:
+                incomplete = capture_capacity = True
             except Exception:
                 incomplete = True
                 logging.getLogger(__name__).exception("Runtime log body buffering unavailable; preserving audit metadata.")
@@ -591,6 +602,8 @@ class RunnerAPI:
             "disabled" if capture_level == "info" else "not_selected")
         if incomplete:
             event["metadata"]["callCaptureIncomplete"] = True
+        if capture_capacity:
+            event["metadata"]["callCaptureUnavailableReason"] = "redis_capacity"
         if runtime_log_captured and ciphertext:
             event["metadata"]["contentCiphertext"] = ciphertext
         try:
@@ -712,7 +725,7 @@ def _telemetry_metadata(decision: ProtectionDecision) -> dict[str, Any]:
         "detectionError": decision.detection_error,
         "risks": risks,
         "findings": findings,
-        "executionStatus": "bypassed" if decision.protection_mode == "bypass" else "error" if decision.detection_error or any(item.verdict == "error" for item in decision.findings) or any(item.timed_out or item.verdict == "error" or item.status in {"error", "failed", "timeout"} for item in decision.trace) else "complete",
+        "executionStatus": execution_status(decision),
         "trace": trace,
         "usage": usage,
         "coverage": coverage,

@@ -71,6 +71,9 @@ class RunnerSettings:
     scan_max_body_bytes: int = 1_048_576
     scan_timeout_seconds: int = 25
     validation_max_concurrency: int = 8
+    call_context_compress_plans: bool = False
+    call_context_capacity_fallback: bool = False
+    call_context_ttl_seconds: int = 300
 
     @classmethod
     def from_env(cls) -> "RunnerSettings":
@@ -187,6 +190,9 @@ class RunnerSettings:
             call_context_redis_url=(
                 os.environ.get("GUARD_RUNNER_CALL_CONTEXT_REDIS_URL", "").strip() or None
             ),
+            call_context_compress_plans=_boolean("GUARD_RUNNER_CALL_CONTEXT_COMPRESS_PLANS", False),
+            call_context_capacity_fallback=_boolean("GUARD_RUNNER_CALL_CONTEXT_CAPACITY_FALLBACK", False),
+            call_context_ttl_seconds=_positive_int("GUARD_RUNNER_CALL_CONTEXT_TTL_SECONDS", 300),
             model_runtimes=model_runtimes,
             evaluator_bindings=evaluator_bindings,
             automated_reasoning_endpoint_url=automated_reasoning_endpoint_url or None,

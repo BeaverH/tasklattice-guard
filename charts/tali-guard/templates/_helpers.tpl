@@ -292,6 +292,15 @@ app.kubernetes.io/part-of: tasklattice-guard
 {{- if and .Values.redis.enabled .Values.runner.callContextRedisUrl }}
 {{- fail "set either redis.enabled=true or runner.callContextRedisUrl, not both" }}
 {{- end }}
+{{- if and .Values.redis.enabled (ne .Values.redis.maxmemoryPolicy "noeviction") }}
+{{- fail "shared call context Redis requires maxmemoryPolicy=noeviction" }}
+{{- end }}
+{{- if and .Values.redis.enabled (not (regexMatch "^[1-9][0-9]*(kb|mb|gb)?$" (toString .Values.redis.maxmemory))) }}
+{{- fail "redis.maxmemory must be a positive Redis memory size, for example 4gb" }}
+{{- end }}
+{{- if le (int .Values.runner.callContext.ttlSeconds) 0 }}
+{{- fail "runner.callContext.ttlSeconds must be positive" }}
+{{- end }}
 {{- if and (gt (int .Values.runner.default.replicaCount) 1) (not (or .Values.redis.enabled .Values.runner.callContextRedisUrl)) }}
 {{- fail "shared Redis is required when GuardRails 0 has more than one replica; enable redis or set runner.callContextRedisUrl" }}
 {{- end }}

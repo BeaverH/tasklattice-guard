@@ -26,6 +26,29 @@ def test_validation_concurrency_can_be_reduced_without_changing_serving(monkeypa
         RunnerSettings.from_env()
 
 
+def test_call_plan_compression_requires_explicit_rollout_opt_in(monkeypatch):
+    _required_runner_env(monkeypatch)
+    monkeypatch.delenv("GUARD_RUNNER_CALL_CONTEXT_COMPRESS_PLANS", raising=False)
+    assert RunnerSettings.from_env().call_context_compress_plans is False
+    monkeypatch.setenv("GUARD_RUNNER_CALL_CONTEXT_COMPRESS_PLANS", "true")
+    assert RunnerSettings.from_env().call_context_compress_plans is True
+    monkeypatch.setenv("GUARD_RUNNER_CALL_CONTEXT_COMPRESS_PLANS", "invalid")
+    with pytest.raises(ValueError, match="must be a boolean"):
+        RunnerSettings.from_env()
+
+
+def test_context_capacity_fallback_and_ttl_are_explicit(monkeypatch):
+    _required_runner_env(monkeypatch)
+    monkeypatch.delenv("GUARD_RUNNER_CALL_CONTEXT_CAPACITY_FALLBACK", raising=False)
+    monkeypatch.delenv("GUARD_RUNNER_CALL_CONTEXT_TTL_SECONDS", raising=False)
+    assert RunnerSettings.from_env().call_context_capacity_fallback is False
+    assert RunnerSettings.from_env().call_context_ttl_seconds == 300
+    monkeypatch.setenv("GUARD_RUNNER_CALL_CONTEXT_CAPACITY_FALLBACK", "true")
+    assert RunnerSettings.from_env().call_context_capacity_fallback is True
+    monkeypatch.setenv("GUARD_RUNNER_CALL_CONTEXT_TTL_SECONDS", "0")
+    with pytest.raises(ValueError): RunnerSettings.from_env()
+
+
 def test_runner_loads_qwen_primary_and_llama_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

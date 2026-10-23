@@ -107,6 +107,12 @@ runner:
   #     limits: { memory: 4Gi }
   # Managed Redis URL; required for multi-replica pools unless redis.enabled=true.
   callContextRedisUrl: ""
+  callContext:
+    ttlSeconds: 300
+    # Upgrade all readers before enabling compression on an older installation.
+    compressPlans: true
+    # Only Redis allocation failures degrade to checks of current content.
+    capacityFallback: true
   # Example: redis://redis.uat.svc.cluster.local:6379/0
   # Use rediss:// and the required authentication for a managed TLS Redis.
   state:
@@ -145,6 +151,8 @@ postgresql:
 # Development-only Redis; production uses runner.callContextRedisUrl.
 redis:
   enabled: false
+  maxmemory: 4gb
+  maxmemoryPolicy: noeviction
   image:
     repository: redis
     tag: "7.4-alpine"
@@ -155,7 +163,7 @@ redis:
       memory: 32Mi
     limits:
       cpu: 250m
-      memory: 128Mi
+      memory: 6Gi
 
 security:
   # Internal signing keys, tokens and mTLS certificates initialize automatically.
