@@ -77,9 +77,13 @@ describe("portable Policy authoring", () => {
   it("selects model contracts by detector profile for arbitrary Policy and Rule IDs", () => {
     const definition = fixture(); definition.rules[0]!.detector = { ref: "model/classifier", version: "1.0.0", parameters: { profile: "safety-classification" } };
     const steps = planFor(definition).steps as Array<{ contract_ref: string; parameters: Array<[string, string]> }>;
-    expect(steps[0]!.contract_ref).toBe("tali.guard.content-safety.v1");
-    expect(Object.fromEntries(steps[0]!.parameters)).toMatchObject({ policy_id: "independent-policy", rule_id: "first", declarative_rule: "true" });
-    expect(steps[1]!.contract_ref).toBe("tali.guard.content-filter.rules.v1");
+    expect(steps).toHaveLength(2);
+    // Local blocking checks run before model calls, retaining each Rule's contract.
+    expect(steps.map(step => step.contract_ref)).toEqual([
+      "tali.guard.content-filter.rules.v1", "tali.guard.content-safety.v1",
+    ]);
+    expect(JSON.parse(Object.fromEntries(steps[0]!.parameters).enabled_rules_json!)).toEqual({ "independent-policy": ["second"] });
+    expect(Object.fromEntries(steps[1]!.parameters)).toMatchObject({ policy_id: "independent-policy", rule_id: "first", declarative_rule: "true" });
   });
   it("preserves Topic Rule configuration when a shipped definition is renamed and exported", () => {
     const definition = compiler.shipped("builtin-topic-safety")!;

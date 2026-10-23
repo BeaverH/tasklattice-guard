@@ -21,8 +21,14 @@ it("ships database Profile seeds that match current capability selections and un
     const bindings = expandProtectionPreset(profile, policies);
     expect(bindings.length).toBeGreaterThan(0);
     for (const binding of bindings) {
-      expect(binding.policyVersion).toBe(policies.find(policy => policy.id === binding.policyId)!.version);
+      const reference = profile.policies.find(policy => policy.policyId === binding.policyId)!;
+      expect(binding.policyVersion).toBe(reference.policyVersion);
+      const policy = policies.flatMap(item => [item, ...item.published_versions ?? []])
+        .find(item => item.id === binding.policyId && item.version === reference.policyVersion);
+      expect(policy, `${binding.policyId}@${reference.policyVersion}`).toBeDefined();
       expect(binding.enabledRuleIds.length).toBeGreaterThan(0);
+      expect(binding.enabledRuleIds).toEqual(reference.enabledRuleIds ?? policy!.rules.map(rule => rule.id));
+      expect(binding.enabledRuleIds.every(id => policy!.rules.some(rule => rule.id === id))).toBe(true);
     }
   }
 });
