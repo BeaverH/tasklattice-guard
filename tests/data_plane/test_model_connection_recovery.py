@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import socket
 import ssl
 import time
@@ -21,6 +22,18 @@ from tests.data_plane.test_jev_jailbreak import evaluator, jailbreak_request
 @pytest.fixture(autouse=True)
 def fixed_backoff(monkeypatch):
     monkeypatch.setattr('runner.toolkit.nemo.actions.model_retry.random.uniform', lambda *_: 0.1)
+
+
+@pytest.fixture(autouse=True)
+def capture_model_logs(caplog):
+    # Earlier network fixtures may configure Uvicorn not to propagate to root.
+    # Capture the actual model logger independently of that process-wide state.
+    logger = logging.getLogger('uvicorn.error.tasklattice.model')
+    logger.addHandler(caplog.handler)
+    try:
+        yield
+    finally:
+        logger.removeHandler(caplog.handler)
 
 
 def service(kind, handler, timeout=20):
