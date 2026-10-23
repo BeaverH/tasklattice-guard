@@ -21,10 +21,11 @@ or `enable` to authenticate with your administrator account. Both credential
 prompts hide input. `disable` clears the administrator session; `connect <url>`
 clears all active credentials before changing servers.
 
-Current delivery supports inspection: `help`, `connect`, `read`, `enable`,
-`disable`, `show`, `detail`, and `exit`. The write commands discussed later in
-this proposal are **not implemented**. An authenticated prompt does not bypass
-Controller authorization.
+Current delivery supports inspection, package import/export, and one-shot
+`platform register-model`, `platform bind`, and `tenant provision` workflows.
+See [API configuration with guardctl](guardctl-configuration.md) for runnable
+examples. Other proposed write commands below remain unimplemented. An
+authenticated prompt does not bypass Controller authorization.
 
 For automation, provide `GUARD_ACCESS_TOKEN` through the process environment
 and pipe commands. Commands execute in order, HTTP failures return a nonzero

@@ -95,14 +95,15 @@ use the [production deployment guide](charts/tali-guard/README.md#production-ins
 | I want to… | Guide |
 | --- | --- |
 | Integrate an application or gateway | [Runtime API, streaming, dry run, and verification](docs/gateway-integration.md) |
-| Configure protection and validation | [Policies, the Default Guardrail, and execution order](docs/guardrail-policies.md) |
+| Configure protection and validation | [Policies and validation](docs/guardrail-policies.md), [execution order and PII conflicts](docs/policy-composition.md) |
 | Connect models for protection checks | [Providers, Models, and Guardrail Catalog](docs/model-configuration.md) |
 | Route traffic across Guardrails | [Routes, selectors, and weighted distribution](docs/router-route-weighted-distribution-design.md) |
 | Test a Router or Endpoint | [Playground advanced path testing](docs/playground-advanced-mode.md) |
 | Publish, restore, or delete versions | [Revision lifecycles](docs/revision-lifecycle.md) |
 | Automate management operations | [Controller API conventions](docs/api-contract.md) and [Access Tokens](docs/account-access-tokens.md) |
 | Deploy and operate Guard | [Helm deployment](charts/tali-guard/README.md), [operations and security](docs/operations.md), and [observability](docs/observability.md) |
-| Inspect the control plane from a Runner | [guardctl usage and image regression tests](docs/ops-cli-proposal.md#running-the-shipped-cli) |
+| Learn guardctl and inspect the control plane | [guardctl command-line manual](bin/README.md) |
+| Configure models and publish a Default copy through APIs | [guardctl configuration](docs/guardctl-configuration.md) |
 | Develop or understand the internals | [Development and tests](docs/development.md) and [architecture](docs/architecture.md) |
 
 A running Controller also serves an interactive API reference at `/api/docs`,

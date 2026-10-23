@@ -3,6 +3,7 @@ import { Writable } from 'node:stream';
 import axios, { AxiosRequestConfig } from 'axios';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
+import { configurationHelp, runConfiguration } from './configure.js';
 const cliDirectory = dirname(resolve(process.argv[1]));
 
 function loadEnvFile(path: string): Record<string, string> {
@@ -662,6 +663,7 @@ async function handleCommand(line: string) {
     console.log('  import <file> [--versions=a,b] [--restore-deleted] [--confirm]');
     console.log('                               Verify and preview a package; --confirm imports it');
     console.log('  exit | quit                  Close the CLI');
+    console.log(configurationHelp);
     return;
   }
 
@@ -776,6 +778,13 @@ async function handleCommand(line: string) {
 }
 
 async function main() {
+  // One-shot commands preserve shell argument boundaries and never prompt for input.
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'platform' || argv[0] === 'tenant') {
+    rl.close();
+    await runConfiguration(argv[0], argv.slice(1), session.baseUrl);
+    return;
+  }
   console.log('Welcome to Guard Controller CLI (guardctl)');
   console.log(`Connected to: ${session.baseUrl} (via ${session.urlSource})`);
   if (process.env.GUARD_ACCESS_TOKEN) {
