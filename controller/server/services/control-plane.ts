@@ -17,7 +17,7 @@ import { queryAuditEvents } from "./audit-events.js";
 import type { AuditQuery } from "../../shared/audit-query.js";
 import type { EventSeverity } from "../../shared/security-severity.js";
 import { readGuardrailProfiles } from "./guardrail-profiles.js";
-import { expandProtectionPreset } from "../policy-catalog/presets.js";
+import { previewProtectionProfile, profileDraft } from "../policy-catalog/presets.js";
 import { TrafficRoutingService } from "./traffic-routing.js";
 import { ProtectionModeService } from "./protection-modes.js";
 import { resetProtectionMode } from "../../shared/protection-mode.js";
@@ -86,7 +86,7 @@ import type { DeletionImpact, RuntimeEventInput, ValidationCaseResult, Validatio
 import { guardrailInspection } from "../domain/guardrail-inspection.js";
 import { freezeTestSuite, testSuiteDigest } from "../domain/test-suite.js";
 import { builtInPolicyView, guardrailPolicyNodes } from "../domain/policy-node.js";
-import { applyValidationOverrides, emptyValidationMetrics, generatedTestCases } from "../domain/validation.js";
+import { applyValidationOverrides, emptyValidationMetrics, generatedTestCases, reconcileValidationOverrides } from "../domain/validation.js";
 import { PolicyCatalog, type PolicyDto } from "../policy-catalog/catalog.js";
 import { customPolicyCompliance } from "../policy-catalog/compliance.js";
 import { registeredAction } from "../action-catalog/catalog.js";
@@ -240,7 +240,7 @@ export class ControlPlaneService {
   async listGuardrailProfiles() {
     const profiles = await readGuardrailProfiles(this.db);
     const policies = await this.listPolicies();
-    return profiles.map(profile => ({ ...profile, policyBindings: expandProtectionPreset(profile, policies) }));
+    return profiles.map(profile => previewProtectionProfile(profile, policies));
   }
 
   async listPolicies() {
@@ -726,7 +726,8 @@ export class ControlPlaneService {
         throw new ConflictError("The draft changed while you were editing. Reload and review the latest changes before saving.", "guardrail_draft_conflict");
       }
       const draftConfig = input.draftConfig ? normalizeGuardrailDraft(input.draftConfig) : normalizeGuardrailDraft(existing.draftConfig);
-      await this.validateGuardrailDraft(draftConfig, tx);
+      if (!draftConfig.profileOrigin && existing.draftConfig.profileOrigin) draftConfig.profileOrigin = existing.draftConfig.profileOrigin;
+      await this.validateGuardrailDraft(draftConfig, tx, normalizeGuardrailDraft(existing.draftConfig));
       // Runtime profile affects compilation just as a Policy edit does. A
       // validation for the old profile cannot authorize a new executable.
       const draftChanged = stableDraftValue(draftConfigContent(draftConfig)) !== stableDraftValue(draftConfigContent(existing.draftConfig))
@@ -2476,10 +2477,21 @@ export class ControlPlaneService {
       detail: { version: content.guardrailVersion, checksum, source: "bundled_platform_release", testsExecuted: false } });
   }
 
-  private async validateGuardrailDraft(draft: GuardrailDraftConfig, db: Pick<ControllerDatabase, "select"> = this.db) {
+  private async validateGuardrailDraft(draft: GuardrailDraftConfig, db: Pick<ControllerDatabase, "select"> = this.db, previous?: GuardrailDraftConfig) {
     try {
       const catalog = await this.catalogPolicies(undefined, db);
       const programmablePolicies = await this.resolveProgrammablePolicies(draft, catalog, db);
+      if (draft.policyBindings.some(binding => Object.keys(binding.testCaseOverrides ?? {}).length)) {
+        let reference = previous;
+        if (!reference && draft.profileOrigin) {
+          const profile = (await readGuardrailProfiles(db)).find(item => item.id === draft.profileOrigin!.id && item.version === draft.profileOrigin!.version);
+          if (profile) reference = profileDraft(profile, catalog);
+        }
+        if (reference) {
+          const referencePolicies = await this.resolveProgrammablePolicies(reference, catalog, db);
+          reconcileValidationOverrides(draft, reference, generatedTestCases("reference", reference, catalog, referencePolicies));
+        }
+      }
       buildGuardrailPlan({
         guardrailId: "guardrail-draft-validation",
         guardrailVersion: guardrailVersionId(),
@@ -2487,6 +2499,7 @@ export class ControlPlaneService {
         policies: catalog,
         programmablePolicies,
       });
+      applyValidationOverrides(generatedTestCases("candidate", draft, catalog, programmablePolicies), draft);
       return { catalog, programmablePolicies };
     } catch (error) {
       throw new ValidationError(error instanceof Error ? error.message : "Guardrail draft is invalid.");

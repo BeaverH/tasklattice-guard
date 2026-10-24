@@ -47,6 +47,7 @@ export type GuardrailPolicyBindingConfig = {
 
 /** Controller-owned product draft expressed only as Policy bindings. */
 export type GuardrailDraftConfig = {
+  profileOrigin?: import("../../shared/protection-map.js").ProfileOrigin | undefined;
   allowedTopics: string[];
   topicControlMode?: "strict" | "permissive";
   restrictedTopics: string[];
@@ -129,6 +130,8 @@ export function normalizeGuardrailDraft(value: unknown): GuardrailDraftConfig {
     throw new Error("Standalone custom content rules are no longer supported. Configure the Phrase filters Policy before saving or publishing this draft.");
   }
   return {
+    ...(typeof record(source.profileOrigin).id === "string" && typeof record(source.profileOrigin).version === "string"
+      ? { profileOrigin: { id: String(record(source.profileOrigin).id), version: String(record(source.profileOrigin).version) } } : {}),
     allowedTopics: stringArray(source.allowedTopics),
     restrictedTopics: stringArray(source.restrictedTopics),
     topicControlMode: source.topicControlMode === "permissive" ? "permissive" : "strict",

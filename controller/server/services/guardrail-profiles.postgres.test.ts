@@ -28,6 +28,7 @@ describe.skipIf(!url)("Database-backed Guardrail Profiles", () => {
     await pool.query(readFileSync(new URL("../db/migrations/0042_credential_policy_profile_version.sql", import.meta.url), "utf8"));
     await pool.query(readFileSync(new URL("../db/migrations/0043_capability_profiles.sql", import.meta.url), "utf8"));
     await pool.query(readFileSync(new URL("../db/migrations/0044_topic_binding_parameters.sql", import.meta.url), "utf8"));
+    await pool.query(readFileSync(new URL("../db/migrations/0049_full_feature_baseline.sql", import.meta.url), "utf8"));
   });
   afterAll(async () => {
     await pool?.end();
@@ -36,8 +37,8 @@ describe.skipIf(!url)("Database-backed Guardrail Profiles", () => {
   });
   it("seeds one default for each supported industry or use case with pinned executable bindings", async () => {
     const profiles = await readGuardrailProfiles(drizzle(pool, { schema }));
-    expect(profiles).toHaveLength(14);
-    expect(new Set(profiles.map(profile => profile.category)).size).toBe(14);
+    expect(profiles).toHaveLength(15);
+    expect(new Set(profiles.map(profile => profile.category)).size).toBe(15);
     expect(profiles.every(profile => profile.isDefault)).toBe(true);
     expect(profiles.some(profile => profile.id === "restricted-general-topics")).toBe(false);
     for (const profile of profiles) expect(expandProtectionPreset(profile, catalog.list()).map(binding => binding.policyId)).toEqual(profile.policies.map(policy => policy.policyId));
@@ -52,8 +53,16 @@ describe.skipIf(!url)("Database-backed Guardrail Profiles", () => {
     const customBefore = (await pool.query("SELECT definition FROM guardrail_profile WHERE id='claims-assistant'")).rows[0].definition;
     await pool.query(readFileSync(new URL("../db/migrations/0043_capability_profiles.sql", import.meta.url), "utf8"));
     await pool.query(readFileSync(new URL("../db/migrations/0044_topic_binding_parameters.sql", import.meta.url), "utf8"));
+    await pool.query(readFileSync(new URL("../db/migrations/0049_full_feature_baseline.sql", import.meta.url), "utf8"));
     expect((await pool.query("SELECT enabled FROM guardrail_profile WHERE id='banking-assistant'")).rows[0].enabled).toBe(false);
     expect((await pool.query("SELECT definition FROM guardrail_profile WHERE id='claims-assistant'")).rows[0].definition).toEqual(customBefore);
+  });
+  it("preserves edits and disabled state when the baseline seed is replayed", async () => {
+    await pool.query("UPDATE guardrail_profile SET enabled=false, definition=jsonb_set(definition, '{name}', '\"Edited baseline\"') WHERE id='full-feature-baseline'");
+    await pool.query(readFileSync(new URL("../db/migrations/0049_full_feature_baseline.sql", import.meta.url), "utf8"));
+    const row = (await pool.query("SELECT enabled, definition FROM guardrail_profile WHERE id='full-feature-baseline'")).rows[0];
+    expect(row.enabled).toBe(false);
+    expect(row.definition.name).toBe("Edited baseline");
   });
   it("enforces one enabled default per category", async () => {
     await expect(pool.query("INSERT INTO guardrail_profile (id,category,category_name,is_default,definition) SELECT 'duplicate',category,category_name,true,definition FROM guardrail_profile WHERE id='common-baseline'"))

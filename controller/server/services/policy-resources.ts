@@ -55,7 +55,15 @@ export class PolicyResourceService {
   async views(base: PolicyDto[], db: Pick<ControllerDatabase, "select"> = this.db, id?: string): Promise<PolicyDto[]> {
     const rows = await db.select().from(resources).where(id ? eq(resources.id, id) : undefined);
     const published = await db.select().from(versions).where(id ? eq(versions.policyId, id) : undefined).orderBy(desc(versions.createdAt));
-    const result = new Map(base.map(p => [p.id, p]));
+    const result = new Map(base.map(policy => {
+      // Bundled declarative model Policies have no legacy native ID contract.
+      // Retain their definition so planning and dependency discovery use the
+      // authored detector, including runtime parameters such as on_unknown.
+      const definition = policy.source === "built_in" && policy.protection.execution === "custom"
+        ? this.compiler.shipped(policy.id) : null;
+      const compiled = definition?.metadata.version === policy.version ? this.compiler.compile(definition) : null;
+      return [policy.id, compiled ? { ...policy, rules: compiled.rules, definition: compiled.definition!, protection: compiled.protection } : policy];
+    }));
     for (const row of rows) {
       const history = published.filter(v => v.policyId === row.id).map(v => v.view);
       const existing = result.get(row.id);

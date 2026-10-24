@@ -95,6 +95,7 @@ const guardrailPolicyBindingInput = z.object({
   }).nullable().default(null),
 });
 const guardrailDraftInput = z.strictObject({
+  profileOrigin: z.object({ id: z.string().trim().min(1).max(256), version: z.string().trim().min(1).max(128) }).optional(),
   allowedTopics: z.array(z.string().trim().min(1).max(500)).max(256).default([]),
   restrictedTopics: z.array(z.string().trim().min(1).max(500)).max(256).default([]),
   topicControlMode: z.enum(["strict", "permissive"]).default("permissive"),
