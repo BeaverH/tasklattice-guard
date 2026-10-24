@@ -68,7 +68,7 @@ describe("Policy catalog", () => {
   it("documents every built-in Policy and separates implementation lineage from industry context", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list().filter(policy => policy.source === "built_in");
-    expect(policies).toHaveLength(26);
+    expect(policies).toHaveLength(27);
     for (const policy of policies) {
       expect(policy.compliance?.policy_version, policy.id).toBe(policy.version);
       expect(policy.compliance?.provenance.en, policy.id).toBeTruthy();
@@ -137,7 +137,7 @@ describe("Policy catalog", () => {
     const catalog = PolicyCatalog.load(assetDirectory);
     const policies = catalog.list();
 
-    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(26);
+    expect(policies.filter(policy => policy.source === "built_in")).toHaveLength(27);
     expect(new Set(policies.map((policy) => policy.id)).size).toBe(policies.length);
     expect(catalog.get("builtin-content-safety")).toMatchObject({ rails: ["input", "output"], test_count: 2 });
     expect(catalog.get("competitor-mention-detection")).toMatchObject({

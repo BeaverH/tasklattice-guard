@@ -224,15 +224,23 @@ def compile_policy(definition: PolicyDefinition, registry: dict[str, Any]) -> di
         if detector is None or detector["version"] != rule.detector.version:
             raise ValueError(f"Rule {rule.id}: registered detector/version unavailable: {rule.detector.ref}@{rule.detector.version}")
         params = deepcopy(rule.detector.parameters)
-        unknown = set(params) - set(detector["parameters"])
+        runtime_parameters = {"on_unknown"} if rule.detector.ref == "model/classifier" and params.get("profile") == "jailbreak-classification" else set()
+        unknown = set(params) - set(detector["parameters"]) - runtime_parameters
         if unknown:
             raise ValueError(f"Rule {rule.id}: unknown detector parameters {sorted(unknown)}")
+        if "on_unknown" in params:
+            value = params["on_unknown"]
+            references = {"{{" + parameter.name + "}}" for parameter in definition.parameters}
+            if not isinstance(value, str) or value not in {"allow", "block", *references}:
+                raise ValueError(f"Rule {rule.id}: on_unknown must be allow, block, or a declared parameter")
         if "profiles" in detector:
             profile = params.pop("profile", None)
             if not isinstance(profile, str) or profile not in detector["profiles"]:
                 raise ValueError(f"Rule {rule.id}: unknown classifier profile {profile!r}")
             detector = {**detector, "adapter": deepcopy(detector["profiles"][profile]), "required_parameters": []}
-            params["detector_options"] = {"profile": profile}
+            params["detector_options"] = {"profile": profile, **{
+                key: params.pop(key) for key in runtime_parameters if key in params
+            }}
         if not bundled:
             validate_custom_detector(definition, rule, detector, params)
         validate_detector_parameters(rule, detector, params)

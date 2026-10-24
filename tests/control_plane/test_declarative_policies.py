@@ -383,6 +383,25 @@ async def test_model_tests_are_explicitly_not_run_without_a_model_environment():
     assert all(case["status"] == "not_run" for case in report["policies"][0]["cases"])
 
 
+def test_bundled_strict_jailbreak_preserves_uncertainty_parameter():
+    package = load_package(ROOT / "policies/builtin/builtin-jailbreak-strict")
+    compiled = compile_policy(package.definition, sources.registry())
+    assert compiled["version"] == "1.0.0"
+    assert compiled["rules"][0]["detector_options"] == {
+        "profile": "jailbreak-classification", "on_unknown": "{{on_unknown}}",
+    }
+    assert compiled["parameters"][0]["default"] == "block"
+    candidate = package.definition.model_dump()
+    candidate["rules"][0]["detector"]["parameters"]["on_unknown"] = "{{missing}}"
+    with pytest.raises(ValueError, match="on_unknown must be"):
+        compile_policy(definition(candidate), sources.registry())
+    candidate["rules"][0]["detector"]["parameters"] = {
+        "profile": "safety-classification", "on_unknown": "block",
+    }
+    with pytest.raises(ValueError, match="unknown detector parameters"):
+        compile_policy(definition(candidate), sources.registry())
+
+
 async def test_regression_uses_action_priority_in_rule_and_policy_scopes(tmp_path):
     root = tmp_path / "package"
     shutil.copytree(ROOT / "policies/examples/customer-information", root)

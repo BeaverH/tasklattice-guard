@@ -30,6 +30,7 @@ collections:
 - asset: model_capability_policies.json
   policies:
   - builtin/builtin-jailbreak
+  - builtin/builtin-jailbreak-strict
   - builtin/builtin-content-safety
   - builtin/builtin-automated-reasoning
   - builtin/builtin-contextual-grounding
