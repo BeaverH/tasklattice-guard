@@ -123,7 +123,7 @@ describe.skipIf(!url)("Guardrail release packages between isolated environments"
     expect(await prod.requiredPlatformModelBindings()).toEqual([]);
     const updated = await prod.getGuardrail(DEFAULT_GUARDRAIL_ID);
     expect(updated.draftConfig.policyBindings).toHaveLength(12);
-    expect((await prodDb.pool.query("SELECT jsonb_array_length(test_suite) AS count FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0].count).toBe(608);
+    expect((await prodDb.pool.query("SELECT jsonb_array_length(test_suite) AS count FROM guardrail_version WHERE guardrail_id=$1", [DEFAULT_GUARDRAIL_ID])).rows[0].count).toBe(748);
   });
 
   it("requires models only for enabled routed targets, not historical versions or disabled routes", async () => {
