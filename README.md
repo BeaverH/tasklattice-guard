@@ -35,6 +35,14 @@ setup. Model-backed protection can be configured separately. Coverage depends
 on the policies you enable and the content you submit; streamed output may
 need to be buffered when a policy requires the complete response.
 
+For the benchmark configuration, select **Full-feature baseline** when creating
+a Guardrail. It copies eight pinned Policies, 77 Rules, parameters and reviewed
+test expectations into an editable draft. Remove any protections you do not
+need. Jailbreak and content-safety checks reuse platform model assignments,
+so each Guardrail does not need its own model setup. See the
+[Profile guide](docs/full-feature-baseline.md) for versions, dependencies and
+what happens to tests after a deletion.
+
 ## How it fits into your application
 
 Your application or gateway calls Guard before sending input to a model and

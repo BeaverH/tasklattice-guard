@@ -487,7 +487,8 @@ formal policy and a compatible reasoning service, not a generic chat endpoint.
 A Profile is a preconfigured starting template, distinct from a Guardrail draft
 and from an evaluator/model profile. `guardrail_profile` stores its category,
 default flag, enabled state, display order, and versioned definition, including
-ordered Policy/version references, Rails and parameter values. Migration 0013
+ordered Policy/version references, Rails, parameter values, handling actions,
+reviewed test overlays, Rule order and optional complete draft settings. Migration 0013
 seeds defaults for General, Banking, Securities, Internet support and Singapore
 finance. Its partial unique index allows one enabled default per category.
 Seeds run once through the migration journal; runtime startup never replaces
@@ -497,12 +498,32 @@ operator changes. Add new defaults through a migration, not a request-time seed.
 request and expands their pinned Policy references. The legacy
 `/api/v1/policy-catalog/protection-presets` route remains a database-backed alias.
 Both require authenticated Policies read access. Profile application copies
-bindings into the draft; later Profile changes do not rewrite existing Guardrails.
+bindings and draft settings into the draft; later Profile changes do not rewrite existing Guardrails.
+Each Profile response has an `availability` result. A missing pinned version
+disables only that Profile, and never substitutes another version.
 The UI initially loads the General default and lists all Profiles in one dropdown,
 with the name followed by industry/use-case and default tags. It preserves
 explicit append/replace/cancel/undo behavior.
 Choosing blank is respected. Runtime model availability gates still apply to
 all selected bindings, including those inherited from a Profile.
+
+Migration 0049 adds `full-feature-baseline@1.0.0`, the reviewed benchmark
+configuration with eight Policies and 77 Rules. It uses a bundled declarative
+`builtin-jailbreak-strict@1.0.0` instead of an installation-specific Policy.
+`profileOrigin` records the template ID and version in the editable draft;
+it does not introduce runtime inheritance or embed model credentials.
+Replacing a Profile applies all settings; appending preserves existing settings.
+Undo restores settings, bindings and provenance together. Model readiness is
+shown immediately; missing jailbreak/content-safety assignments do not prevent
+draft creation or editing, but still gate model testing and publication.
+
+Before saving or previewing a selection, unchanged inherited expectation
+overlays are reconciled against the exact source Profile (creation) or previous
+saved draft (editing). Deselected Policies, Rules or Rails remove only overlays
+whose source Case or expected Rule became unavailable. Remaining generated
+Cases retain the original Policy assertions; tests are not silently excluded.
+Edited, unknown and version-stale overlays still fail validation. Composition
+changes require a fresh validation run. See [the Profile guide](full-feature-baseline.md).
 
 ### Unified Rule detector contract
 

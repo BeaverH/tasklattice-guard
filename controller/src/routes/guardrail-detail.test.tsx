@@ -157,6 +157,21 @@ describe("Guardrail detail information hierarchy", () => {
     await waitFor(() => expect(update).toHaveBeenCalledWith(guardrail.id, expect.objectContaining({ policy_bindings: [bindings[0]] })));
   });
 
+  it("allows trimming a draft before its remaining safety model is configured", async () => {
+    vi.spyOn(controllerApi, "getModelReadiness").mockResolvedValue({ models: [], active: null, draft: null, activating: null });
+    const catalog = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list();
+    const policies = ["local-government-identifiers", "builtin-content-safety"].map(id => catalog.find(policy => policy.id === id)!);
+    const bindings = policies.map(defaultPolicyBinding);
+    const guardrail = { ...deletableGuardrail, profile_origin: { id: "full-feature-baseline", version: "1.0.0" }, policy_bindings: bindings };
+    const update = vi.spyOn(api, "updateGuardrail").mockResolvedValue(guardrail);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TooltipProvider><EditGuardrailSheet guardrail={guardrail} policies={policies} open onOpenChange={vi.fn()} onSaved={vi.fn()} /></TooltipProvider></QueryClientProvider>);
+    await screen.findByText("protection.validationReadiness.blockedTitle");
+    fireEvent.click(screen.getByRole("button", { name: `protection.remove name:${policies[0]!.name}` }));
+    expect(screen.getByRole("button", { name: "guardrails.saveDraft" }).hasAttribute("disabled")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "guardrails.saveDraft" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(guardrail.id, expect.objectContaining({ policy_bindings: [bindings[1]] })));
+  });
+
   it("hides retained topic values when reopening a draft without Topic Control", () => {
     const policy = PolicyCatalog.load(resolve("../runner/toolkit/policy_library/assets")).list().find(item => item.id === "local-credentials")!;
     const guardrail = { ...deletableGuardrail, allowed_topics: ["Kubernetes"], restricted_topics: ["Investments"], policy_bindings: [defaultPolicyBinding(policy)] };

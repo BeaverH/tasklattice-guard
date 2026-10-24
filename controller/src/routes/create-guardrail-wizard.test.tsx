@@ -321,6 +321,40 @@ describe("Create Guardrail wizard", () => {
     expect(apiMocks.createGuardrail).not.toHaveBeenCalled();
   });
 
+  it("copies full Profile settings, preserves them through undo, and saves with missing models", async () => {
+    const modelPolicy = { ...policy, id: "builtin-jailbreak-strict", name: "Strict Jailbreak", rules: [{ ...policy.rules[0]!, rails: ["input"] }], protection: { ...policy.protection!, execution: "model", modelCapabilities: ["jailbreak"] } };
+    const modelBinding = { ...binding, policy_id: modelPolicy.id, parameter_values: { on_unknown: "block" }, action: "block" as const };
+    apiMocks.getPolicies.mockResolvedValue({ items: [policy, modelPolicy] });
+    apiMocks.getModels.mockResolvedValue({ models: [], active: null, draft: null, activating: null });
+    apiMocks.getPresets.mockResolvedValue({ items: [{ id: "full-feature-baseline", version: "1.0.0", name: "Full-feature baseline", description: "Reviewed benchmark", bindings: [binding, modelBinding], limitations: [],
+      draftSettings: { allowedTopics: ["Support"], restrictedTopics: ["Advice"], topicControlMode: "strict", safetyLevel: "strict", outputDelivery: "full_buffered" } }] });
+    renderWizard("full-feature-baseline");
+    await screen.findByText("Profile applied · 2 Policies selected");
+    expect(await screen.findByText(protectionEn.dependencies.states.missing)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("Customer data protection"), { target: { value: "Baseline draft" } });
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Start blank" }));
+    fireEvent.click(screen.getByRole("button", { name: protectionEn.wizard.replacePreset }));
+    fireEvent.click(screen.getByRole("button", { name: protectionEn.wizard.undoPreset }));
+    fireEvent.click(screen.getByRole("button", { name: "Review & create" }));
+    await waitFor(() => expect(apiMocks.preview).toHaveBeenCalledWith(expect.objectContaining({
+      policy_bindings: [binding, modelBinding], output_delivery: "full_buffered", safety_level: "strict", topic_control_mode: "strict",
+      allowed_topics: ["Support"], restricted_topics: ["Advice"], profile_origin: { id: "full-feature-baseline", version: "1.0.0" },
+    })));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create draft" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    await waitFor(() => expect(apiMocks.createGuardrail).toHaveBeenCalledWith(apiMocks.preview.mock.calls.at(-1)![0]));
+  });
+
+  it("shows an unavailable Profile without applying its partial bindings", async () => {
+    apiMocks.getPresets.mockResolvedValue({ items: [{ id: "missing", version: "1", name: "Missing Profile", bindings: [], limitations: [], availability: { available: false, reason: "Pinned version unavailable" } }] });
+    renderWizard("missing");
+    expect(await screen.findByText(/Missing Profile: Pinned version unavailable/)).toBeTruthy();
+    expect(screen.queryByText(/Profile applied/)).toBeNull();
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
+    expect((await screen.findByRole("option", { name: /Missing Profile/ })).getAttribute("aria-disabled")).toBe("true");
+  });
+
   it("loads the General default Profile and lists all Profiles with tags in one dropdown", async () => {
     apiMocks.getPresets.mockResolvedValue({ items: [
       { id: "general", name: "General Profile", category: "general", categoryName: "General", isDefault: true, bindings: [binding], limitations: [] },

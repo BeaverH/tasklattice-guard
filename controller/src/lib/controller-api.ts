@@ -111,6 +111,7 @@ export type ModelConfigurationView = {
 };
 
 export type GuardrailDraftConfig = {
+  profileOrigin?: import("../../shared/protection-map").ProfileOrigin;
   allowedTopics: string[];
   restrictedTopics: string[];
   topicControlMode?: "strict" | "permissive";

@@ -123,6 +123,7 @@ function mapGuardrail(
     allowed_topics: value.draftConfig.allowedTopics,
     restricted_topics: value.draftConfig.restrictedTopics,
     topic_control_mode: value.draftConfig.topicControlMode ?? "strict",
+    ...(value.draftConfig.profileOrigin ? { profile_origin: value.draftConfig.profileOrigin } : {}),
     policy_bindings: value.draftConfig.policyBindings.map(fromCurrentBinding),
     safety_level: value.draftConfig.safetyLevel,
     output_delivery: value.draftConfig.outputDelivery,
@@ -189,6 +190,7 @@ export async function createGuardrail(input: {
   allowed_topics?: string[];
   restricted_topics?: string[];
   topic_control_mode?: "strict" | "permissive";
+  profile_origin?: import("../../shared/protection-map").ProfileOrigin;
   policy_bindings: GuardrailPolicyBinding[];
   safety_level?: SafetyLevel;
   output_delivery?: OutputDelivery;
@@ -196,6 +198,7 @@ export async function createGuardrail(input: {
   const created = await controllerApi.createControllerGuardrail({
     name: input.name,
     draftConfig: {
+      ...(input.profile_origin ? { profileOrigin: input.profile_origin } : {}),
       allowedTopics: input.allowed_topics ?? [],
       restrictedTopics: input.restricted_topics ?? [],
       topicControlMode: input.topic_control_mode ?? "permissive",
@@ -222,6 +225,7 @@ async function updateGuardrailDraft(
     expectedDraftRevision: input.expectedDraftRevision ?? current.draftRevision,
     ...(input.name !== undefined ? { name: input.name } : {}),
     draftConfig: {
+      ...(current.draftConfig.profileOrigin ? { profileOrigin: current.draftConfig.profileOrigin } : {}),
       allowedTopics: input.allowed_topics ?? current.draftConfig.allowedTopics,
       restrictedTopics: input.restricted_topics ?? current.draftConfig.restrictedTopics,
       topicControlMode: input.topic_control_mode ?? current.draftConfig.topicControlMode ?? "strict",
@@ -405,6 +409,7 @@ export function previewGuardrailCandidate(input: {
   allowed_topics?: string[];
   restricted_topics?: string[];
   topic_control_mode?: "strict" | "permissive";
+  profile_origin?: import("../../shared/protection-map").ProfileOrigin;
   policy_bindings: GuardrailPolicyBinding[];
   safety_level?: SafetyLevel;
   output_delivery?: OutputDelivery;
@@ -412,6 +417,7 @@ export function previewGuardrailCandidate(input: {
   return controllerApi.previewControllerGuardrailPlan({
     name: input.name,
     draftConfig: {
+      ...(input.profile_origin ? { profileOrigin: input.profile_origin } : {}),
       allowedTopics: input.allowed_topics ?? [],
       restrictedTopics: input.restricted_topics ?? [],
       topicControlMode: input.topic_control_mode ?? "permissive",
@@ -432,6 +438,7 @@ export async function getGuardrailCompilePreview(id: string): Promise<GuardrailC
   const guardrail = await controllerApi.getControllerGuardrail(id);
   return previewGuardrailCandidate({
     name: guardrail.name,
+    ...(guardrail.draftConfig.profileOrigin ? { profile_origin: guardrail.draftConfig.profileOrigin } : {}),
     policy_bindings: guardrail.draftConfig.policyBindings.map(fromCurrentBinding),
     safety_level: guardrail.draftConfig.safetyLevel,
     output_delivery: guardrail.draftConfig.outputDelivery,
@@ -439,10 +446,10 @@ export async function getGuardrailCompilePreview(id: string): Promise<GuardrailC
 }
 
 export const getPolicies = () => controllerApi.requestController<Collection<Policy>>("/api/v1/policies");
-export type GuardrailProfilePreview = ProtectionPreset & Partial<Pick<GuardrailProfile, "category" | "categoryName" | "isDefault">> & { bindings: GuardrailPolicyBinding[] };
+export type GuardrailProfilePreview = ProtectionPreset & Partial<Pick<GuardrailProfile, "category" | "categoryName" | "isDefault">> & { bindings: GuardrailPolicyBinding[]; availability?: { available: boolean; reason: string | null } };
 export type ProtectionPresetPreview = GuardrailProfilePreview;
 export async function getGuardrailProfiles(): Promise<Collection<ProtectionPresetPreview>> {
-  const result = await controllerApi.requestController<Collection<GuardrailProfile & { policyBindings: CurrentPolicyBinding[] }>>("/api/v1/guardrail-profiles");
+  const result = await controllerApi.requestController<Collection<GuardrailProfile & { policyBindings: CurrentPolicyBinding[]; availability?: { available: boolean; reason: string | null } }>>("/api/v1/guardrail-profiles");
   return { ...result, items: result.items.map(({ policyBindings, ...preset }) => ({ ...preset, bindings: policyBindings.map(fromCurrentBinding) })) };
 }
 export const getPolicy = (id: string) => controllerApi.requestController<Policy>(`/api/v1/policies/${encodeURIComponent(id)}`);

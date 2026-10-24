@@ -438,6 +438,7 @@ export type Guardrail = {
   allowed_topics: string[];
   restricted_topics: string[];
   topic_control_mode?: "strict" | "permissive";
+  profile_origin?: import("../../shared/protection-map").ProfileOrigin;
   policy_bindings: GuardrailPolicyBinding[];
   safety_level: SafetyLevel;
   output_delivery: OutputDelivery;

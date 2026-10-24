@@ -328,6 +328,7 @@ export function GuardrailDetailPage() {
             <GuardrailProtectionMode guardrail={guardrail} />
           </div>
           {guardrail.origin === "imported" ? <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Download className="size-3.5" aria-hidden="true" />{t("guardrailPackage.importedFrom", { source: guardrail.source_id ?? "" })}</p> : null}
+          {guardrail.profile_origin ? <p className="mt-2 text-sm text-muted-foreground">{t("protection.profile.source", { id: guardrail.profile_origin.id, version: guardrail.profile_origin.version })}</p> : null}
           {guardrail.copy_origin && <p className="mt-2 text-sm text-muted-foreground">{uiText("uiCopy.copiedFrom")}{" "}{guardrail.copy_origin.sourceName} · {guardrail.copy_origin.sourceVersion ?? `draft r${guardrail.copy_origin.sourceDraftRevision}`} · {guardrail.copy_origin.sourceGuardrailId}</p>}
           {hasDraft ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <p role="status"><span className="font-medium">{t(publishedVersions.length ? "guardrails.unpublishedChanges" : "guardrails.newDraft")}</span> · {t(draftStateKey(guardrail))}{currentTest?.status === "failed" ? ` (${currentTest.metrics.total - currentTest.metrics.passed}/${currentTest.metrics.total})` : ""}</p>
@@ -724,6 +725,8 @@ export function EditGuardrailSheet({ guardrail, policies, open, onOpenChange, on
   const [bindings, setBindings] = useState(guardrail.policy_bindings);
   const correctnessAvailability = useCorrectnessAvailability(open);
   const editReadiness = useGuardrailValidationReadiness({ bindings, policies, enabled: open });
+  // Model setup gates test execution; it must not prevent trimming an editable draft.
+  const editDependencyBlocked = bindings.some(binding => policyRequiresTopicModel(boundPolicy(policies, binding))) && editReadiness.blocked;
   const correctnessBlocker = bindings.map(binding => correctnessAvailability.reason(boundPolicy(policies, binding))).find(Boolean);
   const [level, setLevel] = useState(guardrail.safety_level);
   const [delivery, setDelivery] = useState(guardrail.output_delivery);
@@ -746,7 +749,7 @@ export function EditGuardrailSheet({ guardrail, policies, open, onOpenChange, on
   }, [guardrail, open]);
   const mutation = useMutation({
     mutationFn: () => {
-      if (editReadiness.blocked) throw new Error(editReadiness.reason ?? t("protection.validationReadiness.blockedTitle"));
+      if (editDependencyBlocked) throw new Error(editReadiness.reason ?? t("protection.validationReadiness.blockedTitle"));
       if (correctnessBlocker) throw new Error(correctnessBlocker);
       return updateGuardrail(guardrail.id, {
         ...(baseline.draft_revision !== undefined ? { expectedDraftRevision: baseline.draft_revision } : {}),
@@ -778,7 +781,7 @@ export function EditGuardrailSheet({ guardrail, policies, open, onOpenChange, on
     return missingRequiredParameters.length ? [t("guardrailWizard.nextBlocked.requiredFields", { name: policy.name, fields: missingRequiredParameters.map((parameter) => parameter.label).join(", ") })] : [];
   });
   const requestClose = () => { if (mutation.isPending) return; if (dirty) setDiscardRequested(true); else onOpenChange(false); };
-  return <EntitySheet open={open} closeDisabled={mutation.isPending} onOpenChange={next => { if (!next) requestClose(); }} eyebrow={t("guardrails.editEyebrow")} title={t("guardrails.editTitle", { name: guardrail.name })} description={t("guardrails.editDescription")} width="xl" footer={discardRequested ? <><span role="status" className="mr-auto text-xs text-muted-foreground">{t("guardrails.unsavedDraft")}</span><Button variant="outline" onClick={() => setDiscardRequested(false)}>{t("guardrails.continueEditing")}</Button><Button variant="destructive" onClick={() => onOpenChange(false)}>{t("guardrails.discardChanges")}</Button></> : <>{dirty ? <span role="status" className="mr-auto self-center text-xs text-muted-foreground">{t("guardrails.unsavedDraft")}</span> : null}<Button variant="outline" disabled={mutation.isPending} onClick={requestClose}>{t("common.cancel")}</Button><Button disabled={editReadiness.blocked || Boolean(correctnessBlocker) || !name.trim() || !bindings.length || allowedTopicsMissing || parameterErrors.length > 0 || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? <LoaderCircle className="animate-spin" /> : <Save />}{t(mutation.isPending ? "common.saving" : "guardrails.saveDraft")}</Button></>}>
+  return <EntitySheet open={open} closeDisabled={mutation.isPending} onOpenChange={next => { if (!next) requestClose(); }} eyebrow={t("guardrails.editEyebrow")} title={t("guardrails.editTitle", { name: guardrail.name })} description={t("guardrails.editDescription")} width="xl" footer={discardRequested ? <><span role="status" className="mr-auto text-xs text-muted-foreground">{t("guardrails.unsavedDraft")}</span><Button variant="outline" onClick={() => setDiscardRequested(false)}>{t("guardrails.continueEditing")}</Button><Button variant="destructive" onClick={() => onOpenChange(false)}>{t("guardrails.discardChanges")}</Button></> : <>{dirty ? <span role="status" className="mr-auto self-center text-xs text-muted-foreground">{t("guardrails.unsavedDraft")}</span> : null}<Button variant="outline" disabled={mutation.isPending} onClick={requestClose}>{t("common.cancel")}</Button><Button disabled={editDependencyBlocked || Boolean(correctnessBlocker) || !name.trim() || !bindings.length || allowedTopicsMissing || parameterErrors.length > 0 || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? <LoaderCircle className="animate-spin" /> : <Save />}{t(mutation.isPending ? "common.saving" : "guardrails.saveDraft")}</Button></>}>
     {mutation.error ? <div className="mb-4"><ErrorNotice error={mutation.error} /></div> : null}
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
       <GuardrailValidationReadiness readiness={editReadiness} onRemoveTopic={() => setBindings(items => items.filter(binding => !policyRequiresTopicModel(boundPolicy(policies, binding))))} />

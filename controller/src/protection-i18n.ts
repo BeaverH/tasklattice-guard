@@ -11,7 +11,7 @@ export const protectionEn = {
     states: { missing: "No model is assigned.", unverified: "The assigned model has no verified capability evidence.", failed: "Model capability validation failed.", validated: "The model is validated but has not been activated on the Runner.", activating: "Model activation on the Runner has not completed." },
     failureTitle: "Test execution failed", noFailureDetail: "This historical run failed without recording a failure reason or Case results. Its original cause cannot be determined from this record. Check the current draft dependencies before retrying.",
   },
-  profile: { category: "Industry or use case", select: "Select a Profile", default: "Default Profile", defaultTag: "Default", enables: "Enables {{count}} Policies", blankHint: "No Profile selected. Choose protections manually in the next step.", categories: { general: "General", banking: "Banking", securities: "Securities", internet: "Internet support", singapore_finance: "Singapore finance", china_mainland: "China mainland", china_banking: "China mainland banking" } },
+  profile: { source: "Created from {{id}} · {{version}}; this draft can be customized independently.", customized: "Customized", unavailable: "Unavailable", version: "Version {{version}} · {{count}} Policies · {{rules}} Rules", scope: "Scope and validation", category: "Industry or use case", select: "Select a Profile", default: "Default Profile", defaultTag: "Default", enables: "Enables {{count}} Policies", blankHint: "No Profile selected. Choose protections manually in the next step.", categories: { general: "General", banking: "Banking", securities: "Securities", internet: "Internet support", singapore_finance: "Singapore finance", china_mainland: "China mainland", china_banking: "China mainland banking" } },
   correctness: {
     contextual_grounding: "Contextual Grounding", automated_reasoning: "Automated Reasoning",
     contextual_groundingHint: "Requires a validated, active Grounding Judge model, a query, and grounding sources. The Settings workflow for validating and adding new Grounding bindings is not yet available.",
@@ -45,7 +45,7 @@ export const protectionEn = {
     advanced: "Advanced settings · output delivery & execution order", orderHint: "Policies keep their Profile or selection order unless you reorder them below.",
     toReview: "Review draft", editProtections: "Edit protections",
     presetHint: "Choose an industry or use case to load its default Profile. Review the enabled protections below, then adjust them in the next step.",
-    switchHint: "You already have selected Policies. Add missing Policies and Rules for the same Policy version, keeping your settings and order, or replace the selection with this Profile. Validate the combined selection before publishing. Topic boundaries are preserved.",
+    switchHint: "You already have selected Policies. Add missing Policies and Rules for the same Policy version, keeping your settings and order, or replace the selection with this Profile. Adding preserves your settings; replacing copies the Profile’s topic boundaries and output settings. Validate the result before publishing.",
     addPreset: "Add missing Policies & Rules", replacePreset: "Replace selection", undoPreset: "Undo Profile change", undone: "Previous selection restored.", resolvePreset: "Choose how to apply this Profile",
   },
 
@@ -58,7 +58,7 @@ export const protectionEn = {
   pinnedVersionUnavailable: "{{name}} is unavailable. No other version has been substituted.",
   dependencies: {
     title: "Selected model dependencies",
-    hint: "Only selected checks are listed. You can save a draft before setup is complete. An activated assignment is not a validated Guardrail or proof of detection quality.",
+    hint: "Selected checks reuse platform model assignments; configure each capability once in Settings. You can save a draft before setup is complete. An activated assignment is not a validated Guardrail or proof of detection quality.",
     loading: "Checking saved model assignments…",
     unavailable: "Model assignment status could not be loaded. Readiness is unknown; your selections are preserved.",
     unknownPolicy: "Dependencies require review for custom Policies: {{policies}}. Do not assume these checks run locally.",
@@ -135,7 +135,7 @@ export const protectionZh = {
     states: { missing: "未配置对应模型。", unverified: "已绑定模型，但缺少有效的能力验证。", failed: "模型能力验证失败。", validated: "模型已通过验证，但尚未在 Runner 上启用。", activating: "模型尚未完成 Runner 启用。" },
     failureTitle: "测试执行失败", noFailureDetail: "这次历史执行失败，但未记录具体失败原因和用例结果，无法从这条记录确定原始原因。请检查当前草稿的依赖后再重试。",
   },
-  profile: { category: "行业或使用场景", select: "选择 Profile", default: "默认 Profile", defaultTag: "默认", enables: "预启用 {{count}} 项 Policy", blankHint: "未选择 Profile，可在下一步手动选择防护。", categories: { general: "通用", banking: "银行", securities: "证券", internet: "互联网客服", singapore_finance: "新加坡金融", china_mainland: "中国大陆", china_banking: "中国大陆银行" } },
+  profile: { source: "创建自 {{id}} · {{version}}，草稿可独立修改。", customized: "已自定义", unavailable: "不可用", version: "版本 {{version}} · {{count}} 个策略 · {{rules}} 条规则", scope: "适用范围与验证", category: "行业或使用场景", select: "选择 Profile", default: "默认 Profile", defaultTag: "默认", enables: "预启用 {{count}} 项 Policy", blankHint: "未选择 Profile，可在下一步手动选择防护。", categories: { general: "通用", banking: "银行", securities: "证券", internet: "互联网客服", singapore_finance: "新加坡金融", china_mainland: "中国大陆", china_banking: "中国大陆银行" } },
   correctness: {
     contextual_grounding: "Contextual Grounding", automated_reasoning: "Automated Reasoning",
     contextual_groundingHint: "需要已验证并启用的 Grounding Judge 模型，以及请求中的问题和参考资料。设置页暂未开放新增 Grounding 绑定所需的专项验证流程。",
@@ -169,7 +169,7 @@ export const protectionZh = {
     advanced: "高级设置 · 输出方式与执行顺序", orderHint: "默认保留 Profile 或选择时的 Policy 顺序，也可以在下方手动调整。",
     toReview: "确认草稿", editProtections: "修改防护配置",
     presetHint: "选择行业或使用场景，加载对应的默认 Profile。下方展示预启用的防护，下一步可逐项调整。",
-    switchHint: "已有选中的 Policy。可以追加缺少的 Policy 和同版本下未选择的 Rule，保留现有配置及顺序；也可以用此 Profile 替换所选项。组合后须重新验证再发布。业务主题范围会保留。",
+    switchHint: "已有选中的 Policy。可以追加缺少的 Policy 和同版本下未选择的 Rule，保留现有配置及顺序；也可以用此 Profile 替换所选项。追加会保留现有设置；替换会复制 Profile 的主题范围和输出设置。修改后须重新验证再发布。",
     addPreset: "追加缺少的 Policy 和 Rule", replacePreset: "替换所选项", undoPreset: "撤销 Profile 更改", undone: "已恢复之前的选择。", resolvePreset: "选择 Profile 的应用方式",
   },
 
@@ -182,7 +182,7 @@ export const protectionZh = {
   pinnedVersionUnavailable: "{{name}} 不可用，系统没有用其他版本替代它。",
   dependencies: {
     title: "已选保护的模型依赖",
-    hint: "只展示已选检测所需的绑定。配置未完成也可以保存草稿；绑定已激活不代表 Guardrail 已通过验证，也不代表检测效果达标。",
+    hint: "已选检测复用平台模型绑定，每项能力只需在设置中配置一次。配置未完成也可以保存草稿；绑定已激活不代表 Guardrail 已通过验证，也不代表检测效果达标。",
     loading: "正在检查已保存的模型绑定…",
     unavailable: "无法获取模型绑定状态，当前就绪情况未知；已选配置不会丢失。",
     unknownPolicy: "以下自定义 Policy 的依赖需要单独审核：{{policies}}。不能假定这些检测仅在本地执行。",
